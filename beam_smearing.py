@@ -76,7 +76,7 @@ def apply_beam_smearing(v, psf, sb=None, sig=None, aperture=None):
         return mom0, mom1, None
 
     # Second moment
-    _sig = numpy.square(v) if sig is None else numpy.square(v) + numpy.square(sig)
+    _sig = numpy.square(v) + numpy.square(sig)
     mom2 = signal.fftconvolve(_sig if sb is None else sb*_sig, beam, mode='same')
 
     # Finish

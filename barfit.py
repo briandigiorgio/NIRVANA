@@ -17,6 +17,7 @@ import multiprocessing as mp
 from tqdm import tqdm
 from scipy.optimize import leastsq, least_squares
 from scipy.signal import convolve
+from beam_smearing import apply_beam_smearing as smear
 
 def polar(x,y,i,pa): 
 	'''
@@ -31,13 +32,14 @@ def polar(x,y,i,pa):
 	th = (np.pi/2 - np.arctan2(yd,xd)) % (np.pi*2)
 	return r, th 
 
-def getvfinfo(plate, ifu, path = None, ivar = True, xy = True, disp = True, ell=True, stellar = False, spx = True, flat=False):
+def getvfinfo(plate, ifu, path = None, ivar = True, xy = True, disp = True, ell=True, stellar = False, spx = True, flat=False, psf=True):
 	'''
 	Get relevant Ha info for a MaNGA galaxy. Assumes graymalkin file system.
 	Includes flags to return ivar, SPX XY coords, dispersion, and elliptical
 	coordinates and return in that order. Also has flags to return stellar
 	instead of Ha, use HYB10 binning instead of SPX, and flatten returned
 	arrays.
+	Should probably be a class.
 	'''
 
 	#set desired extension
@@ -97,7 +99,7 @@ def getvfinfo(plate, ifu, path = None, ivar = True, xy = True, disp = True, ell=
 			
 		vf = np.ma.array(vf, mask = m)
 		flux = np.ma.array(flux, mask = m)
-		ret = [vf, flux]
+		ret = [vf, flux, m]
 
 		if ivar:
 			ivar = f['EMLINE_GVEL_IVAR'].data[23]
@@ -121,6 +123,11 @@ def getvfinfo(plate, ifu, path = None, ivar = True, xy = True, disp = True, ell=
 
 	f.close()
 
+	if psf:
+		f = fits.open('/data/manga/spectro/redux/MPL-9/%d/stack/manga-%d-%d-LOGCUBE.fits.gz' % (plate,plate,ifu))
+		ret += [np.ma.array(f['GPSF'].data,mask=m)]
+		f.close()
+
 	#flatten output arrays (good for emcee, bad for imshow)
 	if flat:
 		flat = []
@@ -128,7 +135,7 @@ def getvfinfo(plate, ifu, path = None, ivar = True, xy = True, disp = True, ell=
 			flat += [r.flatten()]
 		return flat
 
-	#return everything in order of [vf,flux,ivar,sigma,sigmaivar,x,y,er,eth,fwhm]
+	#return everything in order of [vf,flux,mask,ivar,sigma,sigmaivar,x,y,er,eth,fwhm,psf]
 	return ret
 
 def rotcurveeval(x,y,vmax,inc,pa,h,vsys=0,xc=0,yc=0):
@@ -202,7 +209,7 @@ def bareval(x,y,vt,v2t,v2r,inc,pa,pab,vsys,xc=0,yc=0):
 	#spekkens and sellwood 2nd order (from andrew's thesis)
 	return vsys + np.sin(inc) * (vt*np.cos(th) - v2t*np.cos(2*(th-pab))*np.cos(th)- v2r*np.sin(2*(th-pab))*np.sin(th))
 
-def barmodel(x,y,er,eth,edges,inc,pa,pab,vsys,vts,v2ts,v2rs,xc=0,yc=0):
+def barmodel(x,y,er,eth,edges,inc,pa,pab,vsys,vts,v2ts,v2rs,xc=0,yc=0,psf=None):
 	'''
 	Evaluate a nonaxisymmetric velocity field model taken from Leung
 	(2018)/Spekkens & Sellwood (2007) at given x and y coordinates according to
@@ -226,6 +233,11 @@ def barmodel(x,y,er,eth,edges,inc,pa,pab,vsys,vts,v2ts,v2rs,xc=0,yc=0):
 
 	#spekkens and sellwood 2nd order vf model (from andrew's thesis)
 	model = vsys + np.sin(inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-pab))*np.cos(th)- v2rvals*np.sin(2*(th-pab))*np.sin(th))
+	if psf is not None:
+		#shape = [int(np.sqrt(len(psf)))]*2
+		#for a in psf: a.reshape(shape)
+		psf, flux, sigma, mask = psf
+		model = smear(model, psf, flux, sigma, mask=mask)[1]
 	return model
 
 	#model = np.zeros_like(x)
@@ -240,7 +252,7 @@ def unpack(params, args):
 	Should probably be a class.
 	'''
 
-	vf, ivar, edges, er, eth, x, y, nglobs = args #galaxy data
+	vf, ivar, edges, er, eth, x, y, nglobs, weight, psf = args #galaxy data
 	xc, yc = [0,0]
 
 	#global parameters with and without center
@@ -251,7 +263,14 @@ def unpack(params, args):
 	vts  = params[nglobs::3]
 	v2ts = params[nglobs+1::3]
 	v2rs = params[nglobs+2::3]
-	return vf,ivar,edges,er,eth,x,y,nglobs,inc,pa,pab,vsys,xc,yc,vts,v2ts,v2rs
+	return vf,ivar,edges,er,eth,x,y,nglobs,weight,psf,inc,pa,pab,vsys,xc,yc,vts,v2ts,v2rs
+
+def smoothing(array, weight=1):
+	edgearray = np.array([0,*array,array[-1]])
+	avgs = (edgearray[:-2] + edgearray[2:])/2
+	chisq = (avgs - array)**2 / np.abs(array)
+	chisq[~np.isfinite(chisq)] = 0
+	return chisq.sum() * weight
 
 def dynprior(params,args):
 	'''
@@ -260,7 +279,8 @@ def dynprior(params,args):
 	point, all of the prior transformations are uniform and pretty
 	unintelligent. Returns parameter prior transformations.  
 	'''
-	vf,ivar,edges,er,eth,x,y,nglobs,inc,pa,pab,vsys,xc,yc,vts,v2ts,v2rs = unpack(params,args)
+
+	vf,ivar,edges,er,eth,x,y,nglobs,weight,psf,inc,pa,pab,vsys,xc,yc,vts,v2ts,v2rs = unpack(params,args)
 
 	#uniform transformations to cover full angular range
 	incp = 90*inc
@@ -284,7 +304,7 @@ def logprior(params, args):
 	everything to cover their full range of reasonable values. 
 	'''
 
-	vf,ivar,edges,er,eth,x,y,nglobs,inc,pa,pab,vsys,xc,yc,vts,v2ts,v2rs = unpack(params,args)
+	vf,ivar,edges,er,eth,x,y,nglobs,weight,psf,inc,pa,pab,vsys,xc,yc,vts,v2ts,v2rs = unpack(params,args)
 	#uniform priors on everything with guesses for velocities
 	if inc < 0 or inc > 90 or abs(xc) > 20 or abs(yc) > 20 or abs(vsys) > 50 or (vts > 400).any() or (v2ts > 400).any() or (v2rs > 400).any():# or (vts < 0).any():
 		return -np.inf
@@ -297,11 +317,12 @@ def loglike(params, args):
 	the whole vf weighted by ivar to get a log likelihood value. 
 	'''
 
-	vf,ivar,edges,er,eth,x,y,nglobs,inc,pa,pab,vsys,xc,yc,vts,v2ts,v2rs = unpack(params,args)
+	vf,ivar,edges,er,eth,x,y,nglobs,weight,psf,inc,pa,pab,vsys,xc,yc,vts,v2ts,v2rs = unpack(params,args)
 
 	#make vf model and perform chisq
-	vfmodel = barmodel(x,y,er,eth,edges,inc,pa,pab,vsys,vts,v2ts,v2rs,xc,yc)
+	vfmodel = barmodel(x,y,er,eth,edges,inc,pa,pab,vsys,vts,v2ts,v2rs,xc,yc,psf)
 	llike = -.5*np.sum((vfmodel - vf)**2 * ivar) #chisq
+	llike = llike - smoothing(vts,weight) - smoothing(v2ts,weight) - smoothing(v2rs,weight)
 	return llike
 
 def logpost(params, args):
@@ -317,7 +338,7 @@ def logpost(params, args):
 	return lprior + llike
 
 def barfit(plate,ifu, nbins=10, cores=20, walkers=100, steps=1000, 
-		ntemps=None, cen=False,start=False,dyn=False):
+		ntemps=None, cen=False,start=False,dyn=True,weight=10,smearing=False):
 	'''
 	Main function for velocity field fitter. Takes a given plate and ifu and
 	fits a nonaxisymmetric velocity field with nbins number of radial bins
@@ -332,14 +353,16 @@ def barfit(plate,ifu, nbins=10, cores=20, walkers=100, steps=1000,
 	'''
 
 	#get info on galaxy and define bins, combine into easy to handle list
-	vf,flux,ivar,sigma,sigmaivar,x,y,er,eth = getvfinfo(plate,ifu,flat=True)
+	vf,flux,m,ivar,sigma,sigmaivar,x,y,er,eth,p = getvfinfo(plate,ifu,flat=False,psf=True)
 	edges = np.linspace(0,1.5,nbins+1)
+	if smearing: psf = (p, flux, sigma, m)
+	else: psf = None
 	args = [vf, ivar, edges, er, eth, x, y]
 
 	#set number of global parameters
 	if cen: nglobs = 6
 	else: nglobs = 4
-	args += [nglobs]
+	args += [nglobs,weight,psf]
 
 	#get and print starting guesses for parameters
 	theta0 = getguess(vf,x,y,ivar,er,edges)
@@ -471,7 +494,7 @@ def checkbins(plate,ifu,nbins):
 	a given number of bins for a MaNGA galaxy with given plate ifu. 
 	'''
 
-	vf,flux,ivar,sigma,sigmaivar,x,y,er,eth = getvfinfo(plate,ifu)
+	vf,flux,m,ivar,sigma,sigmaivar,x,y,er,eth = getvfinfo(plate,ifu,psf=False)
 	edges = np.linspace(0,1.5,nbins+1)[:-1]
 
 	if nbins%2: nbins += 1
@@ -508,7 +531,7 @@ def dprofs(samp, edges=False, ax=None, **args):
 
 	return inc, pa, pab, vsys, vts, v2ts, v2rs
 
-def summaryplot(f,nbins):
+def summaryplot(f,nbins,plate,ifu,smearing=True):
 	'''
 	Make a summary plot for a given dynesty file with MaNGA velocity field, the
 	model that dynesty fit, the residuals of the fit, and the velocity
@@ -516,11 +539,15 @@ def summaryplot(f,nbins):
 	'''
 
 	#get chains, edges, parameter values, vf info, model
-	chains = pickle.load(open('dyn8078-10','rb'))
+	if type(f) == str: chains = pickle.load(open(f,'rb'))
+	elif type(f) == np.ndarray: chains = f
+	elif type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler: chains = f.results
 	edges = np.linspace(0,1.5,nbins+1)
 	inc,pa,pab,vsys,vts,v2ts,v2rs = dprofs(chains)
-	vf,flux,ivar,sigma,sigmaivar,x,y,er,eth = getvfinfo(8078,12703)
-	m = barmodel(x,y,er,eth,edges,inc,pa,pab,vsys,vts,v2ts,v2rs)
+	vf,flux,m,ivar,sigma,sigmaivar,x,y,er,eth,p = getvfinfo(plate,ifu)
+	if smearing: psf = (p, flux, sigma, m)
+	else: psf = None
+	model = barmodel(x,y,er,eth,edges,inc,pa,pab,vsys,vts,v2ts,v2rs,psf=psf)
 	plt.figure(figsize = (8,8))
 
 	#MaNGA Ha velocity field
@@ -532,21 +559,18 @@ def summaryplot(f,nbins):
 	#VF model from dynesty fit
 	plt.subplot(222)
 	plt.title('Model')
-	plt.imshow(m,'jet',origin='lower') 
+	plt.imshow(model,'jet',origin='lower') 
 	plt.colorbar(label='km/s')
 
 	#Residuals from fit
 	plt.subplot(223)
 	plt.title('Residuals')
-	plt.imshow(vf-m,'jet',origin='lower')
+	resid = vf-model
+	vmax = np.abs(vf-model).max()
+	plt.imshow(vf-model,'jet',origin='lower',vmin=-vmax,vmax=vmax)
 	plt.colorbar(label='km/s')
 
 	#Radial velocity profiles
 	plt.subplot(224)
 	dprofs(chains,edges,plt.gca())
 	plt.tight_layout()
-
-def psfvf(vf, psf):
-	vfc = signal.convolve(vf,psf,mode='same')
-	vfc = vf[buf:-buf,buf:-buf]
-	return svf

@@ -1,0 +1,14 @@
+include *.md
+include setup.cfg
+
+recursive-include docs *
+recursive-include barfit *.pyx *.c *.pxd *.h
+
+include requirements.txt
+
+prune build
+prune docs/_build
+
+global-exclude *.pyc *.o *.so *.DS_Store
+
+

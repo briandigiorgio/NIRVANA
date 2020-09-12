@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+
+from barfit.scripts import barfit
+
+if __name__ == '__main__':
+    barfit.main(barfit.parse_args())
+

@@ -4,4 +4,5 @@
 
     - Initial version
     - Add beam-smearing
+    - Restructure into python package
 

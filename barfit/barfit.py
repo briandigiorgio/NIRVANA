@@ -7,17 +7,28 @@ fit stars
 binning scheme
 '''
 
-import numpy as np
-import matplotlib.pyplot as plt
-import emcee, sys, ptemcee, corner, dynesty, pickle, argparse
-from astropy.io import fits
+import sys
 import multiprocessing as mp
-from tqdm import tqdm
+
+import numpy as np
 from scipy.optimize import leastsq
 from scipy.signal import convolve
-from beam_smearing import apply_beam_smearing as smear
 from scipy import stats
-from galaxy import Galaxy
+import matplotlib.pyplot as plt
+
+from astropy.io import fits
+
+try:
+    from tqdm import tqdm
+except:
+    tqdm = None
+
+import emcee
+import ptemcee
+import dynesty
+
+from .beam_smearing import apply_beam_smearing as smear
+from .galaxy import Galaxy
 
 def polar(x,y,i,pa): 
     '''
@@ -307,32 +318,12 @@ def barfit(plate,ifu, nbins=10, cores=20, walkers=100, steps=1000, maxr=1.5,
             sampler = emcee.EnsembleSampler(walkers, len(theta0), logpost, args=[args], pool=pool)
 
         #run MCMC
-        for i, result in enumerate(tqdm(sampler.sample(pos, iterations=steps),
-                total=steps, leave=True, dynamic_ncols=True)):
+        _iter = sampler.sample(pos, iterations=steps)
+        if tqdm is not None:
+            _iter = tqdm(_iter, total=steps, leave=True, dynamic_ncols=True):
+        for i, result in enumerate(_iter):
             pass
 
     if cores > 1 and not ntemps: pool.close()
     return sampler
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('plateifu', nargs=2, type=int,
-            help = 'MaNGA plate and ifu identifiers')
-    parser.add_argument('-c', '--cores',   default = 20, type=int,
-            help = 'Number of threads to utilize. Optional, default is 20.')
-    parser.add_argument('-f', '--outfile', default = '', type=str,
-            help = 'Outfile to dump results in. Optional')
-    parser.add_argument('-n', '--nbins',   default = 10, type=int,
-            help = 'Number of radial bins in fit. Optional, default is 10')
-    parser.add_argument('-w', '--weight',  default = 10, type=int,
-            help = 'How much to weight smoothness of rotation curves in fit. Optional, default is 10')
-    parser.add_argument('-r', '--maxr',    default =1.5, type=float,
-            help = 'Maximum radius in Re for bins. Optional, default is 1.5')
-    parser.add_argument('--nosmear', action='store_true', default = False,
-            help = "Don't use beam smearing to speed up fit")
-    args = parser.parse_args()
-
-    plate, ifu = args.plateifu
-    samp = barfit(plate, ifu, cores=args.cores, nbins = args.nbins, weight = args.weight, maxr = args.maxr, smearing = ~args.nosmear)
-    if not args.outfile: args.outfile = f'{plate}-{ifu}_{args.nbins}.out'
-    pickle.dump(samp.results, open(args.outfile, 'wb'))

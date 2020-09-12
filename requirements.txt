@@ -1,0 +1,12 @@
+# Package dependencies for barfit
+setuptools>=46.1
+ipython>=7.14
+numpy>=1.18.4
+scipy>=1.4
+astropy>=4.0
+matplotlib>=3.2.1
+emcee>=3.0
+ptemcee>=1.0
+corner>=2.1
+dynesty>=1.0
+

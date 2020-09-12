@@ -320,7 +320,7 @@ def barfit(plate,ifu, nbins=10, cores=20, walkers=100, steps=1000, maxr=1.5,
         #run MCMC
         _iter = sampler.sample(pos, iterations=steps)
         if tqdm is not None:
-            _iter = tqdm(_iter, total=steps, leave=True, dynamic_ncols=True):
+            _iter = tqdm(_iter, total=steps, leave=True, dynamic_ncols=True)
         for i, result in enumerate(_iter):
             pass
 

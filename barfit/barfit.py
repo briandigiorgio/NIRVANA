@@ -7,17 +7,28 @@ fit stars
 binning scheme
 '''
 
-import numpy as np
-import matplotlib.pyplot as plt
-import emcee, sys, ptemcee, corner, dynesty, pickle, argparse
-from astropy.io import fits
+import sys
 import multiprocessing as mp
-from tqdm import tqdm
+
+import numpy as np
 from scipy.optimize import leastsq
 from scipy.signal import convolve
-from beam_smearing import apply_beam_smearing as smear
 from scipy import stats
-from galaxy import Galaxy
+import matplotlib.pyplot as plt
+
+from astropy.io import fits
+
+try:
+    from tqdm import tqdm
+except:
+    tqdm = None
+
+import emcee
+import ptemcee
+import dynesty
+
+from .beam_smearing import apply_beam_smearing as smear
+from .galaxy import Galaxy
 
 def polar(x,y,i,pa): 
     '''
@@ -307,8 +318,10 @@ def barfit(plate,ifu, nbins=10, cores=20, walkers=100, steps=1000, maxr=1.5,
             sampler = emcee.EnsembleSampler(walkers, len(theta0), logpost, args=[args], pool=pool)
 
         #run MCMC
-        for i, result in enumerate(tqdm(sampler.sample(pos, iterations=steps),
-                total=steps, leave=True, dynamic_ncols=True)):
+        _iter = sampler.sample(pos, iterations=steps)
+        if tqdm is not None:
+            _iter = tqdm(_iter, total=steps, leave=True, dynamic_ncols=True):
+        for i, result in enumerate(_iter):
             pass
 
     if cores > 1 and not ntemps: pool.close()

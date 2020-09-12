@@ -9,13 +9,15 @@ binning scheme
 
 import numpy as np
 import matplotlib.pyplot as plt
-import emcee, sys, ptemcee, corner, dynesty, pickle
+import emcee, sys, ptemcee, corner, dynesty, pickle, argparse
 from astropy.io import fits
 import multiprocessing as mp
 from tqdm import tqdm
-from scipy.optimize import leastsq, least_squares
+from scipy.optimize import leastsq
 from scipy.signal import convolve
 from beam_smearing import apply_beam_smearing as smear
+from scipy import stats
+from galaxy import Galaxy
 
 def polar(x,y,i,pa): 
     '''
@@ -30,112 +32,6 @@ def polar(x,y,i,pa):
     th = (np.pi/2 - np.arctan2(yd,xd)) % (np.pi*2)
     return r, th 
 
-def getvfinfo(plate, ifu, path = None, ivar = True, xy = True, disp = True, ell=True, stellar = False, spx = True, flat=False, psf=True):
-    '''
-    Get relevant Ha info for a MaNGA galaxy. Assumes graymalkin file system.
-    Includes flags to return ivar, SPX XY coords, dispersion, and elliptical
-    coordinates and return in that order. Also has flags to return stellar
-    instead of Ha, use HYB10 binning instead of SPX, and flatten returned
-    arrays.
-    Should probably be a class.
-    '''
-
-    #set desired extension
-    if spx:
-        bintype = 'SPX'
-    else:
-        bintype = 'HYB10'
-
-    #set correct path to files and load, defaults to graymalkin
-    if path == None:
-        path = '/data/manga/spectro/analysis/MPL-9/%s-MILESHC-MASTARHC'%bintype
-    f = fits.open('%s/%s/%s/manga-%s-%s-MAPS-%s-MILESHC-MASTARHC.fits.gz'
-            % (path,plate,ifu,plate,ifu,bintype))
-
-    #get stellar vf, flux, mask
-    if stellar:
-        vf = f['STELLAR_VEL'].data
-        flux = f['SPX_MFLUX'].data
-        m = f['STELLAR_VEL_MASK'].data != 0
-
-        #get dispersion and error, mask spaxels with unrealistically low error
-        if disp:
-            sigma = f['STELLAR_SIGMA'].data
-            sigmaivar = f['STELLAR_SIGMA_IVAR'].data
-            inst = f['STELLAR_SIGMACORR'].data[0]
-            m += (sigmaivar > inst)
-            sigma = np.ma.array(sigma, mask = m)
-            sigmaivar = np.ma.array(sigmaivar, mask = m)
-
-        #mask arrays, add to return list
-        vf = np.ma.array(vf, mask = m)
-        flux = np.ma.array(flux, mask = m)
-        ret = [vf, flux]
-
-        #get velocity ivar
-        if ivar:
-            ivar = f['STELLAR_VEL_IVAR'].data
-            ivar = np.ma.array(ivar, mask = m)
-            ret += [ivar]
-
-        #get dispersion info
-        if disp: ret += [sigma,sigmaivar]
-
-    #same for halpha
-    else:
-        vf = f['EMLINE_GVEL'].data[23]
-        flux = f['EMLINE_GFLUX'].data[23]
-        m = f['EMLINE_GVEL_MASK'].data[23] != 0
-
-        if disp:
-            sigma = f['EMLINE_GSIGMA'].data[23]
-            sigmaivar = f['EMLINE_GSIGMA_IVAR'].data[23]
-            inst = f['EMLINE_INSTSIGMA'].data[23]
-            m += (sigmaivar > inst)
-            sigma = np.ma.array(sigma, mask = m)
-            sigmaivar = np.ma.array(sigmaivar, mask = m)
-            
-        vf = np.ma.array(vf, mask = m)
-        flux = np.ma.array(flux, mask = m)
-        ret = [vf, flux, m]
-
-        if ivar:
-            ivar = f['EMLINE_GVEL_IVAR'].data[23]
-            ivar = np.ma.array(ivar, mask = m)
-            ret += [ivar]
-        if disp: ret += [sigma,sigmaivar]
-
-    #on sky xy coordinates for spaxels
-    if xy:
-        x,y = [f['SPX_SKYCOO'].data[1], f['SPX_SKYCOO'].data[0]]
-        x = np.ma.array(x, mask = m)
-        y = np.ma.array(y, mask = m)
-        ret += [x,y]
-    
-    #elliptical polar coordinates
-    if ell:
-        er,eth = [f['SPX_ELLCOO'].data[1], f['SPX_ELLCOO'].data[3]]
-        er = np.ma.array(er, mask = m)
-        eth = np.ma.array(eth, mask = m)
-        ret += [er,eth]
-
-    f.close()
-
-    if psf:
-        f = fits.open('/data/manga/spectro/redux/MPL-9/%d/stack/manga-%d-%d-LOGCUBE.fits.gz' % (plate,plate,ifu))
-        ret += [np.ma.array(f['GPSF'].data,mask=m)]
-        f.close()
-
-    #flatten output arrays (good for emcee, bad for imshow)
-    if flat:
-        flat = []
-        for r in ret:
-            flat += [r.flatten()]
-        return flat
-
-    #return everything in order of [vf,flux,mask,ivar,sigma,sigmaivar,x,y,er,eth,fwhm,psf]
-    return ret
-
 def rotcurveeval(x,y,vmax,inc,pa,h,vsys=0,xc=0,yc=0):
     '''
     Evaluate a simple tanh rotation curve with asymtote vmax, inclination inc
@@ -149,15 +45,20 @@ def rotcurveeval(x,y,vmax,inc,pa,h,vsys=0,xc=0,yc=0):
     model = -vmax * np.tanh(r/h) * np.cos(th) * np.sin(inc) + vsys
     return model
 
-def getguess(vf,x,y,ivar,er,edges):
+def getguess(vf,x=None,y=None,ivar=None,er=None,edges=None):
     '''
     Generate a set of guess parameters for a given velocity field vf with ivar
     by fitting it with a simple rotation curve using least squares and
     sampling the resulting cuve to generate values in bins specified by edges.
     Requires x,y, and elliptical radius coordinates er as well. Returns an
-    array in format [inc,pa,h,vsys] + [vt,v2t,v2r]*(number of bins). Inc and
-    pa in degrees. 
+    array in format [inc,pa,pab,vsys] + [vt,v2t,v2r]*(number of bins). Inc and
+    pa in degrees. Assumes pab = pa.
     '''
+
+    if isinstance(vf, Galaxy):
+        vf,x,y,ivar,er,edges = (vf.vf, vf.x, vf.y, vf.ivar, vf.er, vf.edges)
+    elif x is None or y is None or ivar is None or er is None or edges is None:
+        raise ValueError('Must give a Galaxy object or all other parameters.')
 
     #define a minimization function and feed it to simple leastsquares
     minfunc = lambda params,vf,x,y,e: np.array((vf - \
@@ -172,7 +73,7 @@ def getguess(vf,x,y,ivar,er,edges):
 
     #generate model of vf and start assembling array of guess values
     model = rotcurveeval(x,y,vmax,inc,pa,h,vsys)
-    guess = [inc,pa,h,vsys,0,0,0]
+    guess = [inc,pa,pa,vsys,0,0,0]
 
     #iterate through bins and get vt value for each bin, dummy value for others
     vts = np.zeros(len(edges)-1)
@@ -188,26 +89,7 @@ def getguess(vf,x,y,ivar,er,edges):
     guess[np.isnan(guess)] = 100
     return guess
 
-def bareval(x,y,vt,v2t,v2r,inc,pa,pab,vsys,xc=0,yc=0):
-    '''
-    Evaluate a nonaxisymmetric velocity field model taken from Leung
-    (2018)/Spekkens & Sellwood (2007) at given x and y coordinates. Needs
-    tangential velocity vt, 2nd order tangential and radial velocities v2t and
-    v2r, inclination inc and position angle pa in deg, bar position angle pab
-    in deg, systemic velocity vsys, and x and y offsets xc and yc. Returns
-    evaluated model in same shape as x and y.
-
-    Deprecated
-    '''
-
-    #convert to polar
-    inc, pa, pab = np.radians([inc,pa,pab])
-    r, th = polar(x-xc,y-yc,inc,pa)
-
-    #spekkens and sellwood 2nd order (from andrew's thesis)
-    return vsys + np.sin(inc) * (vt*np.cos(th) - v2t*np.cos(2*(th-pab))*np.cos(th)- v2r*np.sin(2*(th-pab))*np.sin(th))
-
-def barmodel(x,y,er,eth,edges,inc,pa,pab,vsys,vts,v2ts,v2rs,xc=0,yc=0,psf=None):
+def barmodel(args,inc,pa,pab,vsys,vts,v2ts,v2rs,xc=0,yc=0):
     '''
     Evaluate a nonaxisymmetric velocity field model taken from Leung
     (2018)/Spekkens & Sellwood (2007) at given x and y coordinates according to
@@ -220,40 +102,33 @@ def barmodel(x,y,er,eth,edges,inc,pa,pab,vsys,vts,v2ts,v2rs,xc=0,yc=0,psf=None):
 
     #convert angles to polar and normalize radial coorinate
     inc,pa,pab = np.radians([inc,pa,pab])
-    r, th = polar(x-xc,y-yc,inc,pa)
-    r /= (r.max()/er.max())
+    r, th = polar(args.x-xc,args.y-yc,inc,pa)
+    r /= (r.max()/args.er.max())
 
     #interpolate velocity values for all r 
-    bincents = (edges[:-1] + edges[1:])/2
+    bincents = (args.edges[:-1] + args.edges[1:])/2
     vtvals = np.interp(r,bincents,vts)
     v2tvals = np.interp(r,bincents,v2ts)
     v2rvals = np.interp(r,bincents,v2rs)
 
     #spekkens and sellwood 2nd order vf model (from andrew's thesis)
     model = vsys + np.sin(inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-pab))*np.cos(th)- v2rvals*np.sin(2*(th-pab))*np.sin(th))
-    if psf is not None:
+    if args.psf is not None:
         #shape = [int(np.sqrt(len(psf)))]*2
         #for a in psf: a.reshape(shape)
         psf, flux, sigma, mask = psf
-        model = smear(model, psf, flux, sigma, mask=mask)[1]
+        model = smear(model, args.psf, args.flux, args.sigma, mask=args.mask)[1]
     return model
 
-    #model = np.zeros_like(x)
-    #for i in range(len(edges)-1):
-    #   cut = (er > edges[i]) * (er < edges[i+1])
-    #   model[cut] = bareval(x[cut],y[cut],vts[i],v2ts[i],v2rs[i],inc,pa,pab,vsys,xc,yc)
-    #return model
-
-def unpack(params, args):
+def unpack(params, nglobs):
     '''
     Utility function to carry around a bunch of values in the Bayesian fit.
     Should probably be a class.
     '''
 
-    vf, ivar, edges, er, eth, x, y, nglobs, weight, psf = args #galaxy data
-    xc, yc = [0,0]
 
     #global parameters with and without center
+    xc, yc = [0,0]
     if nglobs == 4: inc,pa,pab,vsys = params[:nglobs]
     elif nglobs == 6: inc,pa,pab,vsys,xc,yc = params[:nglobs]
 
@@ -261,9 +136,29 @@ def unpack(params, args):
     vts  = params[nglobs::3]
     v2ts = params[nglobs+1::3]
     v2rs = params[nglobs+2::3]
-    return vf,ivar,edges,er,eth,x,y,nglobs,weight,psf,inc,pa,pab,vsys,xc,yc,vts,v2ts,v2rs
+    return inc,pa,pab,vsys,xc,yc,vts,v2ts,v2rs
 
-def smoothing(array, weight=1):
+class FitArgs(Galaxy):
+    '''
+    Extension of Galaxy class to carry around a few more useful variables when
+    performing dynesty fit. 
+    '''
+
+    def setnglobs(self, nglobs):
+        '''
+        Set number of global variables in fit.
+        '''
+
+        self.nglobs = nglobs
+
+    def setweight(self, weight):
+        '''
+        Set weight to assign to smoothness of rotation curves in fit.
+        '''
+
+        self.weight = weight
+
+def smoothing(array, weight):
     '''
     A penalty function for encouraging smooth rotation curves. Computes a
     rolling average of the curve by taking the average of the values of the
@@ -288,7 +183,13 @@ def dynprior(params,args):
     unintelligent. Returns parameter prior transformations.  
     '''
 
-    vf,ivar,edges,er,eth,x,y,nglobs,weight,psf,inc,pa,pab,vsys,xc,yc,vts,v2ts,v2rs = unpack(params,args)
+    inc,pa,pab,vsys,xc,yc,vts,v2ts,v2rs = unpack(params,args.nglobs)
+
+    #if args.guess is not None:
+    #    incg,pag,pabg,vsysg,xcg,ycg,vtsg,v2tsg,v2rsg = unpack(args.guess,args.nglobs)
+    #    incp = stats.norm.ppf(inc,incg,10)
+    #    pap = stats.norm.ppf(pa,pag,20)
+    #    pabp = stats.norm.ppf(pab,pabg,45)
 
     #uniform transformations to cover full angular range
     incp = 90 * inc
@@ -301,8 +202,13 @@ def dynprior(params,args):
     v2tsp = 200 * v2ts
     v2rsp = 200 * v2rs
 
+    if args.nglobs == 6: 
+        xc = (2*xc - 1) * 20
+        yc = (2*yc - 1) * 20
+
     #reassemble params array
     repack = [incp,pap,pabp,vsysp]
+    if args.nglobs == 6: repack += [xc,yc]
     for i in range(len(vts)): repack += [vtsp[i],v2tsp[i],v2rsp[i]]
     return repack
 
@@ -312,7 +218,7 @@ def logprior(params, args):
     everything to cover their full range of reasonable values. 
     '''
 
-    vf,ivar,edges,er,eth,x,y,nglobs,weight,psf,inc,pa,pab,vsys,xc,yc,vts,v2ts,v2rs = unpack(params,args)
+    inc,pa,pab,vsys,xc,yc,vts,v2ts,v2rs = unpack(params,args.nglobs)
     #uniform priors on everything with guesses for velocities
     if inc < 0 or inc > 90 or abs(xc) > 20 or abs(yc) > 20 or abs(vsys) > 50 or (vts > 400).any() or (v2ts > 400).any() or (v2rs > 400).any():# or (vts < 0).any():
         return -np.inf
@@ -325,12 +231,13 @@ def loglike(params, args):
     the whole vf weighted by ivar to get a log likelihood value. 
     '''
 
-    vf,ivar,edges,er,eth,x,y,nglobs,weight,psf,inc,pa,pab,vsys,xc,yc,vts,v2ts,v2rs = unpack(params,args)
+    inc,pa,pab,vsys,xc,yc,vts,v2ts,v2rs = unpack(params,args.nglobs)
 
     #make vf model and perform chisq
-    vfmodel = barmodel(x,y,er,eth,edges,inc,pa,pab,vsys,vts,v2ts,v2rs,xc,yc,psf)
-    llike = -.5*np.sum((vfmodel - vf)**2 * ivar) #chisq
-    llike = llike - smoothing(vts,weight) - smoothing(v2ts,weight) - smoothing(v2rs,weight)
+    vfmodel = barmodel(args,inc,pa,pab,vsys,vts,v2ts,v2rs,xc,yc)
+    llike = -.5*np.sum((vfmodel - args.vf)**2 * args.ivar) #chisq
+    #llike -= args.weight * (smoothing(vts) - smoothing(v2ts) - smoothing(v2rs))
+    llike = llike - smoothing(vts,args.weight) - smoothing(v2ts,args.weight) - smoothing(v2rs,args.weight)
     return llike
 
 def logpost(params, args):
@@ -345,7 +252,7 @@ def logpost(params, args):
     llike = loglike(params, args)
     return lprior + llike
 
-def barfit(plate,ifu, nbins=10, cores=20, walkers=100, steps=1000, 
+def barfit(plate,ifu, nbins=10, cores=20, walkers=100, steps=1000, maxr=1.5,
         ntemps=None, cen=False,start=False,dyn=True,weight=10,smearing=True):
     '''
     Main function for velocity field fitter. Takes a given plate and ifu and
@@ -360,21 +267,12 @@ def barfit(plate,ifu, nbins=10, cores=20, walkers=100, steps=1000,
     chosen package.  
     '''
 
-    #get info on galaxy and define bins, combine into easy to handle list
-    vf,flux,m,ivar,sigma,sigmaivar,x,y,er,eth,p = getvfinfo(plate,ifu,flat=False,psf=True)
-    edges = np.linspace(0,1.5,nbins+1)
-    if smearing: psf = (p, flux, sigma, m)
-    else: psf = None
-    args = [vf, ivar, edges, er, eth, x, y]
-
-    #set number of global parameters
-    if cen: nglobs = 6
-    else: nglobs = 4
-    args += [nglobs,weight,psf]
-
-    #get and print starting guesses for parameters
-    theta0 = getguess(vf,x,y,ivar,er,edges)
-    print(theta0)
+    #get info on galaxy and define bins and starting guess
+    args = FitArgs(plate,ifu)
+    args.setnglobs(6) if cen else args.setnglobs(4)
+    args.makeedges(nbins, maxr)
+    args.setweight(weight)
+    theta0 = args.getguess()
 
     #open up multiprocessing pool if needed
     if cores > 1 and not ntemps: pool = mp.Pool(cores)
@@ -416,169 +314,25 @@ def barfit(plate,ifu, nbins=10, cores=20, walkers=100, steps=1000,
     if cores > 1 and not ntemps: pool.close()
     return sampler
 
-def cornerplot(sampler, burn=-1000, **args):
-    '''
-    Make a cornerplot with an emcee/ptemcee sampler. Will only look at samples
-    after step burn. Takes args for corner.corner.
-    '''
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('plateifu', nargs=2, type=int,
+            help = 'MaNGA plate and ifu identifiers')
+    parser.add_argument('-c', '--cores',   default = 20, type=int,
+            help = 'Number of threads to utilize. Optional, default is 20.')
+    parser.add_argument('-f', '--outfile', default = '', type=str,
+            help = 'Outfile to dump results in. Optional')
+    parser.add_argument('-n', '--nbins',   default = 10, type=int,
+            help = 'Number of radial bins in fit. Optional, default is 10')
+    parser.add_argument('-w', '--weight',  default = 10, type=int,
+            help = 'How much to weight smoothness of rotation curves in fit. Optional, default is 10')
+    parser.add_argument('-r', '--maxr',    default =1.5, type=float,
+            help = 'Maximum radius in Re for bins. Optional, default is 1.5')
+    parser.add_argument('--nosmear', action='store_true', default = False,
+            help = "Don't use beam smearing to speed up fit")
+    args = parser.parse_args()
 
-    if type(sampler) == np.ndarray: chain = sampler 
-    else: chain = sampler.chain
-    if chain.ndim == 4:
-        chains = chain[:,:,burn:,:].reshape(-1,chain.shape[-1])
-    elif chain.ndim == 3:
-        chains = chain[:, burn:, :].reshape(-1,chain.shape[-1])
-    corner.corner(chains,**args)
-
-def chainvis(sampler, titles = ['$inc$ (deg)',r'$\phi$ (deg)',r'$\phi_b$ (deg)',r'$v_{sys}$ (km/s)'], alpha=.1, nplots=None):
-    '''
-    Look at all the chains of an emcee sampler in one plot to check
-    convergence. Can specify number of variables to plot with nplots if there
-    are too many to see well. Can set alpha of individual chains with alpha and
-    titles of plots with titles.
-    '''
-
-    #get array of chains
-    if type(sampler) == np.ndarray:
-        chain = sampler
-    else:
-        chain = sampler.chain
-
-    #reshape chain array so it works and get appropriate dimensions
-    if chain.ndim == 2: chain = chain[:,:,np.newaxis]
-    elif chain.ndim == 4: chain = chain.reshape(-1,chain.shape[2],chain.shape[3])
-    nwalk,nstep,nvar = chain.shape
-    if nplots: nvar = nplots
-    if len(titles) < nvar: #failsafe if not enough titles
-        titles = np.arange(nvar)
-
-    #make a plot for each variable
-    plt.figure(figsize=(4*nvar,4))
-    for var in range(nvar):
-        plt.subplot(1,nvar,var+1)
-        plt.plot(chain[:,:,var].T, 'k-', lw = .2, alpha = alpha, rasterized=True)
-        plt.xlabel(titles[var])
-    plt.tight_layout()
-    plt.show()
-
-def mcmeds(sampler, burn = -1000):
-    '''
-    Return medians for each variable in an emcee sampler after step burn.
-    '''
-        
-    return np.median(sampler.chain[:,burn:,:], axis = (0,1))
-
-def dmeds(samp):
-    '''
-    Get median values for each variable in a dynesty sampler.
-    '''
-
-    #get samples and weights
-    if type(samp)==dynesty.results.Results: res = samp
-    else: res = samp.results
-    samps = res.samples
-    weights = np.exp(res.logwt - res.logz[-1])
-    meds = np.zeros(samps.shape[1])
-
-    #iterate through and get 50th percentile of values
-    for i in range(samps.shape[1]):
-        meds[i] = dynesty.utils.quantile(samps[:,i],[.5],weights)[0]
-    return meds
-
-def dcorner(samp,**args):
-    '''
-    Make a cornerplot of a dynesty sampler. Takes args for
-    dynesty.plotting.cornerplot.
-    '''
-
-    if type(samp) == dynesty.results.Results:
-        dynesty.plotting.cornerplot(samp, **args)
-    else:
-        dynesty.plotting.cornerplot(samp.results, **args)
-
-def checkbins(plate,ifu,nbins):
-    '''
-    Make a plot to see whether the number of spaxels in each bin make sense for
-    a given number of bins for a MaNGA galaxy with given plate ifu. 
-    '''
-
-    vf,flux,m,ivar,sigma,sigmaivar,x,y,er,eth = getvfinfo(plate,ifu,psf=False)
-    edges = np.linspace(0,1.5,nbins+1)[:-1]
-
-    if nbins%2: nbins += 1
-    plt.figure(figsize=(12,6))
-    nrow = nbins//5
-    ncol = nbins//nrow
-    for i in range(len(edges)-1):
-        plt.subplot(nrow,ncol,i+1)
-        cut = (er>edges[i])*(er<edges[i+1])
-        plt.imshow(np.ma.array(vf, mask=~cut), cmap='RdBu')
-
-def dprofs(samp, edges=False, ax=None, **args):
-    '''
-    Turn a dynesty sampler output by barfit into a set of radial velocity
-    profiles. Can plot if edges are given and will plot on a given axis ax if
-    supplied. Takes args for plt.plot.  
-    '''
-
-    #get and unpack median values for params
-    meds = dmeds(samp)
-    inc, pa, pab, vsys = meds[:4]
-    vts = meds[4::3]
-    v2ts = meds[5::3]
-    v2rs = meds[6::3]
-
-    #plot profiles if edges are given
-    if type(edges) != bool: 
-        if not ax: f,ax = plt.subplots()
-        ls = [r'$V_t$',r'$V_{2t}$',r'$V_{2r}$']
-        [ax.plot(edges[:-1], p, label=ls[i], **args) for i,p in enumerate([vts,v2ts,v2rs])]
-        plt.xlabel(r'$R_e$')
-        plt.ylabel(r'$v$ (km/s)')
-        plt.legend()
-
-    return inc, pa, pab, vsys, vts, v2ts, v2rs
-
-def summaryplot(f,nbins,plate,ifu,smearing=True):
-    '''
-    Make a summary plot for a given dynesty file with MaNGA velocity field, the
-    model that dynesty fit, the residuals of the fit, and the velocity
-    profiles.  
-    '''
-
-    #get chains, edges, parameter values, vf info, model
-    if type(f) == str: chains = pickle.load(open(f,'rb'))
-    elif type(f) == np.ndarray: chains = f
-    elif type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler: chains = f.results
-    edges = np.linspace(0,1.5,nbins+1)
-    inc,pa,pab,vsys,vts,v2ts,v2rs = dprofs(chains)
-    vf,flux,m,ivar,sigma,sigmaivar,x,y,er,eth,p = getvfinfo(plate,ifu)
-    if smearing: psf = (p, flux, sigma, m)
-    else: psf = None
-    model = barmodel(x,y,er,eth,edges,inc,pa,pab,vsys,vts,v2ts,v2rs,psf=psf)
-    plt.figure(figsize = (8,8))
-
-    #MaNGA Ha velocity field
-    plt.subplot(221)
-    plt.title(r'H$\alpha$ Data')
-    plt.imshow(vf,cmap='jet',origin='lower')
-    plt.colorbar(label='km/s')
-
-    #VF model from dynesty fit
-    plt.subplot(222)
-    plt.title('Model')
-    plt.imshow(model,'jet',origin='lower') 
-    plt.colorbar(label='km/s')
-
-    #Residuals from fit
-    plt.subplot(223)
-    plt.title('Residuals')
-    resid = vf-model
-    vmax = np.abs(vf-model).max()
-    plt.imshow(vf-model,'jet',origin='lower',vmin=-vmax,vmax=vmax)
-    plt.colorbar(label='km/s')
-
-    #Radial velocity profiles
-    plt.subplot(224)
-    dprofs(chains,edges,plt.gca())
-    plt.tight_layout()
+    plate, ifu = args.plateifu
+    samp = barfit(plate, ifu, cores=args.cores, nbins = args.nbins, weight = args.weight, maxr = args.maxr, smearing = ~args.nosmear)
+    if not args.outfile: args.outfile = f'{plate}-{ifu}_{args.nbins}.out'
+    pickle.dump(samp.results, open(args.outfile, 'wb'))

@@ -1,3 +1,9 @@
+"""
+Testing utilities
+"""
+
+# TODO: Put most/all of this in barfit/tests/__init__.py ?
+
 import os
 import warnings
 

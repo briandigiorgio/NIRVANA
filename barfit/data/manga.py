@@ -227,6 +227,8 @@ class MaNGAGasKinematics(MaNGAKinematics):
             x = hdu[coo_ext].data[0]
             y = hdu[coo_ext].data[1]
             binid = hdu['BINID'].data[3]
+            grid_x = hdu['SPX_SKYCOO'].data[0]
+            grid_y = hdu['SPX_SKYCOO'].data[1]
             sb = hdu['EMLINE_GFLUX'].data[eml[line]]
             sb_ivar = hdu['EMLINE_GFLUX_IVAR'].data[eml[line]]
             sb_mask = hdu['EMLINE_GFLUX_MASK'].data[eml[line]] > 0
@@ -242,7 +244,8 @@ class MaNGAGasKinematics(MaNGAKinematics):
         super(MaNGAGasKinematics, self).__init__(vel, vel_ivar=vel_ivar, vel_mask=vel_mask, x=x,
                                                  y=y, sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask,
                                                  sig=sig, sig_ivar=sig_ivar, sig_mask=sig_mask,
-                                                 sig_corr=sig_corr, psf=psf, binid=binid)
+                                                 sig_corr=sig_corr, psf=psf, binid=binid,
+                                                 grid_x=grid_x, grid_y=grid_y)
 
 
 class MaNGAStellarKinematics(MaNGAKinematics):
@@ -272,8 +275,9 @@ class MaNGAStellarKinematics(MaNGAKinematics):
         # determined on a spaxel-by-spaxel basis, which determines
         # which extensions to use for the on-sky coordinates and mean
         # flux for each unique measurement.
-        # TODO: Actually, the BIN_* extensions are right in either case
-        # for the stellar kinematics, but I'll leave this for now...
+        # TODO: Actually, the BIN_* extensions are always right for the
+        # stellar kinematics. I.e., in the SPX case, the BIN_* and
+        # SPX_* extensions are identical.  Leaving it for now...
         bintype = maps_file.split('.')[0].split('-')[-3]
         coo_ext = 'SPX_SKYCOO' if bintype == 'SPX' else 'BIN_LWSKYCOO'
         flux_ext = 'SPX_MFLUX' if bintype == 'SPX' else 'BIN_MFLUX'
@@ -284,6 +288,8 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             x = hdu[coo_ext].data[0]
             y = hdu[coo_ext].data[1]
             binid = hdu['BINID'].data[1]
+            grid_x = hdu['SPX_SKYCOO'].data[0]
+            grid_y = hdu['SPX_SKYCOO'].data[1]
             sb = hdu[flux_ext].data
             sb_ivar = hdu['{0}_IVAR'.format(flux_ext)].data
             sb_mask = np.logical_not((sb > 0) & (sb_ivar > 0))
@@ -300,7 +306,8 @@ class MaNGAStellarKinematics(MaNGAKinematics):
                                                      x=x, y=y, sb=sb, sb_ivar=sb_ivar,
                                                      sb_mask=sb_mask, sig=sig, sig_ivar=sig_ivar,
                                                      sig_mask=sig_mask, sig_corr=sig_corr,
-                                                     psf=psf, binid=binid)
+                                                     psf=psf, binid=binid, grid_x=grid_x,
+                                                     grid_y=grid_y)
 
 
 

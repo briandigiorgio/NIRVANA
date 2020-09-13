@@ -13,14 +13,16 @@ model.
 #   - Allow Kinematics to include (inverse) covariance
 #   - Allow for errors in the sigma correction?
 
+from IPython import embed
+
 import numpy as np
 
 class Kinematics:
     r"""
     Base class to hold data fit by the kinematic model.
 
-    All data fit to be fit by this package must be contained in a
-    class that inherits from this one.
+    All data to be fit by this package must be contained in a class
+    that inherits from this one.
 
     .. warning::
 
@@ -105,9 +107,12 @@ class Kinematics:
             should have a value of -1 in this array. If None, all
             (unmasked) measurements are considered unique.
 
-    Attributes:
-        x
-
+    Raises:
+        ValueError:
+            Raised if the input arrays are not 2D or square, if any
+            of the arrays do not match the shape of ``vel``, or if
+            either ``x`` or ``y`` is provided but not both or
+            neither.
     """
     def __init__(self, vel, vel_ivar=None, vel_mask=None, x=None, y=None, sb=None, sb_ivar=None,
                  sb_mask=None, sig=None, sig_ivar=None, sig_mask=None, sig_corr=None, psf=None,
@@ -151,22 +156,25 @@ class Kinematics:
         else:
             self.sig_corr = sig_corr
 
-        # Raw index that maps to the original array coordiantes
+        # Raw index that maps to the original array coordinates
         self.raw_indx = np.arange(np.prod(self.spatial_shape)).reshape(self.spatial_shape)
 
         # Get the indices with the unique measurements
-        if binid is None:
+        self.binid = binid
+        if self.binid is None:
             indx = self.raw_indx.copy()
         else:
-            # Get the indices of measurements with unique bin IDS, ignoring any
+            # Get the indices of measurements with unique bin IDs, ignoring any
             # IDs set to -1
-            uniq, indx = map(lambda x : x[1:], np.unique(binid.ravel(), return_index=True)) \
-                            if np.any(binid == -1) else np.unique(binid.ravel(), return_index=True)
-        # Unravel and select the valid values
-        for a in [self.sb, self.sb_ivar, self.sb_mask, self.vel, self.vel_ivar, self.vel_mask,
-                  self.sig, self.sig_ivar, self.sig_mask, self.raw_indx]:
-            if a is not None:
-                a = a.ravel()[indx]
+            uniq, indx = map(lambda x : x[1:], np.unique(self.binid.ravel(), return_index=True)) \
+                            if np.any(self.binid == -1) \
+                            else np.unique(self.binid.ravel(), return_index=True)
+
+        # Unravel and select the valid values for all arrays
+        for attr in ['sb', 'sb_ivar', 'sb_mask', 'vel', 'vel_ivar', 'vel_mask', 'sig', 'sig_ivar',
+                     'sig_mask', 'raw_indx']:
+            if getattr(self, attr) is not None:
+                setattr(self, attr, getattr(self, attr).ravel()[indx])
 
     def _ingest(self, data, ivar, mask):
         """
@@ -226,12 +234,12 @@ class Kinematics:
             return None
 
         data = np.zeros(self.spatial_shape, dtype=float)
-        data[np.unravel_index(self.spatial_shape, self.raw_index)] = getattr(self, attr)
+        data[np.unravel_index(self.raw_indx, self.spatial_shape)] = getattr(self, attr)
         mask_attr = '{0}_mask'.format(attr)
         if not masked or not hasattr(self, mask_attr) or getattr(self, mask_attr) is None:
             return data
 
         mask = np.ones(self.spatial_shape, dtype=bool)
-        mask[np.unravel_index(self.spatial_shape, self.raw_index)] = getattr(self, mask_attr)
+        mask[np.unravel_index(self.raw_indx, self.spatial_shape)] = getattr(self, mask_attr)
         return np.ma.MaskedArray(data, mask=mask)
 

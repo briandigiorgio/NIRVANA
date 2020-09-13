@@ -161,6 +161,9 @@ class Kinematics:
         # Basic properties
         self.spatial_shape = vel.shape
 
+        self.psf = psf
+        self.aperture = aperture
+
         # Build coordinate arrays
         if x is None:
             # No coordinate arrays provided, so just assume a

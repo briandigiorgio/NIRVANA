@@ -71,16 +71,17 @@ def dmeds(samp):
         meds[i] = dynesty.utils.quantile(samps[:,i],[.5],weights)[0]
     return meds
 
-def dcorner(samp,**args):
+def dcorner(f,**args):
     '''
     Make a cornerplot of a dynesty sampler. Takes args for
     dynesty.plotting.cornerplot.
     '''
 
-    if type(samp) == dynesty.results.Results:
-        dynesty.plotting.cornerplot(samp, **args)
-    else:
-        dynesty.plotting.cornerplot(samp.results, **args)
+    if type(f) == str: res = pickle.load(open(f,'rb'))
+    elif type(f) == np.ndarray: res = f
+    elif type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler: res = f.results
+
+    dynesty.plotting.cornerplot(res, **args)
 
 def checkbins(plate,ifu,nbins):
     '''
@@ -169,4 +170,5 @@ def summaryplot(f,nbins,plate,ifu,smearing=True):
     #Radial velocity profiles
     plt.subplot(224)
     dprofs(chains,gal.edges,plt.gca())
+    plt.ylim(bottom=0)
     plt.tight_layout()

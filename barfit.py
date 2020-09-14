@@ -5,6 +5,8 @@ TODO:
 fit dispersion
 fit stars
 binning scheme
+fake data
+spekkens code pitfalls
 '''
 
 import numpy as np
@@ -114,9 +116,6 @@ def barmodel(args,inc,pa,pab,vsys,vts,v2ts,v2rs,xc=0,yc=0):
     #spekkens and sellwood 2nd order vf model (from andrew's thesis)
     model = vsys + np.sin(inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-pab))*np.cos(th)- v2rvals*np.sin(2*(th-pab))*np.sin(th))
     if args.psf is not None:
-        #shape = [int(np.sqrt(len(psf)))]*2
-        #for a in psf: a.reshape(shape)
-        psf, flux, sigma, mask = psf
         model = smear(model, args.psf, args.flux, args.sigma, mask=args.mask)[1]
     return model
 
@@ -125,7 +124,6 @@ def unpack(params, nglobs):
     Utility function to carry around a bunch of values in the Bayesian fit.
     Should probably be a class.
     '''
-
 
     #global parameters with and without center
     xc, yc = [0,0]
@@ -175,7 +173,17 @@ def smoothing(array, weight):
     chisq[~np.isfinite(chisq)] = 0
     return chisq.sum() * weight
 
-def dynprior(params,args):
+def trunc(q,mean,std,left,right):
+    '''
+    Helper function for the truncated normal distribution. Returns the value
+    at quantile q for a truncated normal distribution with specified mean,
+    std, and left/right bounds.
+    '''
+
+    a,b = (left-mean)/std, (right-mean)/std
+    return stats.truncnorm.ppf(q,a,b,mean,std)
+
+def dynprior(params,args,normprior=False):
     '''
     Prior transform for dynesty fit. Takes in standard params and args and
     defines a prior volume for all of the relevant fit parameters. At this
@@ -185,31 +193,44 @@ def dynprior(params,args):
 
     inc,pa,pab,vsys,xc,yc,vts,v2ts,v2rs = unpack(params,args.nglobs)
 
-    #if args.guess is not None:
-    #    incg,pag,pabg,vsysg,xcg,ycg,vtsg,v2tsg,v2rsg = unpack(args.guess,args.nglobs)
-    #    incp = stats.norm.ppf(inc,incg,10)
-    #    pap = stats.norm.ppf(pa,pag,20)
-    #    pabp = stats.norm.ppf(pab,pabg,45)
+    #attempt at smarter posteriors, currently super slow though
+    #truncated gaussian prior around guess values
+    if normprior and args.guess is not None:
+        incg,pag,pabg,vsysg,xcg,ycg,vtsg,v2tsg,v2rsg = unpack(args.guess,args.nglobs)
+        incp =  trunc(inc,incg,10,0,90)
+        pap =   trunc(pa,pag,20,0,360)
+        pabp =  trunc(pab,pabg,45,0,360)
+        vsysp = trunc(vsys,vsysg,10,-50,50)
+        vtsp =  trunc(vts,vtsg,50,0,400)
+        v2tsp = trunc(v2ts,v2tsg,50,0,200)
+        v2rsp = trunc(v2rs,v2rsg,50,0,200)
 
-    #uniform transformations to cover full angular range
-    incp = 90 * inc
-    pap = 360 * pa
-    pabp = 360 * pab
+    else:
+        #uniform transformations to cover full angular range
+        incp = 90 * inc
+        pap = 360 * pa
+        pabp = 360 * pab
 
-    #uniform guesses for reasonable values for velocities
-    vsysp = (2*vsys - 1) * 50
-    vtsp = 400 * vts
-    v2tsp = 200 * v2ts
-    v2rsp = 200 * v2rs
+        #uniform guesses for reasonable values for velocities
+        vsysp = (2*vsys - 1) * 50
+        vtsp = 400 * vts
+        v2tsp = 200 * v2ts
+        v2rsp = 200 * v2rs
+
+    repack = [incp,pap,pabp,vsysp]
 
     if args.nglobs == 6: 
-        xc = (2*xc - 1) * 20
-        yc = (2*yc - 1) * 20
+        #xc = (2*xc - 1) * 20
+        #yc = (2*yc - 1) * 20
+        xcp = stats.norm.ppf(xc,xcg,5)
+        ycp = stats.norm.ppf(yc,ycg,5)
+        repack += [xcp,ycp]
 
     #reassemble params array
-    repack = [incp,pap,pabp,vsysp]
-    if args.nglobs == 6: repack += [xc,yc]
     for i in range(len(vts)): repack += [vtsp[i],v2tsp[i],v2rsp[i]]
+    #print(args.guess)
+    #print(vsysg,vsysp)
+    #return
     return repack
 
 def logprior(params, args):
@@ -253,7 +274,7 @@ def logpost(params, args):
     return lprior + llike
 
 def barfit(plate,ifu, nbins=10, cores=20, walkers=100, steps=1000, maxr=1.5,
-        ntemps=None, cen=False,start=False,dyn=True,weight=10,smearing=True):
+        ntemps=None, cen=False,start=False,dyn=True,weight=10,smearing=True,points=500):
     '''
     Main function for velocity field fitter. Takes a given plate and ifu and
     fits a nonaxisymmetric velocity field with nbins number of radial bins
@@ -272,6 +293,7 @@ def barfit(plate,ifu, nbins=10, cores=20, walkers=100, steps=1000, maxr=1.5,
     args.setnglobs(6) if cen else args.setnglobs(4)
     args.makeedges(nbins, maxr)
     args.setweight(weight)
+    if smearing: args.getpsf()
     theta0 = args.getguess()
 
     #open up multiprocessing pool if needed
@@ -282,7 +304,9 @@ def barfit(plate,ifu, nbins=10, cores=20, walkers=100, steps=1000, maxr=1.5,
     if dyn:
         #dynesty sampler with periodic pa and pab, reflective inc
         sampler = dynesty.NestedSampler(loglike,dynprior,len(theta0),pool=pool,
-                queue_size=cores, periodic = [1,2], reflective = [0], 
+        #sampler = dynesty.DynamicNestedSampler(loglike,dynprior,len(theta0), pool=pool, 
+        #        queue_size=cores, periodic = [1,2], reflective = [0], 
+                queue_size=cores, periodic=[1,2], nlive=points,
                 ptform_args = [args], logl_args = [args])
         sampler.run_nested(print_func=None)
     
@@ -328,11 +352,13 @@ if __name__ == '__main__':
             help = 'How much to weight smoothness of rotation curves in fit. Optional, default is 10')
     parser.add_argument('-r', '--maxr',    default =1.5, type=float,
             help = 'Maximum radius in Re for bins. Optional, default is 1.5')
+    parser.add_argument('-p', '--points', default = 500, type=int,
+            help = 'Number of live points dynesty uses.')
     parser.add_argument('--nosmear', action='store_true', default = False,
             help = "Don't use beam smearing to speed up fit")
     args = parser.parse_args()
 
     plate, ifu = args.plateifu
-    samp = barfit(plate, ifu, cores=args.cores, nbins = args.nbins, weight = args.weight, maxr = args.maxr, smearing = ~args.nosmear)
+    samp = barfit(plate, ifu, cores=args.cores, nbins = args.nbins, weight = args.weight, maxr = args.maxr, smearing = ~args.nosmear, points=args.points)
     if not args.outfile: args.outfile = f'{plate}-{ifu}_{args.nbins}.out'
     pickle.dump(samp.results, open(args.outfile, 'wb'))

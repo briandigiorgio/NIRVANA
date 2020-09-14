@@ -1,0 +1,7 @@
+# barfit documentation requirements
+
+-r requirements.txt
+
+Sphinx>=3.0.4
+sphinx-automodapi>=0.12
+

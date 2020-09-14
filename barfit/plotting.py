@@ -1,6 +1,16 @@
-#!/usr/bin/env python
+"""
+Plotting for barfit results.
+"""
 
-from barfit import *
+import numpy as np
+from matplotlib import pyplot as plt
+
+import dynesty
+
+import corner
+
+from .barfit import getvfinfo, FitArgs, barmodel
+from .beam_smearing import apply_beam_smearing
 
 def cornerplot(sampler, burn=-1000, **args):
     '''
@@ -16,13 +26,15 @@ def cornerplot(sampler, burn=-1000, **args):
         chains = chain[:, burn:, :].reshape(-1,chain.shape[-1])
     corner.corner(chains,**args)
 
-def chainvis(sampler, titles = ['$inc$ (deg)',r'$\phi$ (deg)',r'$\phi_b$ (deg)',r'$v_{sys}$ (km/s)'], alpha=.1, nplots=None):
+def chainvis(sampler, titles=None, alpha=0.1, nplots=None):
     '''
     Look at all the chains of an emcee sampler in one plot to check
     convergence. Can specify number of variables to plot with nplots if there
     are too many to see well. Can set alpha of individual chains with alpha and
     titles of plots with titles.
     '''
+    if titles is None:
+        titles = ['$inc$ (deg)', r'$\phi$ (deg)', r'$\phi_b$ (deg)', r'$v_{sys}$ (km/s)']
 
     #get array of chains
     if type(sampler) == np.ndarray:
@@ -141,9 +153,9 @@ def summaryplot(f,nbins,plate,ifu,smearing=True):
     gal = FitArgs(plate,ifu)
     gal.makeedges(nbins,1.5)
     model = barmodel(gal,inc,pa,pab,vsys,vts,v2ts,v2rs)
-    if smear: 
+    if smearing: 
         gal.getpsf()
-        model = smear(model, gal.psf, gal.flux, gal.sigma, mask=gal.mask)[1]
+        model = apply_beam_smearing(model, gal.psf, gal.flux, gal.sigma, mask=gal.mask)[1]
     plt.figure(figsize = (8,8))
     plt.suptitle(f'{plate}-{ifu}')
 

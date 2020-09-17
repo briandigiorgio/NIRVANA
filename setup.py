@@ -59,7 +59,7 @@ def run_setup(data_files, scripts, packages, install_requires):
           url='https://github.com/briandigiorgio/BarFit',
           packages=packages,
           package_data={'barfit': data_files, '': ['*.rst', '*.txt']},
-          python_requires='>=3.7',
+          python_requires='>=3.6',
           include_package_data=True,
           scripts=scripts,
           install_requires=install_requires,

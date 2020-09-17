@@ -19,9 +19,10 @@ model.
 from IPython import embed
 
 import numpy as np
+from .fitargs import FitArgs
 
 
-class Kinematics:
+class Kinematics(FitArgs):
     r"""
     Base class to hold data fit by the kinematic model.
 
@@ -140,7 +141,7 @@ class Kinematics:
     """
     def __init__(self, vel, vel_ivar=None, vel_mask=None, x=None, y=None, sb=None, sb_ivar=None,
                  sb_mask=None, sig=None, sig_ivar=None, sig_mask=None, sig_corr=None, psf=None,
-                 aperture=None, binid=None, grid_x=None, grid_y=None):
+                 aperture=None, binid=None, grid_x=None, grid_y=None, reff=None):
 
         # Check shape of input arrays
         self.nimg = vel.shape[0]
@@ -163,6 +164,7 @@ class Kinematics:
 
         self.psf = psf
         self.aperture = aperture
+        self.reff = reff
 
         # Build coordinate arrays
         if x is None:

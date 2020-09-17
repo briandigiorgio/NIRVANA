@@ -74,7 +74,6 @@ class Galaxy:
         self.eth = np.ma.array(eth, mask = m)
 
         self.psf = None
-        self.guess = None
 
         f.close()
 
@@ -108,47 +107,3 @@ class Galaxy:
         '''
 
         self.edges = np.linspace(0,maxr,nbins+1)
-
-    def getguess(self):
-        '''
-        Generate a set of guess parameters for a given velocity field vf with
-        ivar by fitting it with a simple rotation curve using least squares
-        and sampling the resulting cuve to generate values in bins specified
-        by edges. Must have edges set before calling this. Sets guess
-        parameter in format [inc,pa,pab,vsys] + [vt,v2t,v2r]*(number of bins).
-        Inc and pa in degrees. Assumes pab = pa.
-        '''
-        from barfit import polar,rotcurveeval
-
-        if self.edges is None: raise ValueError('Must define edges first')
-
-        #define a minimization function and feed it to simple leastsquares
-        minfunc = lambda params,vf,x,y,e: np.array((vf - \
-                rotcurveeval(x,y,*params))/e).flatten()
-        vmax,inc,pa,h,vsys = leastsq(minfunc, (200,45,180,3,0), 
-                args = (self.vf,self.x,self.y,self.ivar**-.5))[0]
-
-        #check and fix signs if galaxy was fit upside down
-        if np.product(np.sign([vmax,inc,h])) < 0: pa += 180
-        pa %= 360
-        vmax,inc,h = np.abs([vmax,inc,h])
-
-        #generate model of vf and start assembling array of guess values
-        model = rotcurveeval(self.x,self.y,vmax,inc,pa,h,vsys)
-        guess = [inc,pa,pa,vsys,0,0,0]
-
-        #iterate through bins and get vt value for each bin, 
-        #dummy value for v2t and v2r since there isn't a good guess
-        vts = np.zeros(len(self.edges)-1)
-        v2ts = np.array([10] * len(self.edges-1))
-        v2rs = np.array([10] * len(self.edges-1))
-        for i in range(1,len(self.edges)-1):
-            cut = (self.er > self.edges[i]) * (self.er < self.edges[i+1])
-            vts[i] = np.max(model[cut])
-            guess += [vts[i], v2ts[i], v2rs[i]]
-        
-        #clean and return
-        guess = np.array(guess)
-        guess[np.isnan(guess)] = 100
-        self.guess = guess
-        return self.guess

@@ -6,11 +6,12 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 import dynesty
-
 import corner
+import pickle
 
-from .barfit import getvfinfo, FitArgs, barmodel
+from .barfit import barmodel
 from .beam_smearing import apply_beam_smearing
+from .data.manga import MaNGAStellarKinematics, MaNGAGasKinematics
 
 def cornerplot(sampler, burn=-1000, **args):
     '''
@@ -150,33 +151,33 @@ def summaryplot(f,nbins,plate,ifu,smearing=True):
     elif type(f) == np.ndarray: chains = f
     elif type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler: chains = f.results
     inc,pa,pab,vsys,vts,v2ts,v2rs = dprofs(chains)
-    gal = FitArgs(plate,ifu)
-    gal.makeedges(nbins,1.5)
-    model = barmodel(gal,inc,pa,pab,vsys,vts,v2ts,v2rs)
+    gal = MaNGAGasKinematics.from_plateifu(plate,ifu,dr='MPL-9',daptype='HYB10-MILESHC-MASTARHC')
+    gal.setedges(nbins,1.5)
+    model = barmodel(gal,inc,pa,pab,vsys,vts,v2ts,v2rs,plot=True)
+    vf = gal.remap('vel')
     if smearing: 
-        gal.getpsf()
-        model = apply_beam_smearing(model, gal.psf, gal.flux, gal.sigma, mask=gal.mask)[1]
+        model = apply_beam_smearing(model, gal.psf, gal.remap('sb'), gal.remap('sig'), mask=gal.remap('vel_mask'))[1]
     plt.figure(figsize = (8,8))
     plt.suptitle(f'{plate}-{ifu}')
 
     #MaNGA Ha velocity field
     plt.subplot(221)
     plt.title(r'H$\alpha$ Data')
-    plt.imshow(gal.vf,cmap='jet',origin='lower')
+    plt.imshow(vf,cmap='jet',origin='lower')
     plt.colorbar(label='km/s')
 
     #VF model from dynesty fit
     plt.subplot(222)
     plt.title('Model')
-    plt.imshow(model,'jet',origin='lower') 
+    plt.imshow(model,'jet',origin='lower',vmin=vf.min(),vmax=vf.max()) 
     plt.colorbar(label='km/s')
 
     #Residuals from fit
     plt.subplot(223)
     plt.title('Residuals')
-    resid = gal.vf-model
-    vmax = min(np.abs(gal.vf-model).max(),50)
-    plt.imshow(gal.vf-model,'jet',origin='lower',vmin=-vmax,vmax=vmax)
+    resid = vf-model
+    vmax = min(np.abs(vf-model).max(),50)
+    plt.imshow(vf-model,'jet',origin='lower',vmin=-vmax,vmax=vmax)
     plt.colorbar(label='km/s')
 
     #Radial velocity profiles

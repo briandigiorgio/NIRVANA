@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 """
 Script that runs the fit.
 """
@@ -5,7 +7,7 @@ Script that runs the fit.
 import argparse
 import pickle
 
-from barfit import barfit
+from barfit.barfit import barfit
 
 def parse_args(options=None):
 
@@ -35,4 +37,3 @@ def main(args):
         args.outfile = f'{plate}-{ifu}_{args.nbins}.out'
     # TODO: Do we need to use pickle?
     pickle.dump(samp.results, open(args.outfile, 'wb'))
-

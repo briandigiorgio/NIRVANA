@@ -23,6 +23,8 @@ def parse_args(options=None):
                         help='How much to weight smoothness of rotation curves in fit')
     parser.add_argument('-r', '--maxr', default=1.5, type=float,
                         help='Maximum radius in Re for bins')
+    parser.add_argument('-p', '--points', default = 500, type=int,
+                        help='Number of dynesty live points')
     parser.add_argument('--nosmear', action='store_true', default=False,
                         help='Don\'t use beam smearing to speed up fit')
 

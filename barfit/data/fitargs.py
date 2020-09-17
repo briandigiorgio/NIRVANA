@@ -40,7 +40,7 @@ class FitArgs:
         parameter in format [inc,pa,pab,vsys] + [vt,v2t,v2r]*(number of bins).
         Inc and pa in degrees. Assumes pab = pa.
         '''
-        from barfit import polar,rotcurveeval
+        from barfit.barfit import polar,rotcurveeval
         from scipy.optimize import leastsq
 
         if self.edges is None: raise ValueError('Must define edges first')

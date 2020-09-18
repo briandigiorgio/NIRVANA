@@ -86,8 +86,7 @@ def barmodel(args,inc,pa,pab,vsys,vts,v2ts,v2rs,xc=0,yc=0,plot=False):
     #spekkens and sellwood 2nd order vf model (from andrew's thesis)
     model = vsys + np.sin(inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-pab))*np.cos(th)- v2rvals*np.sin(2*(th-pab))*np.sin(th))
     if args.smear:
-        #model = smear(model, args.psf, args.remap('sb'), args.remap('sig'), mask=args.remap('vel_mask'))[1]
-        model = smear(model, args.psf, args.sb_r, args.sig_r, mask=args.vel_mask_r)
+        model = smear(model, args.psf, args.sb_r, args.sig_r, mask=args.vel_mask_r)[1]
 
     if plot: return model
     return args.bin(model)

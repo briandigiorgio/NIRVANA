@@ -307,14 +307,15 @@ class Kinematics(FitArgs):
                 = getattr(self, attr)[self.bin_inverse]
         mask_attr = '{0}_mask'.format(attr)
         if not masked or not hasattr(self, mask_attr) or getattr(self, mask_attr) is None:
+            if new_attr: setattr(self, attr+'_r', data)
             return data
 
         mask = np.ones(self.spatial_shape, dtype=bool)
         mask[np.unravel_index(self.grid_indx, self.spatial_shape)] \
                 = getattr(self, mask_attr)[self.bin_inverse]
-        new_data = np.ma.MaskedArray(data, mask=mask)
-        if new_attr: setattr(self, attr+'_r', new_data)
-        return new_data
+        masked_data = np.ma.MaskedArray(data, mask=mask)
+        if new_attr: setattr(self, attr+'_r', masked_data)
+        return masked_data
 
     def bin(self, data):
         """

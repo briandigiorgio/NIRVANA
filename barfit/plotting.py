@@ -153,31 +153,31 @@ def summaryplot(f,nbins,plate,ifu,smearing=True):
     inc,pa,pab,vsys,vts,v2ts,v2rs = dprofs(chains)
     gal = MaNGAGasKinematics.from_plateifu(plate,ifu,dr='MPL-9',daptype='HYB10-MILESHC-MASTARHC')
     gal.setedges(nbins,1.5)
+    gal.setsmear(smearing)
+    if smearing: [gal.remap(a) for a in ['sb', 'sig', 'vel_mask']]
     model = barmodel(gal,inc,pa,pab,vsys,vts,v2ts,v2rs,plot=True)
-    vf = gal.remap('vel')
-    if smearing: 
-        model = apply_beam_smearing(model, gal.psf, gal.remap('sb'), gal.remap('sig'), mask=gal.remap('vel_mask'))[1]
+    gal.remap('vel')
     plt.figure(figsize = (8,8))
     plt.suptitle(f'{plate}-{ifu}')
 
     #MaNGA Ha velocity field
     plt.subplot(221)
     plt.title(r'H$\alpha$ Data')
-    plt.imshow(vf,cmap='jet',origin='lower')
+    plt.imshow(gal.vel_r,cmap='jet',origin='lower')
     plt.colorbar(label='km/s')
 
     #VF model from dynesty fit
     plt.subplot(222)
     plt.title('Model')
-    plt.imshow(model,'jet',origin='lower',vmin=vf.min(),vmax=vf.max()) 
+    plt.imshow(model,'jet',origin='lower',vmin=gal.vel_r.min(),vmax=gal.vel_r.max()) 
     plt.colorbar(label='km/s')
 
     #Residuals from fit
     plt.subplot(223)
     plt.title('Residuals')
-    resid = vf-model
-    vmax = min(np.abs(vf-model).max(),50)
-    plt.imshow(vf-model,'jet',origin='lower',vmin=-vmax,vmax=vmax)
+    resid = gal.vel_r-model
+    vmax = min(np.abs(gal.vel_r-model).max(),50)
+    plt.imshow(gal.vel_r-model,'jet',origin='lower',vmin=-vmax,vmax=vmax)
     plt.colorbar(label='km/s')
 
     #Radial velocity profiles

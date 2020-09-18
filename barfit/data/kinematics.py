@@ -275,7 +275,7 @@ class Kinematics(FitArgs):
         return _data, _ivar, _mask
 
     # TODO: include sigma correction when attr='sig'?
-    def remap(self, attr, masked=True):
+    def remap(self, attr, masked=True, new_attr=True):
         """
         Remap the requested attribute to the full 2D array.
 
@@ -286,6 +286,8 @@ class Kinematics(FitArgs):
                 If an associated mask exists for the selected
                 attribute, return the map as a
                 `numpy.ma.MaskedArray`_.
+            new_attr (:obj:`bool`, optional):
+                make a new attribute `attr_r` for the 2D array.
 
         Returns:
             `numpy.ndarray`_, `numpy.ma.MaskedArray`_: 2D array with
@@ -310,7 +312,9 @@ class Kinematics(FitArgs):
         mask = np.ones(self.spatial_shape, dtype=bool)
         mask[np.unravel_index(self.grid_indx, self.spatial_shape)] \
                 = getattr(self, mask_attr)[self.bin_inverse]
-        return np.ma.MaskedArray(data, mask=mask)
+        new_data = np.ma.MaskedArray(data, mask=mask)
+        if new_attr: setattr(self, attr+'_r', new_data)
+        return new_data
 
     def bin(self, data):
         """

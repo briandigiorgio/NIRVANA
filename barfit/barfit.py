@@ -85,8 +85,9 @@ def barmodel(args,inc,pa,pab,vsys,vts,v2ts,v2rs,xc=0,yc=0,plot=False):
 
     #spekkens and sellwood 2nd order vf model (from andrew's thesis)
     model = vsys + np.sin(inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-pab))*np.cos(th)- v2rvals*np.sin(2*(th-pab))*np.sin(th))
-    if args.psf is not None:
-        model = smear(model, args.psf, args.remap('sb'), args.remap('sig'), mask=args.remap('vel_mask'))[1]
+    if args.smear:
+        #model = smear(model, args.psf, args.remap('sb'), args.remap('sig'), mask=args.remap('vel_mask'))[1]
+        model = smear(model, args.psf, args.sb_r, args.sig_r, mask=args.vel_mask_r)
 
     if plot: return model
     return args.bin(model)
@@ -243,21 +244,24 @@ def barfit(plate,ifu, nbins=10, cores=20, walkers=100, steps=1000, maxr=1.5,
     args.setnglobs(6) if cen else args.setnglobs(4)
     args.setedges(nbins, maxr)
     args.setweight(weight)
+    args.setsmear(smearing)
+
+    if smearing: [args.remap(a) for a in ['sb', 'sig', 'vel_mask']]
     theta0 = args.getguess()
 
     #open up multiprocessing pool if needed
-    if cores > 1 and not ntemps: pool = mp.Pool(cores)
+    if cores > 1 and not ntemps:
+        pool = mp.Pool(cores)
+        pool.size = cores
     else: pool = None
 
     #choose the appropriate sampler and starting positions based on user input
     if dyn:
-        #dynesty sampler with periodic pa and pab, reflective inc
+        #dynesty sampler with periodic pa and pab
         sampler = dynesty.NestedSampler(loglike,dynprior,len(theta0),pool=pool,
-        #sampler = dynesty.DynamicNestedSampler(loglike,dynprior,len(theta0), pool=pool, 
-        #        queue_size=cores, periodic = [1,2], reflective = [0], 
-                queue_size=cores, periodic=[1,2], nlive=points,
+                periodic=[1,2], nlive=points,# queue_size=cores, 
                 ptform_args = [args], logl_args = [args])
-        sampler.run_nested(print_func=None)
+        sampler.run_nested()
     
     else:
         if ntemps:

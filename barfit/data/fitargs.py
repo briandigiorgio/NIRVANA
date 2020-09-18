@@ -31,6 +31,13 @@ class FitArgs:
 
         self.edges = np.linspace(0,maxr,nbins+1)
 
+    def setsmear(self, smear):
+        '''
+        Set whether or not to do beam smearing. Should only provide True or False
+        '''
+
+        self.smear = smear
+
     def getguess(self):
         '''
         Generate a set of guess parameters for a given velocity field vf with
@@ -58,7 +65,6 @@ class FitArgs:
 
         #generate model of vf and start assembling array of guess values
         model = rotcurveeval(self.grid_x,self.grid_y,vmax,inc,pa,h,vsys,reff=self.reff)
-        plt.imshow(model)
         guess = [inc,pa,pa,vsys,0,0,0]
         r,th = polar(self.grid_y, self.grid_x, inc, pa, reff=self.reff)
 

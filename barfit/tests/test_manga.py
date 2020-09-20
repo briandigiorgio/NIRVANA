@@ -5,8 +5,13 @@ import numpy
 
 from astropy.io import fits
 
+from scipy import signal
+from astropy import convolution
+
 from barfit.data import manga
 from barfit.tests.util import remote_data_file, requires_remote, dap_test_daptype
+
+from barfit.models.beam import convolve_fft, gauss2d_kernel
 
 # TODO: Test remapping
 
@@ -15,7 +20,12 @@ def test_manga_gas_kinematics():
     maps_file = remote_data_file('manga-8138-12704-MAPS-{0}.fits.gz'.format(dap_test_daptype))
     cube_file = remote_data_file('manga-8138-12704-LOGCUBE.fits.gz')
 
-    kin = manga.MaNGAGasKinematics(maps_file, cube_file)
+    #kin = manga.MaNGAGasKinematics(maps_file, cube_file)
+    kin = manga.MaNGAStellarKinematics(maps_file)
+
+    embed()
+    exit()
+
     _vel = kin.remap('vel', masked=False)
 
     with fits.open(maps_file) as hdu:
@@ -55,4 +65,8 @@ def test_from_plateifu():
 
     assert maps_file == _maps_file, 'MAPS file name incorrect'
     assert cube_file == _cube_file, 'CUBE file name incorrect'
+
+if __name__ == '__main__':
+    test_manga_gas_kinematics()
+
 

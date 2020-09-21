@@ -70,7 +70,6 @@ def projected_polar(x, y, pa, inc):
     """
     xd, yd = rotate(x, y, np.pi/2-pa, clockwise=True)
     yd /= np.cos(inc)
-    # Absolute is to deal with annoying "-0." cases.
     return np.sqrt(xd**2 + yd**2), np.arctan2(-yd,xd) % (2*np.pi)
 
 

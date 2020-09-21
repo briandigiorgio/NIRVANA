@@ -59,7 +59,8 @@ from .models.geometry import projected_polar
 #    th = (np.pi/2 - np.arctan2(yd,xd)) % (np.pi*2)
 #    return r, th 
 
-# Moved to barfit/models/axisym.py
+
+#  Moved to barfit.models.axisym.rotcurveeval, but with some changes
 #def rotcurveeval(x,y,vmax,inc,pa,h,vsys=0,xc=0,yc=0,reff=1):
 #    '''
 #    Evaluate a simple tanh rotation curve with asymtote vmax, inclination inc
@@ -69,11 +70,10 @@ from .models.geometry import projected_polar
 #    '''
 #
 #    inc, pa = np.radians([inc,pa])
-#    r,th = projected_polar(x-xc,y-yc, pa, inc)
-#    r /= reff
-#    # TODO: Why was there a negative here? (it used to be `-vmax`)
-#    model = vmax * np.tanh(r/h) * np.cos(th) * np.sin(inc) + vsys
+#    r,th = polar(x-xc,y-yc,inc,pa,reff)
+#    model = -vmax * np.tanh(r/h) * np.cos(th) * np.sin(inc) + vsys
 #    return model
+
 
 def barmodel(args,inc,pa,pab,vsys,vts,v2ts,v2rs,xc=0,yc=0,plot=False):
     '''

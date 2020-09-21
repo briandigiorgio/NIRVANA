@@ -35,7 +35,11 @@ def main(args):
     plate, ifu = args.plateifu
     samp = barfit(plate, ifu, cores=args.cores, nbins=args.nbins, weight=args.weight,
                   maxr=args.maxr, smearing=~args.nosmear)
+
     if args.outfile is None:
-        args.outfile = f'{plate}-{ifu}_{args.nbins}.out'
+        args.outfile = f'{args.plate}-{args.ifu}_{args.nbin}bin_{args.weight}w_{args.points}p'
+        if args.nosmear: args.outfile += '_ns'
+        else: args.outfile += '_s'
+
     # TODO: Do we need to use pickle?
     pickle.dump(samp.results, open(args.outfile, 'wb'))

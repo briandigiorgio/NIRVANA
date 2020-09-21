@@ -286,6 +286,7 @@ class Kinematics(FitArgs):
 
         # Set the error and incorporate the mask for a masked array
         if ivar is None:
+            # Don't instantiate the array if we don't need to.
             _ivar = None #np.ones(self.spatial_shape, dtype=float)
         elif isinstance(ivar, np.ma.MaskedArray):
             _mask |= np.ma.getmaskarray(ivar)
@@ -293,7 +294,8 @@ class Kinematics(FitArgs):
         else:
             _ivar = ivar
         # Make sure to mask any measurement with ivar <= 0
-        _mask |= np.logical_not(_ivar > 0)
+        if _ivar is not None:
+            _mask |= np.logical_not(_ivar > 0)
 
         return _data, _ivar, _mask
 

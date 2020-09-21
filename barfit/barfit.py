@@ -218,7 +218,11 @@ def loglike(params, args):
 
     #make vf model and perform chisq
     vfmodel = barmodel(args,inc,pa,pab,vsys,vts,v2ts,v2rs,xc,yc)
-    llike = -.5*np.ma.sum((vfmodel - args.vel)**2 * args.vel_ivar) #chisq
+    # vfmodel is masked
+    llike = (vfmodel - args.vel)**2
+    if args.vel_ivar is not None:
+        llike *= args.vel_ivar
+    llike = -.5*np.ma.sum(llike) #chisq
     #llike -= args.weight * (smoothing(vts) - smoothing(v2ts) - smoothing(v2rs))
     llike = llike - smoothing(vts,args.weight) - smoothing(v2ts,args.weight) - smoothing(v2rs,args.weight)
     return llike

@@ -47,7 +47,7 @@ def convolve_fft(data, kernel, kernel_fft=False, return_fft=False):
     return fftmult if return_fft else np.fft.ifftn(fftmult).real
 
 
-def construct_beam(psf, aperture=None, return_fft=False):
+def construct_beam(psf, aperture, return_fft=False):
     """
     Construct the beam profile.
 

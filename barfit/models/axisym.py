@@ -175,5 +175,3 @@ class AxisymmetricDisk:
         self.par_err = np.zeros(self.np, dtype=float)
         self.par_err[self.free] = np.sqrt(np.diag(cov))
 
-
-        

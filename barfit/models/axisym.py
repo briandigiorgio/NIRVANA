@@ -19,11 +19,14 @@ def rotcurveeval(x,y,vmax,inc,pa,h,vsys=0,xc=0,yc=0,reff=1):
     as input x andy.
     '''
 
-    inc, pa = np.radians([inc,pa])
-    r,th = projected_polar(x-xc,y-yc, pa, inc)
+    _inc, _pa = np.radians([inc,pa])
+    r,th = projected_polar(x-xc, y-yc, _pa, _inc)
     r /= reff
-    # TODO: Why was there a negative here? (it used to be `-vmax`)
-    model = vmax * np.tanh(r/h) * np.cos(th) * np.sin(inc) + vsys
+
+    # TODO: Why is there a negative here (i.e., -vmax)? ... After
+    # playing around, I assume this is here because it worked for
+    # 8078-12703 because it flips the PA to be ~180 instead of near 0?
+    model = -vmax * np.tanh(r/h) * np.cos(th) * np.sin(_inc) + vsys
     return model
 
 

@@ -66,6 +66,9 @@ class FitArgs:
         pa %= 360
         vmax,inc,h = np.abs([vmax,inc,h])
 
+        embed()
+        exit()
+
         #generate model of vf and start assembling array of guess values
         model = rotcurveeval(self.grid_x,self.grid_y,vmax,inc,pa,h,vsys,reff=self.reff)
         guess = [inc,pa,pa,vsys,0,0,0]

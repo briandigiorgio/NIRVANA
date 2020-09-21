@@ -62,7 +62,3 @@ def test_from_plateifu():
     assert cube_file == _cube_file, 'CUBE file name incorrect'
 
 
-if __name__ == '__main__':
-    test_manga_gas_kinematics()
-
-

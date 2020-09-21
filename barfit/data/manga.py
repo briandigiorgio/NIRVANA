@@ -265,7 +265,7 @@ class MaNGAStellarKinematics(MaNGAKinematics):
         psf_ext (:obj:`str`, optional):
             The name of the extension with the reconstructed PSF.
     """
-    def __init__(self, maps_file, cube_file, psf_ext='GPSF'):
+    def __init__(self, maps_file, cube_file=None, psf_ext='GPSF'):
 
         if not os.path.isfile(maps_file):
             raise FileNotFoundError('File does not exist: {0}'.format(maps_file))

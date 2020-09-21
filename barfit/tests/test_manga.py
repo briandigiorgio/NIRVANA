@@ -5,8 +5,13 @@ import numpy
 
 from astropy.io import fits
 
+from scipy import signal
+from astropy import convolution
+
 from barfit.data import manga
 from barfit.tests.util import remote_data_file, requires_remote, dap_test_daptype
+
+from barfit.models.beam import convolve_fft, gauss2d_kernel
 
 # TODO: Test remapping
 
@@ -55,4 +60,5 @@ def test_from_plateifu():
 
     assert maps_file == _maps_file, 'MAPS file name incorrect'
     assert cube_file == _cube_file, 'CUBE file name incorrect'
+
 

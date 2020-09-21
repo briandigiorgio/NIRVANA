@@ -20,10 +20,11 @@ def remote_data_file(filename=None):
     return root if filename is None else os.path.join(root, filename)
 
 def remote_drp_test_files():
-    return ['manga-8138-12704-LOGCUBE.fits.gz']
+    return ['manga-8138-12704-LOGCUBE.fits.gz', 'manga-8078-12703-LOGCUBE.fits.gz']
 
 def remote_dap_test_files(daptype='HYB10-MILESHC-MASTARHC2'):
-    return ['manga-8138-12704-MAPS-{0}.fits.gz'.format(daptype)]
+    return ['manga-8138-12704-MAPS-{0}.fits.gz'.format(daptype),
+            'manga-8078-12703-MAPS-{0}.fits.gz'.format(daptype)]
 
 drp_test_version = 'v3_0_1'
 dap_test_version = '3.0.1'

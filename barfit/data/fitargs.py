@@ -1,7 +1,13 @@
 #!/usr/bin/env python
 
+from IPython import embed
+
 import numpy as np
+from scipy.optimize import leastsq
 import matplotlib.pyplot as plt
+
+from ..models.geometry import projected_polar
+from ..models.axisym import rotcurveeval
 
 class FitArgs:
     '''
@@ -31,12 +37,12 @@ class FitArgs:
 
         self.edges = np.linspace(0,maxr,nbins+1)
 
-    def setsmear(self, smear):
-        '''
-        Set whether or not to do beam smearing. Should only provide True or False
-        '''
-
-        self.smear = smear
+#    def setsmear(self, smear):
+#        '''
+#        Set whether or not to do beam smearing. Should only provide True or False
+#        '''
+#
+#        self.smear = smear
 
     def getguess(self):
         '''
@@ -47,9 +53,6 @@ class FitArgs:
         parameter in format [inc,pa,pab,vsys] + [vt,v2t,v2r]*(number of bins).
         Inc and pa in degrees. Assumes pab = pa.
         '''
-        from barfit.barfit import polar,rotcurveeval
-        from scipy.optimize import leastsq
-
         if self.edges is None: raise ValueError('Must define edges first')
 
         #define a minimization function and feed it to simple leastsquares
@@ -66,7 +69,8 @@ class FitArgs:
         #generate model of vf and start assembling array of guess values
         model = rotcurveeval(self.grid_x,self.grid_y,vmax,inc,pa,h,vsys,reff=self.reff)
         guess = [inc,pa,pa,vsys,0,0,0]
-        r,th = polar(self.grid_y, self.grid_x, inc, pa, reff=self.reff)
+        r,th = projected_polar(self.grid_x, self.grid_y, *np.radians([pa,inc]))
+        r /= self.reff
 
         #iterate through bins and get vt value for each bin, 
         #dummy value for v2t and v2r since there isn't a good guess

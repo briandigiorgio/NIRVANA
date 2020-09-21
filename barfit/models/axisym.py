@@ -10,6 +10,23 @@ from .geometry import projected_polar
 from .beam import smear
 from .util import cov_err
 
+
+def rotcurveeval(x,y,vmax,inc,pa,h,vsys=0,xc=0,yc=0,reff=1):
+    '''
+    Evaluate a simple tanh rotation curve with asymtote vmax, inclination inc
+    in degrees, position angle pa in degrees, rotation scale h, systematic
+    velocity vsys, and x and y offsets xc and yc. Returns array in same shape
+    as input x andy.
+    '''
+
+    inc, pa = np.radians([inc,pa])
+    r,th = projected_polar(x-xc,y-yc, pa, inc)
+    r /= reff
+    # TODO: Why was there a negative here? (it used to be `-vmax`)
+    model = vmax * np.tanh(r/h) * np.cos(th) * np.sin(inc) + vsys
+    return model
+
+
 class AxisymmetricDisk:
     """
     Simple model for an axisymmetric disk.

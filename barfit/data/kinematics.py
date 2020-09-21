@@ -297,10 +297,11 @@ class Kinematics(FitArgs):
 
         return _data, _ivar, _mask
 
-    def remap_data(self, data):
+    def remap_data(self, data, masked=False):
         if data.shape != self.vel.shape:
             raise ValueError('To remap, must have the same shape as the internal data attributes.')
-        _data = np.zeros(self.spatial_shape, dtype=float)
+        _data = np.ma.masked_all(self.spatial_shape, dtype=float) \
+                    if masked else np.zeros(self.spatial_shape, dtype=float)
         _data[np.unravel_index(self.grid_indx, self.spatial_shape)] = data[self.bin_inverse]
         return _data
 

@@ -64,8 +64,5 @@ def test_lsq_psf():
     assert 56. < disk.par[3] < 57., 'Inclination changed'
     assert 250. < disk.par[5] < 252., 'Projected rotation changed'
 
-if __name__ == '__main__':
-    test_lsq_nopsf()
-
 
 

@@ -9,6 +9,7 @@ import numpy as np
 from astropy.io import fits
 
 from .kinematics import Kinematics
+from .fitargs import FitArgs
 
 
 # TODO: This is put here to avoid a dependence on mangadap and/or
@@ -239,13 +240,14 @@ class MaNGAGasKinematics(MaNGAKinematics):
             sig_ivar = hdu['EMLINE_GSIGMA_IVAR'].data[eml[line]]
             sig_mask = hdu['EMLINE_GSIGMA_MASK'].data[eml[line]] > 0
             sig_corr = hdu['EMLINE_INSTSIGMA'].data[eml[line]]
+            reff = hdu[0].header['REFF']
         print('Done')
 
         super(MaNGAGasKinematics, self).__init__(vel, vel_ivar=vel_ivar, vel_mask=vel_mask, x=x,
                                                  y=y, sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask,
                                                  sig=sig, sig_ivar=sig_ivar, sig_mask=sig_mask,
                                                  sig_corr=sig_corr, psf=psf, binid=binid,
-                                                 grid_x=grid_x, grid_y=grid_y)
+                                                 grid_x=grid_x, grid_y=grid_y, reff=reff)
 
 
 class MaNGAStellarKinematics(MaNGAKinematics):
@@ -263,7 +265,7 @@ class MaNGAStellarKinematics(MaNGAKinematics):
         psf_ext (:obj:`str`, optional):
             The name of the extension with the reconstructed PSF.
     """
-    def __init__(self, maps_file, cube_file, psf_ext='GPSF'):
+    def __init__(self, maps_file, cube_file=None, psf_ext='GPSF'):
 
         if not os.path.isfile(maps_file):
             raise FileNotFoundError('File does not exist: {0}'.format(maps_file))
@@ -300,6 +302,7 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             sig_ivar = hdu['STELLAR_SIGMA_IVAR'].data
             sig_mask = hdu['STELLAR_SIGMA_MASK'].data > 0
             sig_corr = hdu['STELLAR_SIGMACORR'].data[0]
+            reff = hdu[0].header['REFF']
         print('Done')
 
         super(MaNGAStellarKinematics, self).__init__(vel, vel_ivar=vel_ivar, vel_mask=vel_mask,
@@ -307,7 +310,7 @@ class MaNGAStellarKinematics(MaNGAKinematics):
                                                      sb_mask=sb_mask, sig=sig, sig_ivar=sig_ivar,
                                                      sig_mask=sig_mask, sig_corr=sig_corr,
                                                      psf=psf, binid=binid, grid_x=grid_x,
-                                                     grid_y=grid_y)
+                                                     grid_y=grid_y, reff=reff)
 
 
 

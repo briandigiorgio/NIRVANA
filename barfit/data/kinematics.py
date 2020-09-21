@@ -19,8 +19,11 @@ model.
 from IPython import embed
 
 import numpy as np
+from scipy import sparse
+
 from .fitargs import FitArgs
 
+from ..models.beam import construct_beam
 
 class Kinematics(FitArgs):
     r"""
@@ -161,9 +164,7 @@ class Kinematics(FitArgs):
 
         # Basic properties
         self.spatial_shape = vel.shape
-
-        self.psf = psf
-        self.aperture = aperture
+        self._set_beam(psf, aperture)
         self.reff = reff
 
         # Build coordinate arrays
@@ -231,17 +232,39 @@ class Kinematics(FitArgs):
             # bin numbers are not sequential, i.e., the bin numbers are
             # not identical to np.arange(nbin).
 
-            # Construct the bin transform
-            # TODO: Might be a faster way of doing this...
-            # TODO: Set this to be a scipy.sparse.csr_matrix?
-            self.bin_transform = np.array([(binid_map == b).astype(float) 
-                                            for b in self.binid])/nbin.astype(float)[:,None]
+            # Construct the bin transform using a sparse matrix
+            d,i,j = np.array([[1/nbin[i],i,j] 
+                             for i,b in enumerate(self.binid)
+                             for j in np.where(binid_map == b)[0]]).T
+            self.bin_transform = sparse.coo_matrix((d,(i.astype(int),j.astype(int))),
+                                                   shape=(self.binid.size,
+                                                          np.prod(self.spatial_shape))).tocsr()
 
         # Unravel and select the valid values for all arrays
         for attr in ['x', 'y', 'sb', 'sb_ivar', 'sb_mask', 'vel', 'vel_ivar', 'vel_mask', 'sig', 
                      'sig_ivar', 'sig_mask']:
             if getattr(self, attr) is not None:
                 setattr(self, attr, getattr(self, attr).ravel()[indx])
+
+    def _set_beam(self, psf, aperture):
+        """
+        Construct the beam and beam FFT based on the input. If no psf
+        or aperture are provided, both are set to None.
+        """
+        if psf is None and aperture is None:
+            self.beam = None
+            self.beam_fft = None
+            return
+        if psf is None:
+            self.beam = aperture
+            self.beam_fft = np.fft.fftn(np.fft.ifftshift(aperture))
+            return
+        if aperture is None:
+            self.beam = psf
+            self.beam_fft = np.fft.fftn(np.fft.ifftshift(psf))
+            return
+        self.beam_fft = construct_beam(psf, aperture, return_fft=True)
+        self.beam = np.fft.ifftn(self.beam_fft).real
 
     def _ingest(self, data, ivar, mask):
         """
@@ -263,16 +286,26 @@ class Kinematics(FitArgs):
 
         # Set the error and incorporate the mask for a masked array
         if ivar is None:
-            _ivar = np.ones(self.spatial_shape, dtype=float)
+            # Don't instantiate the array if we don't need to.
+            _ivar = None #np.ones(self.spatial_shape, dtype=float)
         elif isinstance(ivar, np.ma.MaskedArray):
             _mask |= np.ma.getmaskarray(ivar)
             _ivar = ivar.data
         else:
             _ivar = ivar
         # Make sure to mask any measurement with ivar <= 0
-        _mask |= np.logical_not(_ivar > 0)
+        if _ivar is not None:
+            _mask |= np.logical_not(_ivar > 0)
 
         return _data, _ivar, _mask
+
+    def remap_data(self, data, masked=False):
+        if data.shape != self.vel.shape:
+            raise ValueError('To remap, must have the same shape as the internal data attributes.')
+        _data = np.ma.masked_all(self.spatial_shape, dtype=float) \
+                    if masked else np.zeros(self.spatial_shape, dtype=float)
+        _data[np.unravel_index(self.grid_indx, self.spatial_shape)] = data[self.bin_inverse]
+        return _data
 
     # TODO: include sigma correction when attr='sig'?
     def remap(self, attr, masked=True, new_attr=True):
@@ -335,8 +368,9 @@ class Kinematics(FitArgs):
             ValueError:
                 Raised if the shape of the input array is incorrect.
         """
+        # TODO: Speed this up.
         if data.shape != self.spatial_shape:
             raise ValueError('Data to rebin has incorrect shape; expected {0}, found {1}.'.format(
                               self.spatial_shape, data.shape))
-        return np.dot(self.bin_transform, data.ravel())
+        return self.bin_transform.dot(data.ravel())
 

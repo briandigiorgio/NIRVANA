@@ -10,12 +10,14 @@ spekkens code pitfalls
 '''
 
 import sys
+import argparse
 import multiprocessing as mp
 
+from IPython import embed
+
 import numpy as np
-from scipy.optimize import leastsq
-from scipy.signal import convolve
 from scipy import stats
+
 import matplotlib.pyplot as plt
 
 from astropy.io import fits
@@ -25,42 +27,53 @@ try:
 except:
     tqdm = None
 
-import emcee
-import ptemcee
-import dynesty
-import argparse
+try:
+    import emcee
+except:
+    emcee = None
 
-from .beam_smearing import apply_beam_smearing as smear
-from .galaxy import Galaxy
-from .data.kinematics import Kinematics
+try:
+    import ptemcee
+except:
+    ptemcee = None
+
+import dynesty
+
+from .models.beam import smear
 from .data.manga import MaNGAGasKinematics, MaNGAStellarKinematics
 from .data.fitargs import FitArgs
 
-def polar(x,y,i,pa,reff=1): 
-    '''
-    Transform x,y coordinates from Cartesian to polar coordinates rotated at
-    angle pa and inclination i. Returns radial coordinate r and aziumuthal
-    coordinate pa. All angles in radians.  
-    '''
+from .models.geometry import projected_polar
 
-    yd = (x*np.cos(pa) + y*np.sin(pa))
-    xd = (y*np.cos(pa) - x*np.sin(pa))/np.cos(i) 
-    r = np.sqrt(xd**2 + yd**2) / reff
-    th = (np.pi/2 - np.arctan2(yd,xd)) % (np.pi*2)
-    return r, th 
+# Now barfit.models.geometry.projected_polar, but with some changes.
+#def polar(x,y,i,pa,reff=1): 
+#    '''
+#    Transform x,y coordinates from Cartesian to polar coordinates rotated at
+#    angle pa and inclination i. Returns radial coordinate r and aziumuthal
+#    coordinate pa. All angles in radians.  
+#    '''
+#
+#    yd = (x*np.cos(pa) + y*np.sin(pa))
+#    xd = (y*np.cos(pa) - x*np.sin(pa))/np.cos(i) 
+#    r = np.sqrt(xd**2 + yd**2) / reff
+#    th = (np.pi/2 - np.arctan2(yd,xd)) % (np.pi*2)
+#    return r, th 
 
-def rotcurveeval(x,y,vmax,inc,pa,h,vsys=0,xc=0,yc=0,reff=1):
-    '''
-    Evaluate a simple tanh rotation curve with asymtote vmax, inclination inc
-    in degrees, position angle pa in degrees, rotation scale h, systematic
-    velocity vsys, and x and y offsets xc and yc. Returns array in same shape
-    as input x andy.
-    '''
 
-    inc, pa = np.radians([inc,pa])
-    r,th = polar(x-xc,y-yc,inc,pa,reff)
-    model = -vmax * np.tanh(r/h) * np.cos(th) * np.sin(inc) + vsys
-    return model
+#  Moved to barfit.models.axisym.rotcurveeval, but with some changes
+#def rotcurveeval(x,y,vmax,inc,pa,h,vsys=0,xc=0,yc=0,reff=1):
+#    '''
+#    Evaluate a simple tanh rotation curve with asymtote vmax, inclination inc
+#    in degrees, position angle pa in degrees, rotation scale h, systematic
+#    velocity vsys, and x and y offsets xc and yc. Returns array in same shape
+#    as input x andy.
+#    '''
+#
+#    inc, pa = np.radians([inc,pa])
+#    r,th = polar(x-xc,y-yc,inc,pa,reff)
+#    model = -vmax * np.tanh(r/h) * np.cos(th) * np.sin(inc) + vsys
+#    return model
+
 
 def barmodel(args,inc,pa,pab,vsys,vts,v2ts,v2rs,xc=0,yc=0,plot=False):
     '''
@@ -75,8 +88,8 @@ def barmodel(args,inc,pa,pab,vsys,vts,v2ts,v2rs,xc=0,yc=0,plot=False):
 
     #convert angles to polar and normalize radial coorinate
     inc,pa,pab = np.radians([inc,pa,pab])
-    r, th = polar(args.grid_y-xc,args.grid_x-yc,inc,pa,args.reff)
-
+    r, th = projected_polar(args.grid_x-xc,args.grid_y-yc,pa,inc)
+    r /= args.reff
     #interpolate velocity values for all r 
     bincents = (args.edges[:-1] + args.edges[1:])/2
     vtvals = np.interp(r,bincents,vts)
@@ -85,11 +98,12 @@ def barmodel(args,inc,pa,pab,vsys,vts,v2ts,v2rs,xc=0,yc=0,plot=False):
 
     #spekkens and sellwood 2nd order vf model (from andrew's thesis)
     model = vsys + np.sin(inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-pab))*np.cos(th)- v2rvals*np.sin(2*(th-pab))*np.sin(th))
-    if args.smear:
-        model = smear(model, args.psf, args.sb_r, args.sig_r, mask=args.vel_mask_r)[1]
-
-    if plot: return model
-    return args.bin(model)
+    if args.beam_fft is not None:
+        model = smear(model, args.beam_fft, beam_fft=True)[1]
+#        smear(model, args.psf, args.sb_r, args.sig_r, mask=args.vel_mask_r)[1]
+    if plot:
+        return args.remap_data(np.ma.MaskedArray(model, mask=args.vel_mask), masked=True)
+    return np.ma.MaskedArray(args.bin(model), mask=args.vel_mask)
 
 def unpack(params, nglobs):
     '''
@@ -200,12 +214,15 @@ def loglike(params, args):
     field with current parameter vales and performs a chi squared on it across
     the whole vf weighted by ivar to get a log likelihood value. 
     '''
-
     inc,pa,pab,vsys,xc,yc,vts,v2ts,v2rs = unpack(params,args.nglobs)
 
     #make vf model and perform chisq
     vfmodel = barmodel(args,inc,pa,pab,vsys,vts,v2ts,v2rs,xc,yc)
-    llike = -.5*np.sum((vfmodel - args.vel)**2 * args.vel_ivar) #chisq
+    # vfmodel is masked
+    llike = (vfmodel - args.vel)**2
+    if args.vel_ivar is not None:
+        llike *= args.vel_ivar
+    llike = -.5*np.ma.sum(llike) #chisq
     #llike -= args.weight * (smoothing(vts) - smoothing(v2ts) - smoothing(v2rs))
     llike = llike - smoothing(vts,args.weight) - smoothing(v2ts,args.weight) - smoothing(v2rs,args.weight)
     return llike
@@ -222,8 +239,9 @@ def logpost(params, args):
     llike = loglike(params, args)
     return lprior + llike
 
-def barfit(plate,ifu, nbins=10, cores=20, walkers=100, steps=1000, maxr=1.5,
-        ntemps=None, cen=False,start=False,dyn=True,weight=10,smearing=True,points=500,stellar=False):
+def barfit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC', dr='MPL-9', nbins=10, cores=20,
+           walkers=100, steps=1000, maxr=1.5, ntemps=None, cen=False, start=False, dyn=True,
+           weight=10, smearing=True, points=500, stellar=False, root=None, verbose=False):
     '''
     Main function for velocity field fitter. Takes a given plate and ifu and
     fits a nonaxisymmetric velocity field with nbins number of radial bins
@@ -238,14 +256,21 @@ def barfit(plate,ifu, nbins=10, cores=20, walkers=100, steps=1000, maxr=1.5,
     '''
 
     #get info on galaxy and define bins and starting guess
-    if stellar: args = MaNGAStellarKinematics.from_plateifu(plate,ifu)
-    else: args = MaNGAGasKinematics.from_plateifu(plate,ifu,line='Ha-6564',daptype='HYB10-MILESHC-MASTARHC',dr='MPL-9')
+    if stellar:
+        args = MaNGAStellarKinematics.from_plateifu(plate, ifu, daptype=daptype, dr=dr,
+                                                    ignore_psf=not smearing, cube_path=root,
+                                                    maps_path=root)
+    else:
+        args = MaNGAGasKinematics.from_plateifu(plate, ifu, line='Ha-6564', daptype=daptype,
+                                                dr=dr, ignore_psf=not smearing, cube_path=root,
+                                                maps_path=root)
+
     args.setnglobs(6) if cen else args.setnglobs(4)
     args.setedges(nbins, maxr)
     args.setweight(weight)
-    args.setsmear(smearing)
+#    args.setsmear(smearing)
 
-    if smearing: [args.remap(a) for a in ['sb', 'sig', 'vel_mask']]
+#    if smearing: [args.remap(a) for a in ['sb', 'sig', 'vel_mask']]
     theta0 = args.getguess()
 
     #open up multiprocessing pool if needed
@@ -259,16 +284,20 @@ def barfit(plate,ifu, nbins=10, cores=20, walkers=100, steps=1000, maxr=1.5,
         #dynesty sampler with periodic pa and pab
         sampler = dynesty.NestedSampler(loglike,dynprior,len(theta0),pool=pool,
                 periodic=[1,2], nlive=points,# queue_size=cores, 
-                ptform_args = [args], logl_args = [args])
+                ptform_args = [args], logl_args = [args], verbose=verbose)
         sampler.run_nested()
     
     else:
         if ntemps:
+            if ptemcee is None:
+                raise ImportError('ptemcee is not available.  Run pip install ptemcee and rerun.')
             #parallel tempered MCMC using somewhat outdated ptemcee
             pos = 1e-4*np.random.randn(ntemps,walkers,len(theta0)) + theta0
             sampler = ptemcee.Sampler(walkers, len(theta0), loglike, logprior, loglargs=[args], logpargs=[args], threads=cores, ntemps=ntemps)
 
         else:
+            if emcee is None:
+                raise ImportError('emcee is not available.  Run pip install emcee and rerun.')
             #normal MCMC with emcee
             if type(start) != bool:
                 #set starting positions if given
@@ -291,3 +320,6 @@ def barfit(plate,ifu, nbins=10, cores=20, walkers=100, steps=1000, maxr=1.5,
 
     if cores > 1 and not ntemps: pool.close()
     return sampler
+
+
+

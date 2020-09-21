@@ -340,3 +340,21 @@ class Kinematics(FitArgs):
                               self.spatial_shape, data.shape))
         return np.dot(self.bin_transform, data.ravel())
 
+    def mock(size, inc, pa, pab, vsys, vts, v2ts, v2rs, xc=0, yc=0, reff=10):
+        a = np.linspace(-15,15,size)
+        edges = np.linspace(0,15,len(vts))
+        x,y = np.meshgrid(a,a)
+
+        #convert angles to polar and normalize radial coorinate
+        inc,pa,pab = np.radians([inc,pa,pab])
+        r, th = polar(y-xc,x-yc,inc,pa,reff)
+
+        #interpolate velocity values for all r 
+        bincents = (edges[:-1] + edges[1:])/2
+        vtvals = np.interp(r,bincents,vts)
+        v2tvals = np.interp(r,bincents,v2ts)
+        v2rvals = np.interp(r,bincents,v2rs)
+
+        #spekkens and sellwood 2nd order vf model (from andrew's thesis)
+        model = vsys + np.sin(inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-pab))*np.cos(th)- v2rvals*np.sin(2*(th-pab))*np.sin(th))
+        return Kinematics(model, x=x, y=y)

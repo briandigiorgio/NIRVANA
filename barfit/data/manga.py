@@ -74,7 +74,7 @@ def read_manga_psf(cube_file, psf_ext):
     return psf
 
 
-def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10',
+def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='v3_0_1',
                               redux_path=None, cube_path=None, analysis_path=None, maps_path=None):
     """
     Get the DAP maps and DRP datacube files for a given plate and
@@ -151,7 +151,7 @@ class MaNGAKinematics(Kinematics):
     """
 
     @classmethod
-    def from_plateifu(cls, plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10',
+    def from_plateifu(cls, plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='v3_0_1/3.0.1',
                       redux_path=None, cube_path=None, analysis_path=None, maps_path=None,
                       ignore_psf=False, **kwargs):
         """
@@ -243,11 +243,11 @@ class MaNGAGasKinematics(MaNGAKinematics):
             reff = hdu[0].header['REFF']
         print('Done')
 
-        super(MaNGAGasKinematics, self).__init__(vel, vel_ivar=vel_ivar, vel_mask=vel_mask, x=x,
-                                                 y=y, sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask,
-                                                 sig=sig, sig_ivar=sig_ivar, sig_mask=sig_mask,
-                                                 sig_corr=sig_corr, psf=psf, binid=binid,
-                                                 grid_x=grid_x, grid_y=grid_y, reff=reff)
+        super().__init__(vel, vel_ivar=vel_ivar, vel_mask=vel_mask, x=x, y=y, 
+                         sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sig=sig, 
+                         sig_ivar=sig_ivar, sig_mask=sig_mask, 
+                         sig_corr=sig_corr, psf=psf, binid=binid, grid_x=grid_x, 
+                         grid_y=grid_y, reff=reff)
 
 
 class MaNGAStellarKinematics(MaNGAKinematics):
@@ -305,12 +305,11 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             reff = hdu[0].header['REFF']
         print('Done')
 
-        super(MaNGAStellarKinematics, self).__init__(vel, vel_ivar=vel_ivar, vel_mask=vel_mask,
-                                                     x=x, y=y, sb=sb, sb_ivar=sb_ivar,
-                                                     sb_mask=sb_mask, sig=sig, sig_ivar=sig_ivar,
-                                                     sig_mask=sig_mask, sig_corr=sig_corr,
-                                                     psf=psf, binid=binid, grid_x=grid_x,
-                                                     grid_y=grid_y, reff=reff)
+        super().__init__(vel, vel_ivar=vel_ivar, vel_mask=vel_mask, x=x, y=y,
+                         sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sig=sig, 
+                         sig_ivar=sig_ivar, sig_mask=sig_mask, 
+                         sig_corr=sig_corr, psf=psf, binid=binid, grid_x=grid_x, 
+                         grid_y=grid_y, reff=reff)
 
 
 

@@ -10,7 +10,6 @@ import corner
 import pickle
 
 from .barfit import barmodel
-from .beam_smearing import apply_beam_smearing
 from .data.manga import MaNGAStellarKinematics, MaNGAGasKinematics
 
 def cornerplot(sampler, burn=-1000, **args):
@@ -151,10 +150,8 @@ def summaryplot(f,nbins,plate,ifu,smearing=True):
     elif type(f) == np.ndarray: chains = f
     elif type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler: chains = f.results
     inc,pa,pab,vsys,vts,v2ts,v2rs = dprofs(chains)
-    gal = MaNGAGasKinematics.from_plateifu(plate,ifu,dr='MPL-9',daptype='HYB10-MILESHC-MASTARHC')
+    gal = MaNGAGasKinematics.from_plateifu(plate,ifu,dr='MPL-9',daptype='HYB10-MILESHC-MASTARHC', ignore_psf=~smearing)
     gal.setedges(nbins,1.5)
-    gal.setsmear(smearing)
-    if smearing: [gal.remap(a) for a in ['sb', 'sig', 'vel_mask']]
     model = barmodel(gal,inc,pa,pab,vsys,vts,v2ts,v2rs,plot=True)
     gal.remap('vel')
     plt.figure(figsize = (8,8))

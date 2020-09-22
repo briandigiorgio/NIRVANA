@@ -50,9 +50,10 @@ def main(args):
                   weight=args.weight, maxr=args.maxr, smearing=args.smearing, root=args.root,
                   verbose=args.verbose)
     if args.outfile is None:
-        args.outfile = f'{plate}-{ifu}_{args.nbins}bin_{args.weight}w_{args.points}p.out'
+        args.outfile = f'{plate}-{ifu}_{args.nbins}bin_{args.weight}w_{args.points}p'
         if args.smearing: args.outfile += '_s'
         else: args.outfile += '_ns'
+    args.outfile += '.out'
 
     # TODO: Do we need to use pickle?
     pickle.dump(samp.results, open(args.outfile, 'wb'))

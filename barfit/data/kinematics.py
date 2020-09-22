@@ -420,11 +420,11 @@ class Kinematics(FitArgs):
                 Raises if input velocity arrays are not the same length.
                 
         '''
-        if len(vts) != len(v2ts) or len(vts) != len(v2rs):
+        if len(vt) != len(v2t) or len(vt != len(v2r):
             raise ValueError('Velocity arrays must be the same length.')
 
         a = np.linspace(-r,r,size)
-        edges = np.linspace(0,r,len(vts)+1)
+        edges = np.linspace(0,r,len(vt)+1)
         x,y = np.meshgrid(a,a)
 
         #convert angles to polar and normalize radial coorinate

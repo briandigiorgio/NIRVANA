@@ -420,7 +420,7 @@ class Kinematics(FitArgs):
                 Raises if input velocity arrays are not the same length.
                 
         '''
-        if len(vt) != len(v2t) or len(vt != len(v2r):
+        if len(vt) != len(v2t) or len(vt) != len(v2r):
             raise ValueError('Velocity arrays must be the same length.')
 
         a = np.linspace(-r,r,size)

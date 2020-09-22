@@ -37,13 +37,6 @@ class FitArgs:
 
         self.edges = np.linspace(0,maxr,nbins+1)
 
-#    def setsmear(self, smear):
-#        '''
-#        Set whether or not to do beam smearing. Should only provide True or False
-#        '''
-#
-#        self.smear = smear
-
     def getguess(self):
         '''
         Generate a set of guess parameters for a given velocity field vf with
@@ -56,10 +49,13 @@ class FitArgs:
         if self.edges is None: raise ValueError('Must define edges first')
 
         #define a minimization function and feed it to simple leastsquares
+        if self.vel_ivar is None: ivar = np.ones_like(self.vel)
+        else: ivar = self.vel_ivar
+
         minfunc = lambda params,vf,x,y,e,reff: np.array((vf - \
                 rotcurveeval(x,y,*params,reff=reff))/e).flatten()
         vmax,inc,pa,h,vsys = leastsq(minfunc, (200,45,180,3,0), 
-                args = (self.vel,self.x,self.y,self.vel_ivar**-.5,self.reff))[0]
+                args = (self.vel,self.x,self.y,ivar**-.5,self.reff))[0]
 
         #check and fix signs if galaxy was fit upside down
         if np.product(np.sign([vmax,inc,h])) < 0: pa += 180

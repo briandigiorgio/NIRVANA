@@ -103,7 +103,7 @@ def barmodel(args,inc,pa,pab,vsys,vts,v2ts,v2rs,xc=0,yc=0,plot=False):
         model = smear(model, args.beam_fft, beam_fft=True)[1]
 #        smear(model, args.psf, args.sb_r, args.sig_r, mask=args.vel_mask_r)[1]
     if plot:
-        return args.remap_data(np.ma.MaskedArray(model, mask=args.vel_mask), masked=True)
+        return args.remap_data(np.ma.MaskedArray(args.bin(model), mask=args.vel_mask), masked=True)
     return np.ma.MaskedArray(args.bin(model), mask=args.vel_mask)
 
 def unpack(params, nglobs):

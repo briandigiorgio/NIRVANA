@@ -41,6 +41,7 @@ import dynesty
 
 from .models.beam import smear
 from .data.manga import MaNGAGasKinematics, MaNGAStellarKinematics
+from .data.kinematics import Kinematics
 from .data.fitargs import FitArgs
 
 from .models.geometry import projected_polar
@@ -241,7 +242,7 @@ def logpost(params, args):
 
 def barfit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC', dr='MPL-9', nbins=10, cores=20,
            walkers=100, steps=1000, maxr=1.5, ntemps=None, cen=False, start=False, dyn=True,
-           weight=10, smearing=True, points=500, stellar=False, root=None, verbose=False):
+           weight=10, smearing=True, points=500, stellar=False, root=None, verbose=False, mock=False):
     '''
     Main function for velocity field fitter. Takes a given plate and ifu and
     fits a nonaxisymmetric velocity field with nbins number of radial bins
@@ -255,22 +256,28 @@ def barfit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC', dr='MPL-9', nbins=10, c
     chosen package.  
     '''
 
+    #mock galaxy using Andrew's values for 8178-12703
+    if plate == 0 and ifu == 0 :
+        vt  = [0,85,120,115,120,140,210,240,245,235]
+        v2t = [0,55,105,120,115,100,70,30,10,20]
+        v2r = [0,70,120,135,125,95,65,50,30,40]
+
+        args = Kinematics.mock(75,50,13.6,-25.8,1.1,vt,v2t,v2r)
+
     #get info on galaxy and define bins and starting guess
-    if stellar:
-        args = MaNGAStellarKinematics.from_plateifu(plate, ifu, daptype=daptype, dr=dr,
-                                                    ignore_psf=not smearing, cube_path=root,
-                                                    maps_path=root)
     else:
-        args = MaNGAGasKinematics.from_plateifu(plate, ifu, line='Ha-6564', daptype=daptype,
-                                                dr=dr, ignore_psf=not smearing, cube_path=root,
-                                                maps_path=root)
+        if stellar:
+            args = MaNGAStellarKinematics.from_plateifu(plate, ifu, daptype=daptype, dr=dr,
+                                                        ignore_psf=not smearing, cube_path=root,
+                                                        maps_path=root)
+        else:
+            args = MaNGAGasKinematics.from_plateifu(plate, ifu, line='Ha-6564', daptype=daptype,
+                                                    dr=dr, ignore_psf=not smearing, cube_path=root,
+                                                    maps_path=root)
 
     args.setnglobs(6) if cen else args.setnglobs(4)
     args.setedges(nbins, maxr)
     args.setweight(weight)
-#    args.setsmear(smearing)
-
-#    if smearing: [args.remap(a) for a in ['sb', 'sig', 'vel_mask']]
     theta0 = args.getguess()
 
     #open up multiprocessing pool if needed
@@ -320,6 +327,3 @@ def barfit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC', dr='MPL-9', nbins=10, c
 
     if cores > 1 and not ntemps: pool.close()
     return sampler
-
-
-

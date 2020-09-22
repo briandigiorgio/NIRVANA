@@ -439,4 +439,5 @@ class Kinematics(FitArgs):
 
         #spekkens and sellwood 2nd order vf model (from andrew's thesis)
         model = vsys + np.sin(inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-pab))*np.cos(th)- v2rvals*np.sin(2*(th-pab))*np.sin(th))
-        return cls(model, x=x, y=y, grid_x=x, grid_y=y, reff=reff)
+        binid = np.arange(np.product(model.shape)).reshape(model.shape)
+        return cls(model, x=x, y=y, grid_x=x, grid_y=y, reff=reff,binid=binid)

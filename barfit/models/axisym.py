@@ -21,7 +21,7 @@ def rotcurveeval(x,y,vmax,inc,pa,h,vsys=0,xc=0,yc=0,reff=1):
 
     _inc, _pa = np.radians([inc,pa])
     r,th = projected_polar(x-xc, y-yc, _pa, _inc)
-    r /= reff
+    if reff is not None: r /= reff
 
     # TODO: Why is there a negative here (i.e., -vmax)? ... After
     # playing around, I assume this is here because it worked for

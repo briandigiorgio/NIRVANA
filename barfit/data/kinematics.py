@@ -24,6 +24,7 @@ from scipy import sparse
 from .fitargs import FitArgs
 
 from ..models.beam import construct_beam
+from ..models.geometry import projected_polar
 
 class Kinematics(FitArgs):
     r"""
@@ -374,21 +375,68 @@ class Kinematics(FitArgs):
                               self.spatial_shape, data.shape))
         return self.bin_transform.dot(data.ravel())
 
-    def mock(size, inc, pa, pab, vsys, vts, v2ts, v2rs, xc=0, yc=0, reff=10):
-        a = np.linspace(-15,15,size)
-        edges = np.linspace(0,15,len(vts))
+    @classmethod
+    def mock(cls, size, inc, pa, pab, vsys, vt, v2t, v2r, xc=0, yc=0, reff=10,r=15):
+        '''
+        Makes a `Kinematics` object with a mock velocity field with input
+        parameters using similar code to barmodel.
+
+        Args:
+            size (:obj:`int`):
+                length of each side of the output arrays.
+            inc (:obj:`float`):
+                Inclination in degrees.
+            pa (:obj:`float`):
+                Position angle in degrees.
+            pab (:obj:`float`:
+                Relative position angle of bisymmetric features.
+            vsys (:obj:`float`):
+                Systemic velocity.
+            vt (`numpy.ndarray`_):
+                First order tangential velocities. Must have same length as
+                :attr:`v2t` and :attr:`v2r`.
+            v2t (`numpy.ndarray`_):
+                Second order tangential velocities. Must have same length as
+                :attr:`vt` and :attr:`v2r`.
+            v2r (`numpy.ndarray`_):
+                Second order radial velocities. Must have same length as
+                :attr:`vt` and :attr:`v2t`.
+            xc (:obj:`float`, optional):
+                Offset of center on x axis. Optional, defaults to 0.
+            yc (:obj:`float`, optional):
+                Offset of center on y axis. Optional, defaults to 0.
+            reff (:obj:`float`, optional):
+                Effective radius of the mock galaxy. Units are arbitrary
+                but must be the same as :attr:`r`. Defaults to 10.
+            r (:obj:`float`, optional):
+                Maximum absolute value for the x and y arrays. Defaults to 15.
+
+        Returns:
+            `Kinematics` object with the velocity field and x and y
+            coordinates of the mock galaxy. 
+
+        Raises:
+            ValueError:
+                Raises if input velocity arrays are not the same length.
+                
+        '''
+        if len(vts) != len(v2ts) or len(vts) != len(v2rs):
+            raise ValueError('Velocity arrays must be the same length.')
+
+        a = np.linspace(-r,r,size)
+        edges = np.linspace(0,r,len(vts)+1)
         x,y = np.meshgrid(a,a)
 
         #convert angles to polar and normalize radial coorinate
         inc,pa,pab = np.radians([inc,pa,pab])
-        r, th = polar(y-xc,x-yc,inc,pa,reff)
+        r, th = projected_polar(x-xc,y-yc,inc,pa)
 
         #interpolate velocity values for all r 
         bincents = (edges[:-1] + edges[1:])/2
-        vtvals = np.interp(r,bincents,vts)
-        v2tvals = np.interp(r,bincents,v2ts)
-        v2rvals = np.interp(r,bincents,v2rs)
+        vtvals = np.interp(r,bincents,vt)
+        v2tvals = np.interp(r,bincents,v2t)
+        v2rvals = np.interp(r,bincents,v2r)
 
         #spekkens and sellwood 2nd order vf model (from andrew's thesis)
         model = vsys + np.sin(inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-pab))*np.cos(th)- v2rvals*np.sin(2*(th-pab))*np.sin(th))
-        return Kinematics(model, x=x, y=y)
+        return cls(model, x=x, y=y, grid_x=x, grid_y=y, reff=reff)

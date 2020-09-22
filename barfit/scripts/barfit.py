@@ -50,7 +50,7 @@ def main(args):
                   weight=args.weight, maxr=args.maxr, smearing=args.smearing, root=args.root,
                   verbose=args.verbose)
     if args.outfile is None:
-        args.outfile = f'{args.plate}-{args.ifu}_{args.nbin}bin_{args.weight}w_{args.points}p'
+        args.outfile = f'{plate}-{ifu}_{args.nbin}bin_{args.weight}w_{args.points}p'
         if args.nosmear: args.outfile += '_ns'
         else: args.outfile += '_s'
 

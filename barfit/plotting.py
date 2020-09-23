@@ -11,6 +11,7 @@ import pickle
 
 from .barfit import barmodel
 from .data.manga import MaNGAStellarKinematics, MaNGAGasKinematics
+from .data.kinematics import Kinematics
 
 def cornerplot(sampler, burn=-1000, **args):
     '''
@@ -150,7 +151,21 @@ def summaryplot(f,nbins,plate,ifu,smearing=True):
     elif type(f) == np.ndarray: chains = f
     elif type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler: chains = f.results
     inc,pa,pab,vsys,vts,v2ts,v2rs = dprofs(chains)
-    gal = MaNGAGasKinematics.from_plateifu(plate,ifu,dr='MPL-9',daptype='HYB10-MILESHC-MASTARHC', ignore_psf=~smearing)
+
+    #mock galaxy using Andrew's values for 8078-12703
+    if plate == 0 and ifu == 0 :
+        vt  = [0,85,120,115,120,140,210,240,245,235]
+        v2t = [0,55,105,120,115,100,70,30,10,20]
+        v2r = [0,70,120,135,125,95,65,50,30,40]
+
+        gal = Kinematics.mock(75,50,13.6,-25.8,1.1,vt,v2t,v2r)
+
+    else:
+        if stellar:
+            gal = MaNGAStellarKinematics.from_plateifu(plate,ifu,dr='MPL-9',daptype='HYB10-MILESHC-MASTARHC', ignore_psf=~smearing)
+        else:
+            gal = MaNGAGasKinematics.from_plateifu(plate,ifu,dr='MPL-9',daptype='HYB10-MILESHC-MASTARHC', ignore_psf=~smearing)
+
     gal.setedges(nbins,1.5)
     model = barmodel(gal,inc,pa,pab,vsys,vts,v2ts,v2rs,plot=True)
     gal.remap('vel')
@@ -182,3 +197,5 @@ def summaryplot(f,nbins,plate,ifu,smearing=True):
     dprofs(chains,gal.edges,plt.gca())
     plt.ylim(bottom=0)
     plt.tight_layout()
+
+    return dprofs(chains)

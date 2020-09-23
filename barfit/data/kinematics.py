@@ -200,9 +200,9 @@ class Kinematics(FitArgs):
         #   - bin_transform is used to bin data in a map with
         #     per-spaxel data to match the binning applied to the
         #     measurements. E.g., this is used to match a per-spaxel model
-        #     to the binned data. By default (binid is None), this is just
-        #     an identity vector. See :func:`bin` for how this is used.
-        self.bin_transform = np.ones(np.prod(self.spatial_shape), dtype=float)
+        #     to the binned data. By default (binid is None), this assumes each
+        #     pixel is its own bin. See :func:`bin` for how this is used.
+        self.bin_transform = np.arange(np.prod(self.spatial_shape))
         #   - grid_indx and bin_inverse serve similar purposes and are
         #   identical if the data are unbinned. grid_index gives the
         #   flattened index of each unique measurement in the input map.
@@ -423,6 +423,7 @@ class Kinematics(FitArgs):
         if len(vt) != len(v2t) or len(vt) != len(v2r):
             raise ValueError('Velocity arrays must be the same length.')
 
+        #make grid of x and y
         a = np.linspace(-r,r,size)
         edges = np.linspace(0,r,len(vt)+1)
         x,y = np.meshgrid(a,a)

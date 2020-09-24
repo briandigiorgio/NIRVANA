@@ -169,9 +169,6 @@ class Kinematics(FitArgs):
         self.spatial_shape = vel.shape
         self._set_beam(psf, aperture)
         self.reff = reff
-        self.inc = inc
-        self.pa = pa
-        self.sersic_n = sersic_n
 
         # Build coordinate arrays
         if x is None:

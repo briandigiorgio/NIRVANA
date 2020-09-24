@@ -7,6 +7,7 @@ from IPython import embed
 
 import numpy as np
 from astropy.io import fits
+from glob import glob
 
 from .kinematics import Kinematics
 from .fitargs import FitArgs
@@ -143,6 +144,53 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
     return maps_file, cube_file
 
 
+def read_drpall(plate, ifu, redux_path, dr, ext='elpetro'):
+    """
+    Read the NASA Sloan Atlas data from the `drpall` file for the appropriate
+    data release.
+
+    Args:
+        plate (:obj:`int`):
+            Plate of galaxy.
+        ifu (:obj:`int`):
+            IFU of galaxy.
+        redux_path (:obj:`str`, optional):
+            The top-level directory with all DRP output. If None,
+            this will be set to the ``MANGA_SPECTRO_REDUX``
+        dr (:obj:`str`, optional):
+            Data release identifier that matches the directory with
+            the data.
+        ext (:obj:`str`):
+            Whether to use the `elpetro` or `sersic` derived values in the NSA
+            catalog.
+
+    Returns:
+        :obj:`tuple`: tuple of inclination, position angle, and S\`ersic n
+        values. Angles are in degrees.
+
+    Raises:
+        FileNotFoundError:
+            Raised if the `drpall` file can't be found in the specified place.
+    """
+    # Read the drpall file
+    print('Reading {0} ... '.format(cube_file))
+    drpall_file = glob(f'{cubepath}/{dr}/drpall*.fits')[0]
+    plateifu = f'{plate}-{ifu}'
+
+    if not drpall_file:
+        raise FileNotFoundError('Could not find drpall file')
+
+    with fits.open(drpall_file) as hdu:
+        data = hdu[1].data[hdu[1].data['plateifu'] == plateifu]
+        inc = np.degrees(np.arccos(data[f'nsa_{ext}_ba']))
+        pa = data[f'nsa_{ext}_phi']
+        n = data['nsa_sersic_n']
+
+    print('Done')
+    return inc, pa, n
+
+
+
 class MaNGAKinematics(Kinematics):
     """
     Base class for MaNGA derived classes the provides common functionality.
@@ -151,7 +199,7 @@ class MaNGAKinematics(Kinematics):
     """
 
     @classmethod
-    def from_plateifu(cls, plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='v3_0_1/3.0.1',
+    def from_plateifu(cls, plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='v3_0_1',
                       redux_path=None, cube_path=None, analysis_path=None, maps_path=None,
                       ignore_psf=False, **kwargs):
         """
@@ -208,6 +256,7 @@ class MaNGAGasKinematics(MaNGAKinematics):
 
         # Get the PSF, if possible
         psf = None if cube_file is None else read_manga_psf(cube_file, psf_ext)
+        print(cube_file)
 
         # Establish whether or not the gas kinematics were determined
         # on a spaxel-by-spaxel basis, which determines which extension

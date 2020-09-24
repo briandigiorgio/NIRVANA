@@ -46,36 +46,6 @@ from .data.fitargs import FitArgs
 
 from .models.geometry import projected_polar
 
-# Now barfit.models.geometry.projected_polar, but with some changes.
-#def polar(x,y,i,pa,reff=1): 
-#    '''
-#    Transform x,y coordinates from Cartesian to polar coordinates rotated at
-#    angle pa and inclination i. Returns radial coordinate r and aziumuthal
-#    coordinate pa. All angles in radians.  
-#    '''
-#
-#    yd = (x*np.cos(pa) + y*np.sin(pa))
-#    xd = (y*np.cos(pa) - x*np.sin(pa))/np.cos(i) 
-#    r = np.sqrt(xd**2 + yd**2) / reff
-#    th = (np.pi/2 - np.arctan2(yd,xd)) % (np.pi*2)
-#    return r, th 
-
-
-#  Moved to barfit.models.axisym.rotcurveeval, but with some changes
-#def rotcurveeval(x,y,vmax,inc,pa,h,vsys=0,xc=0,yc=0,reff=1):
-#    '''
-#    Evaluate a simple tanh rotation curve with asymtote vmax, inclination inc
-#    in degrees, position angle pa in degrees, rotation scale h, systematic
-#    velocity vsys, and x and y offsets xc and yc. Returns array in same shape
-#    as input x andy.
-#    '''
-#
-#    inc, pa = np.radians([inc,pa])
-#    r,th = polar(x-xc,y-yc,inc,pa,reff)
-#    model = -vmax * np.tanh(r/h) * np.cos(th) * np.sin(inc) + vsys
-#    return model
-
-
 def barmodel(args,inc,pa,pab,vsys,vts,v2ts,v2rs,xc=0,yc=0,plot=False):
     '''
     Evaluate a nonaxisymmetric velocity field model taken from Leung
@@ -91,9 +61,16 @@ def barmodel(args,inc,pa,pab,vsys,vts,v2ts,v2rs,xc=0,yc=0,plot=False):
     inc,pa,pab = np.radians([inc,pa,pab])
     r, th = projected_polar(args.grid_x-xc,args.grid_y-yc,pa,inc)
     r /= args.reff
+
+    if args.fixcent:
+        vts  = np.insert(vts,  0, 0)
+        v2ts = np.insert(v2ts, 0, 0)
+        v2rs = np.insert(v2rs, 0, 0)
+        
+
     #interpolate velocity values for all r 
     bincents = (args.edges[:-1] + args.edges[1:])/2
-    vtvals = np.interp(r,bincents,vts)
+    vtvals  = np.interp(r,bincents,vts)
     v2tvals = np.interp(r,bincents,v2ts)
     v2rvals = np.interp(r,bincents,v2rs)
 
@@ -101,7 +78,6 @@ def barmodel(args,inc,pa,pab,vsys,vts,v2ts,v2rs,xc=0,yc=0,plot=False):
     model = vsys + np.sin(inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-pab))*np.cos(th)- v2rvals*np.sin(2*(th-pab))*np.sin(th))
     if args.beam_fft is not None:
         model = smear(model, args.beam_fft, beam_fft=True)[1]
-#        smear(model, args.psf, args.sb_r, args.sig_r, mask=args.vel_mask_r)[1]
     if plot:
         return args.remap_data(np.ma.MaskedArray(args.bin(model), mask=args.vel_mask), masked=True)
     return np.ma.MaskedArray(args.bin(model), mask=args.vel_mask)
@@ -150,7 +126,7 @@ def trunc(q,mean,std,left,right):
     a,b = (left-mean)/std, (right-mean)/std
     return stats.truncnorm.ppf(q,a,b,mean,std)
 
-def dynprior(params,args,normprior=False):
+def dynprior(params,args,gaussprior=False):
     '''
     Prior transform for dynesty fit. Takes in standard params and args and
     defines a prior volume for all of the relevant fit parameters. At this
@@ -162,12 +138,13 @@ def dynprior(params,args,normprior=False):
 
     #attempt at smarter posteriors, currently super slow though
     #truncated gaussian prior around guess values
-    if normprior and args.guess is not None:
+    if gaussprior and args.guess is not None:
         incg,pag,pabg,vsysg,xcg,ycg,vtsg,v2tsg,v2rsg = unpack(args.guess,args.nglobs)
-        incp  = trunc(inc,incg,10,0,90)
-        pap   = trunc(pa,pag,20,0,360)
-        pabp  = trunc(pab,pabg,45,0,360)
-        vsysp = trunc(vsys,vsysg,10,-50,50)
+        incp  = trunc(inc,incg,2,incg-5,incg+5)
+        pap   = trunc(pa,pag,10,0,360)
+        #pabp  = trunc(pab,pabg,45,0,180)
+        pabp = 180 * pab
+        vsysp = trunc(vsys,vsysg,1,vsysg-5,vsysg+5)
         vtsp  = trunc(vts,vtsg,50,0,400)
         v2tsp = trunc(v2ts,v2tsg,50,0,200)
         v2rsp = trunc(v2rs,v2rsg,50,0,200)
@@ -176,10 +153,10 @@ def dynprior(params,args,normprior=False):
         #uniform transformations to cover full angular range
         incp = 90 * inc
         pap = 360 * pa
-        pabp = 360 * pab
+        pabp = 180 * pab
 
         #uniform guesses for reasonable values for velocities
-        vsysp = (2*vsys - 1) * 50
+        vsysp = (2*vsys - 1) * 20
         vtsp = 400 * vts
         v2tsp = 200 * v2ts
         v2rsp = 200 * v2rs
@@ -242,7 +219,8 @@ def logpost(params, args):
 
 def barfit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC', dr='MPL-9', nbins=10, cores=20,
            walkers=100, steps=1000, maxr=1.5, ntemps=None, cen=False, start=False, dyn=True,
-           weight=10, smearing=True, points=500, stellar=False, root=None, verbose=False, mock=False):
+           weight=10, smearing=True, points=500, stellar=False, root=None, verbose=False,
+           fixcent=True):
     '''
     Main function for velocity field fitter. Takes a given plate and ifu and
     fits a nonaxisymmetric velocity field with nbins number of radial bins
@@ -258,11 +236,8 @@ def barfit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC', dr='MPL-9', nbins=10, c
 
     #mock galaxy using Andrew's values for 8078-12703
     if plate == 0 and ifu == 0 :
-        vt  = [0,85,120,115,120,140,210,240,245,235]
-        v2t = [0,55,105,120,115,100,70,30,10,20]
-        v2r = [0,70,120,135,125,95,65,50,30,40]
-
-        args = Kinematics.mock(55,50,13.6,-25.8,1.1,vt,v2t,v2r)
+        mockparams = np.load('mockparams.npy', allow_pickle=True)
+        args = Kinematics.mock(55,*mockparams)
 
     #get info on galaxy and define bins and starting guess
     else:
@@ -276,9 +251,12 @@ def barfit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC', dr='MPL-9', nbins=10, c
                                                     maps_path=root)
 
     args.setnglobs(6) if cen else args.setnglobs(4)
+    args.setfixcent(fixcent)
     args.setedges(nbins, maxr)
     args.setweight(weight)
     theta0 = args.getguess()
+    ndim = len(theta0)
+    if fixcent: ndim -= 3
 
     #open up multiprocessing pool if needed
     if cores > 1 and not ntemps:
@@ -289,7 +267,7 @@ def barfit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC', dr='MPL-9', nbins=10, c
     #choose the appropriate sampler and starting positions based on user input
     if dyn:
         #dynesty sampler with periodic pa and pab
-        sampler = dynesty.NestedSampler(loglike,dynprior,len(theta0),pool=pool,
+        sampler = dynesty.NestedSampler(loglike, dynprior, ndim , pool=pool,
                 periodic=[1,2], nlive=points,# queue_size=cores, 
                 ptform_args = [args], logl_args = [args], verbose=verbose)
         sampler.run_nested()

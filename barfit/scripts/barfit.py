@@ -40,6 +40,8 @@ def parse_args(options=None):
                         help='Don\'t use beam smearing to speed up fit')
     parser.add_argument('--verbose', default=False, action='store_true',
                         help='Run dynesty sampling with verbose output.')
+    parser.add_argument('--freecent', dest='fixcent', default=True, action='store_false',
+                        help='Allow center bin to have nonzero velocity.')
 
     return parser.parse_args() if options is None else parser.parse_args(options)
 
@@ -48,11 +50,14 @@ def main(args):
     plate, ifu = args.plateifu
     samp = barfit(plate, ifu, daptype=args.daptype, dr=args.dr, cores=args.cores, nbins=args.nbins,
                   weight=args.weight, maxr=args.maxr, smearing=args.smearing, root=args.root,
-                  verbose=args.verbose)
+                  verbose=args.verbose, fixcent=args.fixcent)
     if args.outfile is None:
         args.outfile = f'{plate}-{ifu}_{args.nbins}bin_{args.weight}w_{args.points}p'
         if args.smearing: args.outfile += '_s'
         else: args.outfile += '_ns'
+
+        if args.fixcent: args.outfile += '_f'
+        else: args.outfile += '_uf'
     args.outfile += '.out'
 
     # TODO: Do we need to use pickle?

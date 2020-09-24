@@ -6,6 +6,7 @@ Script that runs the fit.
 
 import argparse
 import pickle
+import os
 
 from barfit.barfit import barfit
 
@@ -42,11 +43,17 @@ def parse_args(options=None):
                         help='Run dynesty sampling with verbose output.')
     parser.add_argument('--freecent', dest='fixcent', default=True, action='store_false',
                         help='Allow center bin to have nonzero velocity.')
+    parser.add_argument('--dir', type=str, default = '',
+                        help='Directory to save the outfile in')
 
     return parser.parse_args() if options is None else parser.parse_args(options)
 
 def main(args):
 
+    if args.dir == '':
+        args.dir = '/data/manga/digiorgio/barfit/'
+    if not os.path.isdir(args.dir):
+        raise NotADirectoryError(f'Outfile directory does not exist: {args.dir}')
     plate, ifu = args.plateifu
     samp = barfit(plate, ifu, daptype=args.daptype, dr=args.dr, cores=args.cores, nbins=args.nbins,
                   weight=args.weight, maxr=args.maxr, smearing=args.smearing, root=args.root,
@@ -61,4 +68,4 @@ def main(args):
     args.outfile += '.out'
 
     # TODO: Do we need to use pickle?
-    pickle.dump(samp.results, open(args.outfile, 'wb'))
+    pickle.dump(samp.results, open(args.dir+args.outfile, 'wb'))

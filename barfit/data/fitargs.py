@@ -35,7 +35,15 @@ class FitArgs:
         in Re.  
         '''
 
+        #if self.fixcent: nbins -= 1
         self.edges = np.linspace(0,maxr,nbins+1)
+
+    def setfixcent(self, fixcent):
+        '''
+        Whether or not to fix the central velocity bin.
+        '''
+
+        self.fixcent = fixcent
 
     def getguess(self):
         '''

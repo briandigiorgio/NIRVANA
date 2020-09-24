@@ -134,6 +134,8 @@ class Kinematics(FitArgs):
             The on-sky Cartesian :math:`y` coordinates of *each*
             element in the data grid. See the description of
             ``grid_x``.
+        reff (:obj:`float`, optional):
+            Effective radius in same units as `x` and `y`.
 
     Raises:
         ValueError:
@@ -167,6 +169,9 @@ class Kinematics(FitArgs):
         self.spatial_shape = vel.shape
         self._set_beam(psf, aperture)
         self.reff = reff
+        self.inc = inc
+        self.pa = pa
+        self.sersic_n = sersic_n
 
         # Build coordinate arrays
         if x is None:
@@ -378,8 +383,8 @@ class Kinematics(FitArgs):
     @classmethod
     def mock(cls, size, inc, pa, pab, vsys, vt, v2t, v2r, xc=0, yc=0, reff=10,r=15):
         '''
-        Makes a `Kinematics` object with a mock velocity field with input
-        parameters using similar code to barmodel.
+        Makes a `:class:`barfit.data.kinematics.Kinematics` object with a mock
+        velocity field with input parameters using similar code to :func:`barfit.barfit.barmodel`.
 
         Args:
             size (:obj:`int`):
@@ -412,8 +417,8 @@ class Kinematics(FitArgs):
                 Maximum absolute value for the x and y arrays. Defaults to 15.
 
         Returns:
-            `Kinematics` object with the velocity field and x and y
-            coordinates of the mock galaxy. 
+            :class:`barfit.data.kinematics.Kinematics` object with the velocity
+            field and x and y coordinates of the mock galaxy. 
 
         Raises:
             ValueError:
@@ -429,16 +434,16 @@ class Kinematics(FitArgs):
         x,y = np.meshgrid(a,a)
 
         #convert angles to polar and normalize radial coorinate
-        inc,pa,pab = np.radians([inc,pa,pab])
-        r, th = projected_polar(x-xc,y-yc,inc,pa)
+        _inc,_pa,_pab = np.radians([inc,pa,pab])
+        r, th = projected_polar(x-xc,y-yc,_pa,_inc)
 
         #interpolate velocity values for all r 
         bincents = (edges[:-1] + edges[1:])/2
-        vtvals = np.interp(r,bincents,vt)
+        vtvals  = np.interp(r,bincents,vt)
         v2tvals = np.interp(r,bincents,v2t)
         v2rvals = np.interp(r,bincents,v2r)
 
         #spekkens and sellwood 2nd order vf model (from andrew's thesis)
-        model = vsys + np.sin(inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-pab))*np.cos(th)- v2rvals*np.sin(2*(th-pab))*np.sin(th))
+        model = vsys + np.sin(_inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-_pab))*np.cos(th)- v2rvals*np.sin(2*(th-_pab))*np.sin(th))
         binid = np.arange(np.product(model.shape)).reshape(model.shape)
         return cls(model, x=x, y=y, grid_x=x, grid_y=y, reff=reff,binid=binid)

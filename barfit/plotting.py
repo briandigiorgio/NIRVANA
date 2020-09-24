@@ -114,7 +114,7 @@ def checkbins(plate,ifu,nbins):
         cut = (er>edges[i])*(er<edges[i+1])
         plt.imshow(np.ma.array(vf, mask=~cut), cmap='RdBu')
 
-def dprofs(samp, edges=False, ax=None, **args):
+def dprofs(samp, edges=False, ax=None, fixcent=False, **args):
     '''
     Turn a dynesty sampler output by barfit into a set of radial velocity
     profiles. Can plot if edges are given and will plot on a given axis ax if
@@ -128,6 +128,11 @@ def dprofs(samp, edges=False, ax=None, **args):
     v2ts = meds[5::3]
     v2rs = meds[6::3]
 
+    if fixcent:
+        vts  = np.insert(vts,  0, 0)
+        v2ts = np.insert(v2ts, 0, 0)
+        v2rs = np.insert(v2rs, 0, 0)
+
     #plot profiles if edges are given
     if type(edges) != bool: 
         if not ax: f,ax = plt.subplots()
@@ -139,7 +144,7 @@ def dprofs(samp, edges=False, ax=None, **args):
 
     return inc, pa, pab, vsys, vts, v2ts, v2rs
 
-def summaryplot(f,nbins,plate,ifu,smearing=True):
+def summaryplot(f,nbins,plate,ifu,smearing=True,stellar=False,fixcent=False):
     '''
     Make a summary plot for a given dynesty file with MaNGA velocity field, the
     model that dynesty fit, the residuals of the fit, and the velocity
@@ -154,19 +159,18 @@ def summaryplot(f,nbins,plate,ifu,smearing=True):
 
     #mock galaxy using Andrew's values for 8078-12703
     if plate == 0 and ifu == 0 :
-        vt  = [0,85,120,115,120,140,210,240,245,235]
-        v2t = [0,55,105,120,115,100,70,30,10,20]
-        v2r = [0,70,120,135,125,95,65,50,30,40]
-
-        gal = Kinematics.mock(75,50,13.6,-25.8,1.1,vt,v2t,v2r)
+        mockparams = dprofs(pickle.load(open('mock.out','rb')))
+        gal = Kinematics.mock(55,*mockparams)
 
     else:
         if stellar:
-            gal = MaNGAStellarKinematics.from_plateifu(plate,ifu,dr='MPL-9',daptype='HYB10-MILESHC-MASTARHC', ignore_psf=~smearing)
+            gal = MaNGAStellarKinematics.from_plateifu(plate,ifu,dr='MPL-10',daptype='HYB10-MILESHC-MASTARHC2', ignore_psf=~smearing)
         else:
-            gal = MaNGAGasKinematics.from_plateifu(plate,ifu,dr='MPL-9',daptype='HYB10-MILESHC-MASTARHC', ignore_psf=~smearing)
+            gal = MaNGAGasKinematics.from_plateifu(plate,ifu,dr='MPL-10',daptype='HYB10-MILESHC-MASTARHC2', ignore_psf=~smearing)
 
     gal.setedges(nbins,1.5)
+
+    gal.setfixcent(fixcent)
     model = barmodel(gal,inc,pa,pab,vsys,vts,v2ts,v2rs,plot=True)
     gal.remap('vel')
     plt.figure(figsize = (8,8))
@@ -194,7 +198,7 @@ def summaryplot(f,nbins,plate,ifu,smearing=True):
 
     #Radial velocity profiles
     plt.subplot(224)
-    dprofs(chains,gal.edges,plt.gca())
+    dprofs(chains,gal.edges,plt.gca(),fixcent)
     plt.ylim(bottom=0)
     plt.tight_layout()
 

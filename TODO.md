@@ -3,8 +3,8 @@
 ## Main tasks
 
 - ~~recheck and merge Kyle's code~~
-- test on mock data (no bad points?)
-- fix edges of model data (interpolation errors)
+- ~~test on mock data (no bad points?)~~
+- ~~fix edges of model data (interpolation errors)~~
 - pick out bad points
 - binning schemes
 - add error term

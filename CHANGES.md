@@ -14,4 +14,5 @@
    `scipy.sparse` matrices.
  - Adds a bunch of test code.
  - Begins the implementation of a general `AxisymmetricDisk` class.
-
+ - Adds fixing of center
+ - Adds mock data set

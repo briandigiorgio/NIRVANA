@@ -67,13 +67,14 @@ def mcmeds(sampler, burn = -1000):
         
     return np.median(sampler.chain[:,burn:,:], axis = (0,1))
 
-def dmeds(samp):
+def dmeds(samp,stds=False):
     '''
     Get median values for each variable in a dynesty sampler.
     '''
 
     #get samples and weights
-    if type(samp)==dynesty.results.Results: res = samp
+    if type(samp) == str: res = pickle.load(open(samp,'rb'))
+    elif type(samp)==dynesty.results.Results: res = samp
     else: res = samp.results
     samps = res.samples
     weights = np.exp(res.logwt - res.logz[-1])
@@ -82,6 +83,16 @@ def dmeds(samp):
     #iterate through and get 50th percentile of values
     for i in range(samps.shape[1]):
         meds[i] = dynesty.utils.quantile(samps[:,i],[.5],weights)[0]
+
+    #pull out 1 sigma values on either side of the mean as well if desired
+    if stds:
+        lstd = np.zeros(samps.shape[1])
+        ustd = np.zeros(samps.shape[1])
+        for i in range(samps.shape[1]):
+            lstd[i] = dynesty.utils.quantile(samps[:,i],[.5-.6826/2],weights)[0]
+            ustd[i] = dynesty.utils.quantile(samps[:,i],[.5+.6826/2],weights)[0]
+        return meds, lstd, ustd
+
     return meds
 
 def dcorner(f,**args):
@@ -114,7 +125,7 @@ def checkbins(plate,ifu,nbins):
         cut = (er>edges[i])*(er<edges[i+1])
         plt.imshow(np.ma.array(vf, mask=~cut), cmap='RdBu')
 
-def dprofs(samp, edges=False, ax=None, fixcent=False, **args):
+def dprofs(samp, edges=False, ax=None, fixcent=False, stds=False, **args):
     '''
     Turn a dynesty sampler output by barfit into a set of radial velocity
     profiles. Can plot if edges are given and will plot on a given axis ax if
@@ -122,22 +133,41 @@ def dprofs(samp, edges=False, ax=None, fixcent=False, **args):
     '''
 
     #get and unpack median values for params
-    meds = dmeds(samp)
+    meds = dmeds(samp, stds)
+    if stds: meds, lstd, ustd = meds
     inc, pa, pab, vsys = meds[:4]
-    vts = meds[4::3]
+    vts  = meds[4::3]
     v2ts = meds[5::3]
     v2rs = meds[6::3]
+    if stds:
+        vtl  = lstd[4::3]
+        v2tl = lstd[5::3]
+        v2rl = lstd[6::3]
+        vtu  = ustd[4::3]
+        v2tu = ustd[5::3]
+        v2ru = ustd[6::3]
 
     if fixcent:
         vts  = np.insert(vts,  0, 0)
         v2ts = np.insert(v2ts, 0, 0)
         v2rs = np.insert(v2rs, 0, 0)
 
+        if stds:
+            vtl  = np.insert(vtl,  0, 0)
+            v2tl = np.insert(v2tl, 0, 0)
+            v2rl = np.insert(v2rl, 0, 0)
+            vtu  = np.insert(vtu,  0, 0)
+            v2tu = np.insert(v2tu, 0, 0)
+            v2ru = np.insert(v2ru, 0, 0)
+
+
     #plot profiles if edges are given
     if type(edges) != bool: 
         if not ax: f,ax = plt.subplots()
         ls = [r'$V_t$',r'$V_{2t}$',r'$V_{2r}$']
         [ax.plot(edges[:-1], p, label=ls[i], **args) for i,p in enumerate([vts,v2ts,v2rs])]
+        if stds: 
+            [ax.fill_between(edges[:-1], p[0], p[1], alpha=.5) for i,p in enumerate([[vtl,vtu],[v2tl,v2tu],[v2rl,v2ru]])]
         plt.xlabel(r'$R_e$')
         plt.ylabel(r'$v$ (km/s)')
         plt.legend()
@@ -155,7 +185,10 @@ def summaryplot(f,nbins,plate,ifu,smearing=True,stellar=False,fixcent=False):
     if type(f) == str: chains = pickle.load(open(f,'rb'))
     elif type(f) == np.ndarray: chains = f
     elif type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler: chains = f.results
-    inc,pa,pab,vsys,vts,v2ts,v2rs = dprofs(chains)
+
+    resdict = {}
+    resdict['xc'],resdict['yc'] = [0,0]
+    resdict['inc'],resdict['pa'],resdict['pab'],resdict['vsys'],resdict['vts'],resdict['v2ts'],resdict['v2rs'] = dprofs(chains, stds=True)
 
     #mock galaxy using Andrew's values for 8078-12703
     if plate == 0 and ifu == 0 :
@@ -164,14 +197,15 @@ def summaryplot(f,nbins,plate,ifu,smearing=True,stellar=False,fixcent=False):
 
     else:
         if stellar:
-            gal = MaNGAStellarKinematics.from_plateifu(plate,ifu,dr='MPL-10',daptype='HYB10-MILESHC-MASTARHC2', ignore_psf=~smearing)
+            gal = MaNGAStellarKinematics.from_plateifu(plate,ifu, ignore_psf=~smearing)
         else:
-            gal = MaNGAGasKinematics.from_plateifu(plate,ifu,dr='MPL-10',daptype='HYB10-MILESHC-MASTARHC2', ignore_psf=~smearing)
+            gal = MaNGAGasKinematics.from_plateifu(plate,ifu, ignore_psf=~smearing)
 
     gal.setedges(nbins,1.5)
-
     gal.setfixcent(fixcent)
-    model = barmodel(gal,inc,pa,pab,vsys,vts,v2ts,v2rs,plot=True)
+    gal.setdisp(False)
+
+    model = barmodel(gal,resdict,plot=True)
     gal.remap('vel')
     plt.figure(figsize = (8,8))
     plt.suptitle(f'{plate}-{ifu}')
@@ -198,7 +232,7 @@ def summaryplot(f,nbins,plate,ifu,smearing=True,stellar=False,fixcent=False):
 
     #Radial velocity profiles
     plt.subplot(224)
-    dprofs(chains,gal.edges,plt.gca(),fixcent)
+    dprofs(chains, gal.edges, plt.gca(), fixcent, stds=True)
     plt.ylim(bottom=0)
     plt.tight_layout()
 

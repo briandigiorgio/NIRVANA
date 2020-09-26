@@ -78,24 +78,24 @@ def barmodel(args,paramdict,plot=False):
     v2rvals = np.interp(r,bincents,v2rs)
 
     if args.disp: 
-        sigvals = np.interp(r,bincents,paramdict['sig'])
+        sigmodel = np.interp(r,bincents,paramdict['sig'])
         sb = args.remap('sb')
     else: 
-        sigvals = None
+        sigmodel = None
         sb = None
 
     #spekkens and sellwood 2nd order vf model (from andrew's thesis)
-    model = paramdict['vsys']+ np.sin(inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-pab))*np.cos(th)- v2rvals*np.sin(2*(th-pab))*np.sin(th))
+    velmodel = paramdict['vsys']+ np.sin(inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-pab))*np.cos(th)- v2rvals*np.sin(2*(th-pab))*np.sin(th))
     if args.beam_fft is not None:
-        model = smear(model, args.beam_fft, sb=sb, sig=sigvals, beam_fft=True)[1]
+        sbmodel, velmodel, sigmodel = smear(velmodel, args.beam_fft, sb=sb, sig=sigmodel, beam_fft=True)
 
-    binvel = np.ma.MaskedArray(args.bin(model), mask=args.vel_mask)
-    if sigvals is not None: binsig = np.ma.MaskedArray(args.bin(sigvals), mask=args.sig_mask)
+    binvel = np.ma.MaskedArray(args.bin(velmodel), mask=args.vel_mask)
+    if sigmodel is not None: binsig = np.ma.MaskedArray(args.bin(sigmodel), mask=args.sig_mask)
     else: binsig = None
 
     if plot:
         velremap = args.remap_data(binvel, masked=True)
-        if sigvals is not None: 
+        if sigmodel is not None: 
             sigremap = args.remap_data(binsig, masked=True)
             return velremap, sigremap
         return velremap

@@ -207,9 +207,9 @@ def summaryplot(f,nbins,plate,ifu,smearing=True,stellar=False,fixcent=False):
 
     else:
         if stellar:
-            gal = MaNGAStellarKinematics.from_plateifu(plate,ifu, ignore_psf=~smearing)
+            gal = MaNGAStellarKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing)
         else:
-            gal = MaNGAGasKinematics.from_plateifu(plate,ifu, ignore_psf=~smearing)
+            gal = MaNGAGasKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing)
 
     gal.setedges(nbins,1.5)
     gal.setfixcent(fixcent)

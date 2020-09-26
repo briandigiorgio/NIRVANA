@@ -5,6 +5,8 @@
 - ~~recheck and merge Kyle's code~~
 - ~~test on mock data (no bad points?)~~
 - ~~fix edges of model data (interpolation errors)~~
+- error bars on plots
+- multiple mocks with different characteristics
 - pick out bad points
 - binning schemes
 - add error term
@@ -19,3 +21,5 @@
 - Renaming
     - NASKAR: NonAxiSymmetric Kinematic Analysis Routine
     - NIRVANA: Nonaxisymmetric Irregular Rotational Velocity ANAlysis
+- Jacobians?
+- Fisher matrix?

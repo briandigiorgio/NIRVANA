@@ -44,6 +44,13 @@ class FitArgs:
 
         self.fixcent = fixcent
 
+    def setdisp(self, disp):
+        '''
+        Whether or not to fit dispersion.
+        '''
+
+        self.disp = disp
+
     def getguess(self):
         '''
         Generate a set of guess parameters for a given velocity field vf with

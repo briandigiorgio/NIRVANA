@@ -46,7 +46,7 @@ from .data.fitargs import FitArgs
 
 from .models.geometry import projected_polar
 
-def barmodel(args,inc,pa,pab,vsys,vts,v2ts,v2rs,xc=0,yc=0,plot=False):
+def barmodel(args,paramdict,plot=False):
     '''
     Evaluate a nonaxisymmetric velocity field model taken from Leung
     (2018)/Spekkens & Sellwood (2007) at given x and y coordinates according to
@@ -58,15 +58,18 @@ def barmodel(args,inc,pa,pab,vsys,vts,v2ts,v2rs,xc=0,yc=0,plot=False):
     '''
 
     #convert angles to polar and normalize radial coorinate
-    inc,pa,pab = np.radians([inc,pa,pab])
-    r, th = projected_polar(args.grid_x-xc,args.grid_y-yc,pa,inc)
+    inc,pa,pab = np.radians([paramdict['inc'],paramdict['pa'],paramdict['pab']])
+    r, th = projected_polar(args.grid_x-paramdict['xc'],args.grid_y-paramdict['yc'],pa,inc)
     r /= args.reff
 
     if args.fixcent:
-        vts  = np.insert(vts,  0, 0)
-        v2ts = np.insert(v2ts, 0, 0)
-        v2rs = np.insert(v2rs, 0, 0)
-        
+        vts  = np.insert(paramdict['vts'],  0, 0)
+        v2ts = np.insert(paramdict['v2ts'], 0, 0)
+        v2rs = np.insert(paramdict['v2rs'], 0, 0)
+    else:
+        vts  = paramdict['vts']
+        v2ts = paramdict['v2ts']
+        v2rs = paramdict['v2rs']
 
     #interpolate velocity values for all r 
     bincents = (args.edges[:-1] + args.edges[1:])/2
@@ -74,30 +77,60 @@ def barmodel(args,inc,pa,pab,vsys,vts,v2ts,v2rs,xc=0,yc=0,plot=False):
     v2tvals = np.interp(r,bincents,v2ts)
     v2rvals = np.interp(r,bincents,v2rs)
 
-    #spekkens and sellwood 2nd order vf model (from andrew's thesis)
-    model = vsys + np.sin(inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-pab))*np.cos(th)- v2rvals*np.sin(2*(th-pab))*np.sin(th))
-    if args.beam_fft is not None:
-        model = smear(model, args.beam_fft, beam_fft=True)[1]
-    if plot:
-        return args.remap_data(np.ma.MaskedArray(args.bin(model), mask=args.vel_mask), masked=True)
-    return np.ma.MaskedArray(args.bin(model), mask=args.vel_mask)
+    if args.disp: 
+        sigvals = np.interp(r,bincents,paramdict['sig'])
+        sb = args.remap('sb')
+    else: 
+        sigvals = None
+        sb = None
 
-def unpack(params, nglobs):
+    #spekkens and sellwood 2nd order vf model (from andrew's thesis)
+    model = paramdict['vsys']+ np.sin(inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-pab))*np.cos(th)- v2rvals*np.sin(2*(th-pab))*np.sin(th))
+    if args.beam_fft is not None:
+        model = smear(model, args.beam_fft, sb=sb, sig=sigvals, beam_fft=True)[1]
+
+    binvel = np.ma.MaskedArray(args.bin(model), mask=args.vel_mask)
+    if sigvals is not None: binsig = np.ma.MaskedArray(args.bin(sigvals), mask=args.sig_mask)
+    else: binsig = None
+
+    if plot:
+        velremap = args.remap_data(binvel, masked=True)
+        if sigvals is not None: 
+            sigremap = args.remap_data(binsig, masked=True)
+            return velremap, sigremap
+        return velremap
+
+    return binvel, binsig
+
+def unpack(params, args):
     '''
     Utility function to carry around a bunch of values in the Bayesian fit.
-    Should probably be a class.
+    Now a dictionary!
     '''
 
+    paramdict = {}
     #global parameters with and without center
-    xc, yc = [0,0]
-    if nglobs == 4: inc,pa,pab,vsys = params[:nglobs]
-    elif nglobs == 6: inc,pa,pab,vsys,xc,yc = params[:nglobs]
+    paramdict['xc'], paramdict['yc'] = [0,0]
+    if args.nglobs == 4:
+        paramdict['inc'],paramdict['pa'],paramdict['pab'],paramdict['vsys'] = params[:args.nglobs]
+    elif args.nglobs == 6:
+        paramdict['inc'],paramdict['pa'],paramdict['pab'],paramdict['vsys'],paramdict['xc'],paramdict['yc'] = params[:args.nglobs]
 
     #velocities
-    vts  = params[nglobs::3]
-    v2ts = params[nglobs+1::3]
-    v2rs = params[nglobs+2::3]
-    return inc,pa,pab,vsys,xc,yc,vts,v2ts,v2rs
+    start = args.nglobs
+    jump = len(args.edges)-1
+    if args.fixcent: jump -= 1
+    paramdict['vts']  = params[start:start + jump]
+    paramdict['v2ts'] = params[start + jump:start + 2*jump]
+    paramdict['v2rs'] = params[start + 2*jump:start + 3*jump]
+
+    #get sigma values and fill in center bin if necessary
+    if args.disp: 
+        if args.fixcent: sigjump = jump+1
+        else: sigjump = jump
+        paramdict['sig'] = params[start + 3*jump:start + 3*jump + sigjump]
+
+    return paramdict
 
 def smoothing(array, weight):
     '''
@@ -134,33 +167,35 @@ def dynprior(params,args,gaussprior=False):
     unintelligent. Returns parameter prior transformations.  
     '''
 
-    inc,pa,pab,vsys,xc,yc,vts,v2ts,v2rs = unpack(params,args.nglobs)
+    paramdict = unpack(params,args)
 
     #attempt at smarter posteriors, currently super slow though
     #truncated gaussian prior around guess values
     if gaussprior and args.guess is not None:
-        incg,pag,pabg,vsysg,xcg,ycg,vtsg,v2tsg,v2rsg = unpack(args.guess,args.nglobs)
-        incp  = trunc(inc,incg,2,incg-5,incg+5)
-        pap   = trunc(pa,pag,10,0,360)
+        guessdict = unpack(args.guess,args)
+        incp  = trunc(paramdict['inc'],guessdict['incg'],2,guessdict['incg']-5,guessdict['incg']+5)
+        pap   = trunc(paramdict['pa'],guessdict['pag'],10,0,360)
         #pabp  = trunc(pab,pabg,45,0,180)
-        pabp = 180 * pab
-        vsysp = trunc(vsys,vsysg,1,vsysg-5,vsysg+5)
-        vtsp  = trunc(vts,vtsg,50,0,400)
-        v2tsp = trunc(v2ts,v2tsg,50,0,200)
-        v2rsp = trunc(v2rs,v2rsg,50,0,200)
+        pabp = 180 * paramdict['pab']
+        vsysp = trunc(paramdict['vsys'],guessdict['vsysg'],1,guessdict['vsysg']-5,guessdict['vsysg']+5)
+        vtsp  = trunc(paramdict['vts'],guessdict['vtsg'],50,0,400)
+        v2tsp = trunc(paramdict['v2ts'],guessdict['v2tsg'],50,0,200)
+        v2rsp = trunc(paramdict['v2rs'],guessdict['v2rsg'],50,0,200)
 
     else:
         #uniform transformations to cover full angular range
-        incp = 90 * inc
-        pap = 360 * pa
-        pabp = 180 * pab
+        incp = 90 * paramdict['inc']
+        pap = 360 * paramdict['pa']
+        pabp = 180 * paramdict['pab']
 
         #uniform guesses for reasonable values for velocities
-        vsysp = (2*vsys - 1) * 20
-        vtsp = 400 * vts
-        v2tsp = 200 * v2ts
-        v2rsp = 200 * v2rs
+        vsysp = (2*paramdict['vsys']- 1) * 20
+        vtsp = 400 * paramdict['vts']
+        v2tsp = 200 * paramdict['v2ts']
+        v2rsp = 200 * paramdict['v2rs']
+        if args.disp: sigp = 200 * paramdict['sig']
 
+    #reassemble params array
     repack = [incp,pap,pabp,vsysp]
 
     if args.nglobs == 6: 
@@ -170,8 +205,8 @@ def dynprior(params,args,gaussprior=False):
         ycp = stats.norm.ppf(yc,ycg,5)
         repack += [xcp,ycp]
 
-    #reassemble params array
-    for i in range(len(vts)): repack += [vtsp[i],v2tsp[i],v2rsp[i]]
+    repack += [*vtsp,*v2tsp,*v2rsp]
+    if args.disp: repack += [*sigp]
     return repack
 
 def logprior(params, args):
@@ -180,9 +215,9 @@ def logprior(params, args):
     everything to cover their full range of reasonable values. 
     '''
 
-    inc,pa,pab,vsys,xc,yc,vts,v2ts,v2rs = unpack(params,args.nglobs)
+    paramdict = unpack(params,args)
     #uniform priors on everything with guesses for velocities
-    if inc < 0 or inc > 90 or abs(xc) > 20 or abs(yc) > 20 or abs(vsys) > 50 or (vts > 400).any() or (v2ts > 400).any() or (v2rs > 400).any():# or (vts < 0).any():
+    if paramdict['inc']< 0 or paramdict['inc'] > 90 or paramdict['abs(xc)'] > 20 or paramdict['abs(yc)'] > 20 or paramdict['abs(vsys)'] > 50 or (paramdict['vts'] > 400).any() or (paramdict['v2ts'] > 400).any() or (paramdict['v2rs'] > 400).any():# or (vts < 0).any():
         return -np.inf
     return 0
     
@@ -192,17 +227,24 @@ def loglike(params, args):
     field with current parameter vales and performs a chi squared on it across
     the whole vf weighted by ivar to get a log likelihood value. 
     '''
-    inc,pa,pab,vsys,xc,yc,vts,v2ts,v2rs = unpack(params,args.nglobs)
+    paramdict = unpack(params,args)
 
     #make vf model and perform chisq
-    vfmodel = barmodel(args,inc,pa,pab,vsys,vts,v2ts,v2rs,xc,yc)
-    # vfmodel is masked
+    vfmodel, sigmodel = barmodel(args,paramdict)
     llike = (vfmodel - args.vel)**2
-    if args.vel_ivar is not None:
-        llike *= args.vel_ivar
-    llike = -.5*np.ma.sum(llike) #chisq
-    #llike -= args.weight * (smoothing(vts) - smoothing(v2ts) - smoothing(v2rs))
-    llike = llike - smoothing(vts,args.weight) - smoothing(v2ts,args.weight) - smoothing(v2rs,args.weight)
+    if args.vel_ivar is not None: llike *= args.vel_ivar
+    llike = -.5*np.ma.sum(llike)
+
+    #smoothing of rotation curves
+    llike = llike - smoothing(paramdict['vts'],args.weight) - smoothing(paramdict['v2ts'],args.weight) - smoothing(paramdict['v2rs'],args.weight)
+
+    #add in sigma model if applicable
+    if sigmodel is not None:
+        siglike = (sigmodel - args.sig)**2
+        if args.sig_ivar is not None: siglike *= args.sig_ivar
+        llike = llike - .5*np.ma.sum(siglike)
+        llike = llike - smoothing(paramdict['sig'],args.weight)
+
     return llike
 
 def logpost(params, args):
@@ -217,10 +259,10 @@ def logpost(params, args):
     llike = loglike(params, args)
     return lprior + llike
 
-def barfit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC', dr='MPL-9', nbins=10, cores=20,
+def barfit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=10, cores=20,
            walkers=100, steps=1000, maxr=1.5, ntemps=None, cen=False, start=False, dyn=True,
            weight=10, smearing=True, points=500, stellar=False, root=None, verbose=False,
-           fixcent=True):
+           fixcent=True, disp=True):
     '''
     Main function for velocity field fitter. Takes a given plate and ifu and
     fits a nonaxisymmetric velocity field with nbins number of radial bins
@@ -254,9 +296,13 @@ def barfit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC', dr='MPL-9', nbins=10, c
     args.setfixcent(fixcent)
     args.setedges(nbins, maxr)
     args.setweight(weight)
+    args.setdisp(disp)
+
     theta0 = args.getguess()
     ndim = len(theta0)
     if fixcent: ndim -= 3
+
+    if disp: ndim += nbins
 
     #open up multiprocessing pool if needed
     if cores > 1 and not ntemps:

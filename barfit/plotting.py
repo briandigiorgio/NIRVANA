@@ -4,12 +4,13 @@ Plotting for barfit results.
 
 import numpy as np
 from matplotlib import pyplot as plt
+import matplotlib
 
 import dynesty
 import corner
 import pickle
 
-from .barfit import barmodel
+from .barfit import barmodel, unpack
 from .data.manga import MaNGAStellarKinematics, MaNGAGasKinematics
 from .data.kinematics import Kinematics
 
@@ -125,7 +126,7 @@ def checkbins(plate,ifu,nbins):
         cut = (er>edges[i])*(er<edges[i+1])
         plt.imshow(np.ma.array(vf, mask=~cut), cmap='RdBu')
 
-def dprofs(samp, edges=False, ax=None, fixcent=False, stds=False, **args):
+def dprofs(samp, args, plot=None, stds=False, **kwargs):
     '''
     Turn a dynesty sampler output by barfit into a set of radial velocity
     profiles. Can plot if edges are given and will plot on a given axis ax if
@@ -135,44 +136,57 @@ def dprofs(samp, edges=False, ax=None, fixcent=False, stds=False, **args):
     #get and unpack median values for params
     meds = dmeds(samp, stds)
     if stds: meds, lstd, ustd = meds
-    inc, pa, pab, vsys = meds[:4]
-    vts  = meds[4::3]
-    v2ts = meds[5::3]
-    v2rs = meds[6::3]
+    paramdict = unpack(meds, args)
+
+    #insert 0 for center bin if necessary
+    if args.fixcent:
+        vts  = np.insert(paramdict['vts'],  0, 0)
+        v2ts = np.insert(paramdict['v2ts'], 0, 0)
+        v2rs = np.insert(paramdict['v2rs'], 0, 0)
+    else:
+        vts  = paramdict['vts']
+        v2ts = paramdict['v2ts']
+        v2rs = paramdict['v2rs']
+
+    #get standard deviations
     if stds:
-        vtl  = lstd[4::3]
-        v2tl = lstd[5::3]
-        v2rl = lstd[6::3]
-        vtu  = ustd[4::3]
-        v2tu = ustd[5::3]
-        v2ru = ustd[6::3]
+        start = args.nglobs
+        jump = len(args.edges)-1
+        if args.fixcent: jump -= 1
+        paramdict['vtl']  = lstd[start:start + jump]
+        paramdict['v2tl'] = lstd[start + jump:start + 2*jump]
+        paramdict['v2rl'] = lstd[start + 2*jump:start + 3*jump]
+        paramdict['vtu']  = ustd[start:start + jump]
+        paramdict['v2tu'] = ustd[start + jump:start + 2*jump]
+        paramdict['v2ru'] = ustd[start + 2*jump:start + 3*jump]
+        if args.disp: 
+            if args.fixcent: sigjump = jump+1
+            else: sigjump = jump
+            paramdict['sigl'] = lstd[start + 3*jump:start + 3*jump + sigjump]
+            paramdict['sigu'] = ustd[start + 3*jump:start + 3*jump + sigjump]
 
-    if fixcent:
-        vts  = np.insert(vts,  0, 0)
-        v2ts = np.insert(v2ts, 0, 0)
-        v2rs = np.insert(v2rs, 0, 0)
-
-        if stds:
-            vtl  = np.insert(vtl,  0, 0)
-            v2tl = np.insert(v2tl, 0, 0)
-            v2rl = np.insert(v2rl, 0, 0)
-            vtu  = np.insert(vtu,  0, 0)
-            v2tu = np.insert(v2tu, 0, 0)
-            v2ru = np.insert(v2ru, 0, 0)
-
+        #add in central bin if necessary
+        if args.fixcent:
+            paramdict['vtl']  = np.insert(paramdict['vtl'],  0, 0)
+            paramdict['v2tl'] = np.insert(paramdict['v2tl'], 0, 0)
+            paramdict['v2rl'] = np.insert(paramdict['v2rl'], 0, 0)
+            paramdict['vtu']  = np.insert(paramdict['vtu'],  0, 0)
+            paramdict['v2tu'] = np.insert(paramdict['v2tu'], 0, 0)
+            paramdict['v2ru'] = np.insert(paramdict['v2ru'], 0, 0)
 
     #plot profiles if edges are given
-    if type(edges) != bool: 
-        if not ax: f,ax = plt.subplots()
+    if plot is not None: 
+        if not isinstance(plot, matplotlib.axes._subplots.Axes): f,plot = plt.subplots()
         ls = [r'$V_t$',r'$V_{2t}$',r'$V_{2r}$']
-        [ax.plot(edges[:-1], p, label=ls[i], **args) for i,p in enumerate([vts,v2ts,v2rs])]
+        [plot.plot(args.edges[:-1], p, label=ls[i], **kwargs) for i,p in enumerate([vts,v2ts,v2rs])]
         if stds: 
-            [ax.fill_between(edges[:-1], p[0], p[1], alpha=.5) for i,p in enumerate([[vtl,vtu],[v2tl,v2tu],[v2rl,v2ru]])]
+            [plot.fill_between(args.edges[:-1], p[0], p[1], alpha=.5) 
+                    for i,p in enumerate([[paramdict['vtl'],paramdict['vtu']],[paramdict['v2tl'],paramdict['v2tu']],[paramdict['v2rl'],paramdict['v2ru']]])]
         plt.xlabel(r'$R_e$')
         plt.ylabel(r'$v$ (km/s)')
         plt.legend()
 
-    return inc, pa, pab, vsys, vts, v2ts, v2rs
+    return paramdict
 
 def summaryplot(f,nbins,plate,ifu,smearing=True,stellar=False,fixcent=False):
     '''
@@ -186,54 +200,101 @@ def summaryplot(f,nbins,plate,ifu,smearing=True,stellar=False,fixcent=False):
     elif type(f) == np.ndarray: chains = f
     elif type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler: chains = f.results
 
-    resdict = {}
-    resdict['xc'],resdict['yc'] = [0,0]
-    resdict['inc'],resdict['pa'],resdict['pab'],resdict['vsys'],resdict['vts'],resdict['v2ts'],resdict['v2rs'] = dprofs(chains, stds=True)
 
     #mock galaxy using Andrew's values for 8078-12703
     if plate == 0 and ifu == 0 :
         mockparams = dprofs(pickle.load(open('mock.out','rb')))
-        gal = Kinematics.mock(55,*mockparams)
+        gal = Kinematics.mock(55,mockparams['inc'],mockparams['pa'],mockparams['pab'], mockparams['vsys'], mockparams['vts'], mockparams['v2ts'], mockparams['v2rs'])
 
     else:
         if stellar:
-            gal = MaNGAStellarKinematics.from_plateifu(plate,ifu, ignore_psf=~smearing)
+            gal = MaNGAStellarKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing)
         else:
-            gal = MaNGAGasKinematics.from_plateifu(plate,ifu, ignore_psf=~smearing)
+            gal = MaNGAGasKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing)
 
     gal.setedges(nbins,1.5)
     gal.setfixcent(fixcent)
-    gal.setdisp(False)
+    gal.setdisp(True)
+    gal.setnglobs(4)
 
-    model = barmodel(gal,resdict,plot=True)
-    gal.remap('vel')
-    plt.figure(figsize = (8,8))
-    plt.suptitle(f'{plate}-{ifu}')
+    resdict = dprofs(chains, gal, stds=True)
+    velmodel, sigmodel = barmodel(gal,resdict,plot=True)
+
+    [gal.remap(a) for a in ['vel','sig']]
+
+    plt.figure(figsize = (12,12))
+
+    plt.subplot(331)
+    ax = plt.gca()
+    plt.axis('off')
+    plt.title(f'{plate}-{ifu}',size=20)
+    plt.text(.1, .8, r'$i$: %0.1f$^\circ$'%resdict['inc'], 
+            transform=ax.transAxes, size=20)
+    plt.text(.1, .6, r'$\phi$: %0.1f$^\circ$'%resdict['pa'], 
+            transform=ax.transAxes, size=20)
+    plt.text(.1, .4, r'$\phi_b$: %0.1f$^\circ$'%resdict['pab'], 
+            transform=ax.transAxes, size=20)
+    plt.text(.1, .2, r'$v_{{sys}}$: %0.1f km/s'%resdict['vsys'], 
+            transform=ax.transAxes, size=20)
+
+    #Radial velocity profiles
+    plt.subplot(332)
+    dprofs(chains, gal, plt.gca(), stds=True)
+    plt.ylim(bottom=0)
+    plt.title('Velocity Profiles')
+
+    #dispersion profile
+    plt.subplot(333)
+    plt.plot(gal.edges[:-1], resdict['sig'])
+    plt.fill_between(gal.edges[:-1], resdict['sigl'], resdict['sigu'], alpha=.5)
+    plt.ylim(bottom=0)
+    plt.title('Velocity Dispersion Profile')
 
     #MaNGA Ha velocity field
-    plt.subplot(221)
-    plt.title(r'H$\alpha$ Data')
+    plt.subplot(334)
+    plt.title(r'H$\alpha$ Velocity Data')
     plt.imshow(gal.vel_r,cmap='jet',origin='lower')
+    plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')
 
     #VF model from dynesty fit
-    plt.subplot(222)
-    plt.title('Model')
-    plt.imshow(model,'jet',origin='lower',vmin=gal.vel_r.min(),vmax=gal.vel_r.max()) 
+    plt.subplot(335)
+    plt.title('Velocity Model')
+    plt.imshow(velmodel,'jet',origin='lower',vmin=gal.vel_r.min(),vmax=gal.vel_r.max()) 
+    plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')
 
     #Residuals from fit
-    plt.subplot(223)
-    plt.title('Residuals')
-    resid = gal.vel_r-model
-    vmax = min(np.abs(gal.vel_r-model).max(),50)
-    plt.imshow(gal.vel_r-model,'jet',origin='lower',vmin=-vmax,vmax=vmax)
+    plt.subplot(336)
+    plt.title('Velocity Residuals')
+    resid = gal.vel_r-velmodel
+    vmax = min(np.abs(gal.vel_r-velmodel).max(),50)
+    plt.imshow(gal.vel_r-velmodel,'jet',origin='lower',vmin=-vmax,vmax=vmax)
+    plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')
 
-    #Radial velocity profiles
-    plt.subplot(224)
-    dprofs(chains, gal.edges, plt.gca(), fixcent, stds=True)
-    plt.ylim(bottom=0)
-    plt.tight_layout()
+    #MaNGA Ha velocity disp
+    plt.subplot(337)
+    plt.title(r'H$\alpha$ Velocity Dispersion Data')
+    plt.imshow(gal.sig_r,cmap='jet',origin='lower')
+    plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
+    plt.colorbar(label='km/s')
 
-    return dprofs(chains)
+    #disp model from dynesty fit
+    plt.subplot(338)
+    plt.title('Velocity Dispersion Model')
+    plt.imshow(sigmodel,'jet',origin='lower',vmin=gal.sig_r.min(),vmax=gal.sig_r.max()) 
+    plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
+    plt.colorbar(label='km/s')
+
+    #Residuals from disp fit
+    plt.subplot(339)
+    plt.title('Dispersion Residuals')
+    resid = gal.sig_r-sigmodel
+    vmax = min(np.abs(gal.sig_r-sigmodel).max(),50)
+    plt.imshow(gal.sig_r-sigmodel,'jet',origin='lower',vmin=-vmax,vmax=vmax)
+    plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
+    plt.colorbar(label='km/s')
+
+    plt.tight_layout()
+    return dprofs(chains, gal)

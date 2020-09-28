@@ -14,11 +14,11 @@ def parse_args(options=None):
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('plateifu', nargs=2, type=int, help='MaNGA plate and ifu identifiers')
-    parser.add_argument('-d', '--daptype', default='HYB10-MILESHC-MASTARHC', type=str,
+    parser.add_argument('--daptype', default='HYB10-MILESHC-MASTARHC2', type=str,
                         help='DAP analysis key used to select the data files.  This is needed '
                              'regardless of whether or not you specify the directory with the '
                              'data files (using --root).')
-    parser.add_argument('--dr', default='MPL-9', type=str,
+    parser.add_argument('--dr', default='MPL-10', type=str,
                         help='The MaNGA data release.  This is only used to automatically '
                              'construct the directory to the MaNGA galaxy data, and it will be '
                              'ignored if the root directory is set directly (using --root).')
@@ -45,6 +45,8 @@ def parse_args(options=None):
                         help='Allow center bin to have nonzero velocity.')
     parser.add_argument('--dir', type=str, default = '',
                         help='Directory to save the outfile in')
+    parser.add_argument('--nodisp', dest='disp', default=True, action='store_false',
+                        help='Turn off dispersion fitting')
 
     return parser.parse_args() if options is None else parser.parse_args(options)
 
@@ -57,7 +59,7 @@ def main(args):
     plate, ifu = args.plateifu
     samp = barfit(plate, ifu, daptype=args.daptype, dr=args.dr, cores=args.cores, nbins=args.nbins,
                   weight=args.weight, maxr=args.maxr, smearing=args.smearing, root=args.root,
-                  verbose=args.verbose, fixcent=args.fixcent)
+                  verbose=args.verbose, fixcent=args.fixcent, disp=args.disp)
     if args.outfile is None:
         args.outfile = f'{plate}-{ifu}_{args.nbins}bin_{args.weight}w_{args.points}p'
         if args.smearing: args.outfile += '_s'
@@ -65,6 +67,9 @@ def main(args):
 
         if args.fixcent: args.outfile += '_f'
         else: args.outfile += '_uf'
+
+        if args.disp: args.outfile += '_d'
+        else: args.outfile += '_nd'
     args.outfile += '.out'
 
     # TODO: Do we need to use pickle?

@@ -1,3 +1,13 @@
+0.0.2dev
+--------
+
+ - Added in fitting of dispersion in radial bins
+ - Changed `barfit.barfit.unpack` to use a dictionary
+ - Lots of changes to `barfit.barfit` code to utilize dictionary
+ - Various changes to `FitArgs` and script to accommadate dictionary
+ - Huge changes to `barfit.plotting` for disperion and dictionary
+ - Switched to using `MPL-10` by default
+
 
 0.0.1dev
 --------

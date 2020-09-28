@@ -94,9 +94,9 @@ def barmodel(args,paramdict,plot=False):
     else: binsig = None
 
     if plot:
-        velremap = args.remap_data(binvel, masked=True)
-        if sigmodel is not None: 
-            sigremap = args.remap_data(binsig, masked=True)
+        velremap = args.remap(binvel, masked=True)
+        if sigvals is not None: 
+            sigremap = args.remap(binsig, masked=True)
             return velremap, sigremap
         return velremap
 

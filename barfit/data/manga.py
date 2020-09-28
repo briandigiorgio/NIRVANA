@@ -13,13 +13,28 @@ from .kinematics import Kinematics
 from .fitargs import FitArgs
 
 
-# TODO: This is put here to avoid a dependence on mangadap and/or
-# marvin.
 def channel_dictionary(hdu, ext, prefix='C'):
     """
-    Construct a dictionary of the channels in a MAPS file.
+    Construct a dictionary of the channels in a MaNGA MAPS file.
 
     Copied from mangadap.util.fileio.channel_dictionary
+
+    Args:
+        hdu (`astropy.io.fits.HDUList`_):
+            The open fits file.
+        ext (:obj:`int`, :obj:`str`):
+            The name or index number of the fits extension with the
+            relevant map channels and the header with the channel
+            names.
+        prefix (:obj:`str`, optional):
+            The key that is used as a prefix for all header keywords
+            associated with channel names. The header keyword is the
+            combination of this prefix and the 1-indexed channel
+            number.
+
+    Returns:
+        :obj:`dict`: The dictionary that provides the channel index
+        associate with the channel name.
     """
     channel_dict = {}
     for k, v in hdu[ext].header.items():
@@ -32,7 +47,7 @@ def channel_dictionary(hdu, ext, prefix='C'):
     return channel_dict
 
 
-def read_manga_psf(cube_file, psf_ext):
+def read_manga_psf(cube_file, psf_ext, quiet=False):
     """
     Read the image of the reconstructed datacube point-spread
     function from the MaNGA DRP CUBE file.
@@ -49,6 +64,8 @@ def read_manga_psf(cube_file, psf_ext):
         psf_ext (:obj:`str`):
             The name of the extension with the reconstructed PSF;
             e.g. ``'GPSF'``.
+        quiet (:obj:`bool`, optional):
+            Suppress printed output.
 
     Returns:
         `numpy.ndarray`_: Array with the reconstructed PSF.
@@ -65,13 +82,15 @@ def read_manga_psf(cube_file, psf_ext):
 
     # Read the PSF
     # TODO: Switch from print to a logger
-    print('Reading {0} ... '.format(cube_file))
+    if not quiet:
+        print('Reading {0} ... '.format(cube_file))
     with fits.open(cube_file) as hdu:
         if psf_ext not in hdu:
             raise KeyError('{0} does not include an extension {1}.'.format(
                             cube_file, psf_ext))
         psf = hdu[psf_ext].data
-    print('Done')
+    if not quiet:
+        print('Done')
     return psf
 
 
@@ -144,10 +163,10 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
     return maps_file, cube_file
 
 
-def read_drpall(plate, ifu, redux_path, dr, ext='elpetro'):
+def read_drpall(plate, ifu, redux_path, dr, ext='elpetro', quiet=False):
     """
-    Read the NASA Sloan Atlas data from the `drpall` file for the appropriate
-    data release.
+    Read the NASA Sloan Atlas data from the DRPall file for the
+    appropriate data release.
 
     Args:
         plate (:obj:`int`):
@@ -161,8 +180,10 @@ def read_drpall(plate, ifu, redux_path, dr, ext='elpetro'):
             Data release identifier that matches the directory with
             the data.
         ext (:obj:`str`):
-            Whether to use the `elpetro` or `sersic` derived values in the NSA
-            catalog.
+            Whether to use the `elpetro` or `sersic` derived values
+            in the NSA catalog.
+        quiet (:obj:`bool`, optional):
+            Suppress printed output.
 
     Returns:
         :obj:`tuple`: tuple of inclination, position angle, and S\`ersic n
@@ -170,10 +191,12 @@ def read_drpall(plate, ifu, redux_path, dr, ext='elpetro'):
 
     Raises:
         FileNotFoundError:
-            Raised if the `drpall` file can't be found in the specified place.
+            Raised if the DRPall file can't be found in the specified
+            place.
     """
     # Read the drpall file
-    print('Reading {0} ... '.format(cube_file))
+    if not quiet:
+        print('Reading {0} ... '.format(cube_file))
     drpall_file = glob(f'{cubepath}/{dr}/drpall*.fits')[0]
     plateifu = f'{plate}-{ifu}'
 
@@ -186,9 +209,9 @@ def read_drpall(plate, ifu, redux_path, dr, ext='elpetro'):
         pa = data[f'nsa_{ext}_phi']
         n = data['nsa_sersic_n']
 
-    print('Done')
+    if not quiet:
+        print('Done')
     return inc, pa, n
-
 
 
 class MaNGAKinematics(Kinematics):
@@ -248,15 +271,16 @@ class MaNGAGasKinematics(MaNGAKinematics):
             The name of the extension with the reconstructed PSF.
         line (:obj:`str`, optional):
             The name of the emission-line to use for the kinematics.
+        quiet (:obj:`bool`, optional):
+            Suppress printed output.
     """
-    def __init__(self, maps_file, cube_file=None, psf_ext='RPSF', line='Ha-6564'):
+    def __init__(self, maps_file, cube_file=None, psf_ext='RPSF', line='Ha-6564', quiet=False):
 
         if not os.path.isfile(maps_file):
             raise FileNotFoundError('File does not exist: {0}'.format(maps_file))
 
         # Get the PSF, if possible
         psf = None if cube_file is None else read_manga_psf(cube_file, psf_ext)
-        print(cube_file)
 
         # Establish whether or not the gas kinematics were determined
         # on a spaxel-by-spaxel basis, which determines which extension
@@ -269,7 +293,8 @@ class MaNGAGasKinematics(MaNGAKinematics):
 
         # Read the kinematic maps
         # TODO: Switch from print to a logger
-        print('Reading {0} ... '.format(maps_file))
+        if not quiet:
+            print('Reading {0} ... '.format(maps_file))
         with fits.open(maps_file) as hdu:
             eml = channel_dictionary(hdu, 'EMLINE_GVEL')
             if line not in eml:
@@ -290,7 +315,8 @@ class MaNGAGasKinematics(MaNGAKinematics):
             sig_mask = hdu['EMLINE_GSIGMA_MASK'].data[eml[line]] > 0
             sig_corr = hdu['EMLINE_INSTSIGMA'].data[eml[line]]
             reff = hdu[0].header['REFF']
-        print('Done')
+        if not quiet:
+            print('Done')
 
         super().__init__(vel, vel_ivar=vel_ivar, vel_mask=vel_mask, x=x, y=y, 
                          sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sig=sig, 
@@ -313,8 +339,10 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             :class:`~barfit.data.kinematics.Kinematics` object.
         psf_ext (:obj:`str`, optional):
             The name of the extension with the reconstructed PSF.
+        quiet (:obj:`bool`, optional):
+            Suppress printed output.
     """
-    def __init__(self, maps_file, cube_file=None, psf_ext='GPSF'):
+    def __init__(self, maps_file, cube_file=None, psf_ext='GPSF', quiet=False):
 
         if not os.path.isfile(maps_file):
             raise FileNotFoundError('File does not exist: {0}'.format(maps_file))
@@ -334,7 +362,8 @@ class MaNGAStellarKinematics(MaNGAKinematics):
         flux_ext = 'SPX_MFLUX' if bintype == 'SPX' else 'BIN_MFLUX'
 
         # Read the kinematic maps
-        print('Reading {0} ... '.format(maps_file))
+        if not quiet:
+            print('Reading {0} ... '.format(maps_file))
         with fits.open(maps_file) as hdu:
             x = hdu[coo_ext].data[0]
             y = hdu[coo_ext].data[1]
@@ -352,7 +381,8 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             sig_mask = hdu['STELLAR_SIGMA_MASK'].data > 0
             sig_corr = hdu['STELLAR_SIGMACORR'].data[0]
             reff = hdu[0].header['REFF']
-        print('Done')
+        if not quiet:
+            print('Done')
 
         super().__init__(vel, vel_ivar=vel_ivar, vel_mask=vel_mask, x=x, y=y,
                          sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sig=sig, 

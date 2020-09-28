@@ -9,17 +9,16 @@ import numpy as np
 from .util import lin_interp
 
 
-class StepFunction:
-    def __init__(self, edges, par=None):
-        self.edges = np.sort(edges)
-        if not np.array_equal(self.edges, edges):
-            warnings.warn('As provided, edges for PiecewiseLinear were not sorted.')
-        self.np = self.edges.size
-        self.par = np.ones(self.np, dtype=float)
+class Func1D:
+    """
+    Base class that *should not* be instantiated by itself.
+    """
+    def __init__(self, par):
+        self.np = len(par)
         self._set_par(par)
 
-    def __call__(self, r, par=None):
-        return self.sample(r, par=par)
+    def __call__(self, x, par=None, check=False):
+        return self.sample(x, par=par, check=check)
 
     def _set_par(self, par):
         if par is not None:
@@ -27,152 +26,433 @@ class StepFunction:
                 raise ValueError('Incorrect number of parameters.')
             self.par = np.atleast_1d(par)
 
-    def _sort(self, r, check):
-        i2 = np.searchsorted(self.edges, r, side='right')
+    def sample(self, x, par=None, check=False):
+        raise NotImplementedError('Sample function not defined for {0}!'.format(
+                                    self.__class__.__name__))
+
+    def ddx(self, x, par=None, check=False):
+        raise NotImplementedError('Function derivative not defined for {0}!'.format(
+                                    self.__class__.__name__))
+
+    def d2dx2(self, x, par=None, check=False):
+        raise NotImplementedError('Function second derivative not defined for {0}!'.format(
+                                    self.__class__.__name__))
+
+
+class StepFunction(Func1D):
+    """
+    Defines a step function.
+
+    Args:
+        edges (array-like):
+            The *left* edges of each step. Samples to the left and
+            right, respectively, first and last edge are given the
+            same value as those edges.
+        par (array-like, optional):
+            The values of the step function. Shape must be the same
+            as ``edges``. If None, step levels set by
+            :func:`guess_par`.
+        minv (:obj:`float`, optional):
+            Uniform lower bound for all steps. If None, set by
+            :func:`par_bounds`.
+        maxv (:obj:`float`, optional):
+            Uniform upper bound for all steps. If None, set by
+            :func:`par_bounds`.
+    """
+    def __init__(self, edges, par=None, minv=None, maxv=None):
+        self.edges = np.sort(edges)
+        if not np.array_equal(self.edges, edges):
+            warnings.warn('As provided, edges for StepFunction were not sorted.')
+        if par is not None and len(par) != self.edges.size:
+            raise ValueError('Provided number of parameters does not match the number of edges.')
+        super().__init__(self.guess_par(self.edge.size) if par is None else par)
+        self.lb, self.ub = self.par_bounds(minv=minv, maxv=maxv)
+
+    @staticmethod
+    def guess_par(npar):
+        """
+        Guess parameters for the step function.
+
+        Args:
+            npar (:obj:`int`):
+                Number of step function edges.
+
+        Returns:
+            `numpy.ndarray`_: Guess parameters.
+        """
+        return np.ones(npar, dtype=float)
+
+    def par_bounds(self, minv=None, maxv=None):
+        """
+        Function parameter boundaries.
+
+        Args:
+            minv (:obj:`float`, optional):
+                Uniform lower boundary. If None, set to ``-np.inf``.
+            maxv (:obj:`float`, optional):
+                Uniform upper boundary. If None, set to ``np.inf``.
+
+        Returns:
+            :obj:`tuple`: Two `numpy.ndarray`_ objects with,
+            respectively, the lower and upper boundary for the
+            function.
+        """
+        return np.full(self.np, -np.inf if minv is None else minv, dtype=float), \
+                np.full(self.np, np.inf if maxv is None else maxv, dtype=float)
+
+    def _sort(self, x, check):
+        """
+        Sort the provided coordinates into each edge.
+
+        Args:
+            x (array-like):
+                Locations at which to sample the function.
+            check (:obj:`bool`):
+                Check that at least one ``x`` value falls in each
+                step.
+
+        Returns:
+            `numpy.ndarray`_: Indices of the *right* edge associated
+            with each ``x`` value.
+        """
+        i2 = np.searchsorted(self.edges, x, side='right')
         if not check:
             return i2
         if not np.all(np.isin(np.arange(self.np-1)+1, np.unique(i2))):
             raise ValueError('Not all segments of the piece-wise linear function are constrained.')
 
-    def sample(self, r, par=None, check=False):
+    def sample(self, x, par=None, check=False):
+        """
+        Sample the step function.
+
+        Args:
+            x (array-like):
+                Locations at which to sample the function.
+            par (array-like, optional):
+                The step function parameters. If None, the current
+                values of :attr:`par` are used. Must have a length of
+                :attr:`np`.
+            check (:obj:`bool`, optional):
+                Check that at least one ``x`` value falls in each
+                step.
+
+        Returns:
+            `numpy.ndarray`_: Values of the step function at each
+            ``x`` value.
+        """
         if par is not None:
             self._set_par(par)
-        f = np.full(r.size, self.edges[0], dtype=float)
-        i2 = self._sort(r, check)
+        f = np.full(len(x), self.par[0], dtype=float)
+        i2 = self._sort(x, check)
         indx = (i2 > 0)
         f[indx] = self.par[i2[indx]-1]
         return f
 
-    def ddr(self, r, par=None):
-        return np.zeros(r.size, dtype=float)
+    def ddx(self, x, par=None, check=False):
+        """
+        Sample the derivative of the step function. See
+        :func:`sample` for the argument descriptions.
+        """
+        return np.zeros(len(x), dtype=float)
 
-    def d2dr2(self, x, par=None):
-        return np.zeros(r.size, dtype=float)
+    def d2dx2(self, x, par=None, check=False):
+        """
+        Sample the second derivative of the step function. See
+        :func:`sample` for the argument descriptions.
+        """
+        return np.zeros(len(x), dtype=float)
 
 
-class PiecewiseLinear:
-    def __init__(self, edges, par=None):
+class PiecewiseLinear(Func1D):
+    """
+    Defines a piece-wise linear function.
+
+    Args:
+        edges (array-like):
+            The vertices of linearly connected function. Samples to
+            the left and right, respectively, first and last edge are
+            given the same value as those edges.
+        par (array-like, optional):
+            The values of the linear function at each vertex. Shape
+            must be the same as ``edges``. If None, step levels set
+            by :func:`guess_par`.
+        minv (:obj:`float`, optional):
+            Uniform lower bound for all steps. If None, set by
+            :func:`par_bounds`.
+        maxv (:obj:`float`, optional):
+            Uniform upper bound for all steps. If None, set by
+            :func:`par_bounds`.
+    """
+    def __init__(self, edges, par=None, minv=None, maxv=None):
         self.edges = np.sort(edges)
         if not np.array_equal(self.edges, edges):
             warnings.warn('As provided, edges for PiecewiseLinear were not sorted.')
-        self.np = self.edges.size
-        self.par = np.ones(self.np, dtype=float)
-        self._set_par(par)
+        if par is not None and len(par) != self.edges.size:
+            raise ValueError('Provided number of parameters does not match the number of edges.')
+        super().__init__(self.guess_par(self.edge.size) if par is None else par)
+        self.lb, self.ub = self.par_bounds(minv=minv, maxv=maxv)
 
-    def __call__(self, r, par=None):
-        return self.sample(r, par=par)
+    @staticmethod
+    def guess_par(npar):
+        """
+        Guess parameters for the function.
 
-    def _set_par(self, par):
-        if par is not None:
-            if len(par) != self.np:
-                raise ValueError('Incorrect number of parameters.')
-            self.par = np.atleast_1d(par)
+        Args:
+            npar (:obj:`int`):
+                Number of linear function vertices.
 
-    def _sort(self, r, check):
-        i2 = np.searchsorted(self.edges, r, side='right')
+        Returns:
+            `numpy.ndarray`_: Guess parameters.
+        """
+        return np.ones(npar, dtype=float)
+
+    def par_bounds(self, minv=None, maxv=None):
+        """
+        Function parameter boundaries.
+
+        Args:
+            minv (:obj:`float`, optional):
+                Uniform lower boundary. If None, set to ``-np.inf``.
+            maxv (:obj:`float`, optional):
+                Uniform upper boundary. If None, set to ``np.inf``.
+
+        Returns:
+            :obj:`tuple`: Two `numpy.ndarray`_ objects with,
+            respectively, the lower and upper boundary for the
+            function.
+        """
+        return np.full(self.np, -np.inf if minv is None else minv, dtype=float), \
+                np.full(self.np, np.inf if maxv is None else maxv, dtype=float)
+
+    def _sort(self, x, check):
+        """
+        Sort the provided coordinates into each edge.
+
+        Args:
+            x (array-like):
+                Locations at which to sample the function.
+            check (:obj:`bool`):
+                Check that at least one ``x`` value falls in each
+                step.
+
+        Returns:
+            `numpy.ndarray`_: Indices of the *right* edge associated
+            with each ``x`` value.
+        """
+        i2 = np.searchsorted(self.edges, x, side='right')
         if not check:
             return i2
         if not np.all(np.isin(np.arange(self.np-1)+1, np.unique(i2))):
             raise ValueError('Not all segments of the piece-wise linear function are constrained.')
 
-    def sample(self, r, par=None, check=False):
+    def sample(self, x, par=None, check=False):
+        """
+        Sample the piece-wise linear function.
+
+        Args:
+            x (array-like):
+                Locations at which to sample the function.
+            par (array-like, optional):
+                The function parameters. If None, the current values
+                of :attr:`par` are used. Must have a length of
+                :attr:`np`.
+            check (:obj:`bool`, optional):
+                Check that at least one ``x`` value falls in each
+                step.
+
+        Returns:
+            `numpy.ndarray`_: Values of the step function at each
+            ``x`` value.
+        """
         if par is not None:
             self._set_par(par)
-        f = np.full(r.size, self.edges[0], dtype=float)
-        i2 = self._sort(r, check)
+        f = np.full(len(x), self.par[0], dtype=float)
+        i2 = self._sort(x, check)
         indx = (i2 > 0) & (i2 < self.np)
-        f[indx] = lin_interp(r[indx], self.edges[i2[indx]-1], self.par[i2[indx]-1],
+        f[indx] = lin_interp(x[indx], self.edges[i2[indx]-1], self.par[i2[indx]-1],
                              self.edges[i2[indx]], self.par[i2[indx]])
         f[i2 == self.np] = self.par[-1]
         return f
 
-    def ddr(self, r, par=None):
+    def ddx(self, x, par=None, check=False):
+        """
+        Sample the derivative of the step function. See
+        :func:`sample` for the argument descriptions.
+        """
         if par is not None:
             self._set_par(par)
-        f = np.zeros(r.size, dtype=float)
-        i2 = self._sort(r, check)
+        f = np.zeros(len(x), dtype=float)
+        i2 = self._sort(x, check)
         indx = (i2 > 0) & (i2 < self.np)
         f[indx] = (self.par[i2[indx]] - self.par[i2[indx]-1]) \
                     / (self.edges[i2[indx]] - self.edges[i2[indx]-1])
         return f
 
-    def d2dr2(self, x, par=None):
-        return np.zeros(r.size, dtype=float)
+    def d2dx2(self, x, par=None, check=False):
+        """
+        Sample the second derivative of the step function. See
+        :func:`sample` for the argument descriptions.
+        """
+        return np.zeros(len(x), dtype=float)
 
 
-class HyperbolicTangent:
+class HyperbolicTangent(Func1D):
     """
     Instantiates a hyperbolic tangent function.
-    """
-    def __init__(self, par=None):
-        self.np = 2
-        self.par = self.guess_par()
-        self._set_par(par)
 
-    def __call__(self, r, par=None):
-        return self.sample(r, par=par)
-        
-    def _set_par(self, par):
-        if par is not None:
-            if len(par) != self.np:
-                raise ValueError('Incorrect number of parameters.')
-            self.par = np.atleast_1d(par)
+    Args:
+        par (array-like, optional):
+            The two model parameters. If None, set by
+            :func:`guess_par`.
+        lb (array-like, optional):
+            Lower bounds for the model parameters. If None, set by
+            :func:`par_bounds`.
+        ub (:obj:`float`, optional):
+            Upper bounds for the model parameters. If None, set by
+            :func:`par_bounds`.
+    """
+    def __init__(self, par=None, lb=None, ub=None):
+        super().__init__(self.guess_par() if par is None else par)
+        if lb is not None and len(lb) != self.np:
+            raise ValueError('Number of lower bounds does not match the number of parameters.')
+        if ub is not None and len(ub) != self.np:
+            raise ValueError('Number of upper bounds does not match the number of parameters.')
+        _lb, _ub = self.par_bounds()
+        self.lb = _lb if lb is None else np.atleast_1d(lb)
+        self.ub = _ub if ub is None else np.atleast_1d(ub)
 
     @staticmethod
     def guess_par():
+        """Return default guess parameters."""
         return np.array([100., 10.])
 
     @staticmethod
-    def par_bounds(maxr):
-        return np.array([0., 1e-3]), np.array([500., maxr])
+    def par_bounds():
+        """
+        Return default parameter boundaries.
 
-    def sample(self, r, par=None):
+        Returns:
+            :obj:`tuple`: Two `numpy.ndarray`_ objects with,
+            respectively, the lower and upper bounds for the
+            parameters.
+        """
+        return np.array([0., 1e-3]), np.array([500., 100.])
+
+    def sample(self, x, par=None, check=False):
+        """
+        Sample the function.
+
+        Args:
+            x (array-like):
+                Locations at which to sample the function.
+            par (array-like, optional):
+                The function parameters. If None, the current values
+                of :attr:`par` are used. Must have a length of
+                :attr:`np`.
+            check (:obj:`bool`, optional):
+                Ignored. Only included for a uniform interface with
+                other subclasses of :class:`Func1D`.
+
+        Returns:
+            `numpy.ndarray`_: Function evaluated at each ``x`` value.
+        """
         if par is not None:
             self._set_par(par)
-        return self.par[0]*np.tanh(r/self.par[1])
+        return self.par[0]*np.tanh(np.asarray(x)/self.par[1])
 
-    def ddr(self, r, par=None):
+    def ddx(self, x, par=None):
+        """
+        Sample the derivative of the function. See :func:`sample` for
+        the argument descriptions.
+        """
         if par is not None:
             self._set_par(par)
-        sech2 = (1./numpy.cosh(r/self.par[1]))**2
+        sech2 = (1./numpy.cosh(np.asarray(x)/self.par[1]))**2
         return self.par[0] * sech2 / self.par[1]
 
-    def d2dr2(self, r, par=None):
+    def d2dx2(self, x, par=None):
+        """
+        Sample the second derivative of the function. See
+        :func:`sample` for the argument descriptions.
+        """
         if par is not None:
             self._set_par(par)
-        rh = r/self.hrot
-        sech2 = (1./numpy.cosh(rh))**2
-        tanh = np.tanh(rh)
-        return -2. * self.par[0] * sech2 * tanhr / self.par[1]**2 
+        xh = np.asarray(x)/self.hrot
+        sech2 = (1./numpy.cosh(xh))**2
+        return -2. * self.par[0] * sech2 * np.tanh(xh) / self.par[1]**2 
 
 
-class Exponential:
+class Exponential(Func1D):
     """
-    Exponential profile.
+    Instantiates an exponential function.
+
+    Args:
+        par (array-like, optional):
+            The two model parameters. If None, set by
+            :func:`guess_par`.
+        lb (array-like, optional):
+            Lower bounds for the model parameters. If None, set by
+            :func:`par_bounds`.
+        ub (:obj:`float`, optional):
+            Upper bounds for the model parameters. If None, set by
+            :func:`par_bounds`.
     """
-    def __init__(self, par=None):
-        self.np = 2
-        self.par = np.ones(self.np, dtype=float)
-        self._set_par(par)
+    def __init__(self, par=None, lb=None, ub=None):
+        super().__init__(self.guess_par() if par is None else par)
+        if lb is not None and len(lb) != self.np:
+            raise ValueError('Number of lower bounds does not match the number of parameters.')
+        if lb is not None and len(ub) != self.np:
+            raise ValueError('Number of upper bounds does not match the number of parameters.')
+        _lb, _ub = self.par_bounds()
+        self.lb = _lb if lb is None else np.atleast_1d(lb)
+        self.ub = _ub if ub is None else np.atleast_1d(ub)
 
-    def __call__(self, r, par=None):
-        return self.sample(r, par=par)
-        
-    def _set_par(self, par):
-        if par is not None:
-            if len(par) != self.np:
-                raise ValueError('Incorrect number of parameters.')
-            self.par = np.atleast_1d(par)
+    @staticmethod
+    def guess_par():
+        """Return default guess parameters."""
+        return np.array([100., 10.])
 
-    def sample(self, r, par=None):
+    @staticmethod
+    def par_bounds():
+        """
+        Return default parameter boundaries.
+
+        Returns:
+            :obj:`tuple`: Two `numpy.ndarray`_ objects with,
+            respectively, the lower and upper bounds for the
+            parameters.
+        """
+        return np.array([0., 1e-3]), np.array([500., 100.])
+
+    def sample(self, x, par=None, check=False):
+        """
+        Sample the function.
+
+        Args:
+            x (array-like):
+                Locations at which to sample the function.
+            par (array-like, optional):
+                The function parameters. If None, the current values
+                of :attr:`par` are used. Must have a length of
+                :attr:`np`.
+            check (:obj:`bool`, optional):
+                Ignored. Only included for a uniform interface with
+                other subclasses of :class:`Func1D`.
+
+        Returns:
+            `numpy.ndarray`_: Function evaluated at each ``x`` value.
+        """
         if par is not None:
             self._set_par(par)
-        return self.par[0]*np.exp(-r/self.par[1])
+        return self.par[0]*np.exp(-np.asarray(x)/self.par[1])
 
-    def ddr(self, r, par=None):
+    def ddx(self, x, par=None, check=False):
+        """
+        Sample the derivative of the function. See :func:`sample` for
+        the argument descriptions.
+        """
         if par is not None:
             self._set_par(par)
-        return -self.sample(r)/self.par[1]
-
+        return -self.sample(x)/self.par[1]
 
 

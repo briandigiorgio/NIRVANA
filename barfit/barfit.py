@@ -316,7 +316,7 @@ def barfit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=10,
         sampler = dynesty.NestedSampler(loglike, dynprior, ndim , pool=pool,
                 periodic=[1,2], nlive=points,# queue_size=cores, 
                 ptform_args = [args], logl_args = [args], verbose=verbose)
-        sampler.run_nested()
+        sampler.run_nested()#maxiter=1000)
     
     else:
         if ntemps:

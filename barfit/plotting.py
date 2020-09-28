@@ -153,26 +153,26 @@ def dprofs(samp, args, plot=None, stds=False, **kwargs):
         start = args.nglobs
         jump = len(args.edges)-1
         if args.fixcent: jump -= 1
-        vtl  = lstd[start:start + jump]
-        v2tl = lstd[start + jump:start + 2*jump]
-        v2rl = lstd[start + 2*jump:start + 3*jump]
-        vtu  = ustd[start:start + jump]
-        v2tu = ustd[start + jump:start + 2*jump]
-        v2ru = ustd[start + 2*jump:start + 3*jump]
+        paramdict['vtl']  = lstd[start:start + jump]
+        paramdict['v2tl'] = lstd[start + jump:start + 2*jump]
+        paramdict['v2rl'] = lstd[start + 2*jump:start + 3*jump]
+        paramdict['vtu']  = ustd[start:start + jump]
+        paramdict['v2tu'] = ustd[start + jump:start + 2*jump]
+        paramdict['v2ru'] = ustd[start + 2*jump:start + 3*jump]
         if args.disp: 
             if args.fixcent: sigjump = jump+1
             else: sigjump = jump
-            sigl = lstd[start + 3*jump:start + 3*jump + sigjump]
-            sigu = ustd[start + 3*jump:start + 3*jump + sigjump]
+            paramdict['sigl'] = lstd[start + 3*jump:start + 3*jump + sigjump]
+            paramdict['sigu'] = ustd[start + 3*jump:start + 3*jump + sigjump]
 
         #add in central bin if necessary
         if args.fixcent:
-            vtl  = np.insert(vtl,  0, 0)
-            v2tl = np.insert(v2tl, 0, 0)
-            v2rl = np.insert(v2rl, 0, 0)
-            vtu  = np.insert(vtu,  0, 0)
-            v2tu = np.insert(v2tu, 0, 0)
-            v2ru = np.insert(v2ru, 0, 0)
+            paramdict['vtl']  = np.insert(paramdict['vtl'],  0, 0)
+            paramdict['v2tl'] = np.insert(paramdict['v2tl'], 0, 0)
+            paramdict['v2rl'] = np.insert(paramdict['v2rl'], 0, 0)
+            paramdict['vtu']  = np.insert(paramdict['vtu'],  0, 0)
+            paramdict['v2tu'] = np.insert(paramdict['v2tu'], 0, 0)
+            paramdict['v2ru'] = np.insert(paramdict['v2ru'], 0, 0)
 
     #plot profiles if edges are given
     if plot is not None: 
@@ -180,7 +180,8 @@ def dprofs(samp, args, plot=None, stds=False, **kwargs):
         ls = [r'$V_t$',r'$V_{2t}$',r'$V_{2r}$']
         [plot.plot(args.edges[:-1], p, label=ls[i], **kwargs) for i,p in enumerate([vts,v2ts,v2rs])]
         if stds: 
-            [plot.fill_between(args.edges[:-1], p[0], p[1], alpha=.5) for i,p in enumerate([[vtl,vtu],[v2tl,v2tu],[v2rl,v2ru]])]
+            [plot.fill_between(args.edges[:-1], p[0], p[1], alpha=.5) 
+                    for i,p in enumerate([[paramdict['vtl'],paramdict['vtu']],[paramdict['v2tl'],paramdict['v2tu']],[paramdict['v2rl'],paramdict['v2ru']]])]
         plt.xlabel(r'$R_e$')
         plt.ylabel(r'$v$ (km/s)')
         plt.legend()
@@ -245,6 +246,7 @@ def summaryplot(f,nbins,plate,ifu,smearing=True,stellar=False,fixcent=False):
     #dispersion profile
     plt.subplot(333)
     plt.plot(gal.edges[:-1], resdict['sig'])
+    plt.fill_between(gal.edges[:-1], resdict['sigl'], resdict['sigu'], alpha=.5)
     plt.ylim(bottom=0)
     plt.title('Velocity Dispersion Profile')
 

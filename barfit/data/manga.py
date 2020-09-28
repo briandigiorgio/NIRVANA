@@ -94,7 +94,7 @@ def read_manga_psf(cube_file, psf_ext, quiet=False):
     return psf
 
 
-def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10',
+def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='v3_0_1',
                               redux_path=None, cube_path=None, analysis_path=None, maps_path=None):
     """
     Get the DAP maps and DRP datacube files for a given plate and
@@ -222,7 +222,7 @@ class MaNGAKinematics(Kinematics):
     """
 
     @classmethod
-    def from_plateifu(cls, plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10',
+    def from_plateifu(cls, plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='v3_0_1',
                       redux_path=None, cube_path=None, analysis_path=None, maps_path=None,
                       ignore_psf=False, **kwargs):
         """

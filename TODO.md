@@ -5,17 +5,17 @@
 - ~~recheck and merge Kyle's code~~
 - ~~test on mock data (no bad points?)~~
 - ~~fix edges of model data (interpolation errors)~~
-- error bars on plots
+- ~~error bars on plots~~
 - multiple mocks with different characteristics
 - pick out bad points
 - binning schemes
 - add error term
 - stellar fits
-- adding in dispersion
-- add in surface brightness
+- ~~adding in dispersion~~
+- ~~add in surface brightness~~
 - allow Kinematics to include (inverse) covariance
     - Include nominal MaNGA covariance for MaNGAKinematics
-- Treatment of the velocity dispersion and corrections
+- Treatment of the velocity dispersion and correction
 
 ## Side tasks
 

@@ -6,16 +6,6 @@ model.
 .. include:: ../include/links.rst
 """
 
-# TODO: 
-#   - Do not *require* that Kinematics use (square) 2D maps
-#   - Allow Kinematics to hold more than one component (i.e., gas and
-#     stars or multiple gas lines)
-#   - Allow Kinematics to include (inverse) covariance
-#   - Allow for errors in the sigma correction?
-#   - Create an automated way of constructing `grid_x` and `grid_y`. Will
-#     be required when/if kinematics are not provided in a regular array
-#     grid. This is needed so that we know where to calculate the model.
-
 from IPython import embed
 
 import numpy as np
@@ -195,26 +185,28 @@ class Kinematics(FitArgs):
         # The following are arrays used to convert between arrays
         # holding the data for the unique bins to arrays with the full
         # data map.
-        #   - The input BIN IDs
+        #   - The input BIN IDs and grid coordinates
         self.binid = binid
         self.grid_x = grid_x
         self.grid_y = grid_y
+        #   - grid_indx and bin_inverse serve similar purposes and
+        #     are identical if the data are unbinned. grid_index
+        #     gives the flattened index of each unique measurement in
+        #     the input map. bin_inverse gives the indices that can
+        #     be used to reconstruct the input maps based on the
+        #     values extracted for the unique bin IDs. See
+        #     :func:`remap` for how these arrays are used to
+        #     reconstruct the input maps.
+        self.grid_indx = np.arange(np.prod(self.spatial_shape), dtype=int)
+        self.bin_inverse = self.grid_indx.copy()
         #   - bin_transform is used to bin data in a map with
         #     per-spaxel data to match the binning applied to the
         #     measurements. E.g., this is used to match a per-spaxel model
         #     to the binned data. By default (binid is None), this assumes each
         #     pixel is its own bin. See :func:`bin` for how this is used.
-        self.bin_transform = np.arange(np.prod(self.spatial_shape))
-        #   - grid_indx and bin_inverse serve similar purposes and are
-        #   identical if the data are unbinned. grid_index gives the
-        #   flattened index of each unique measurement in the input map.
-        #   bin_inverse gives the indices that can be used to reconstruct
-        #   the input maps based on the values extracted for the unique
-        #   bin IDs. See :func:`remap` for how these arrays are used to
-        #   reconstruct the input maps.
-        self.grid_indx = np.arange(np.prod(self.spatial_shape))
-        self.bin_inverse = self.grid_indx.copy()
-
+        self.bin_transform = sparse.coo_matrix((np.ones(np.prod(self.spatial_shape), dtype=float),
+                                                (self.grid_indx,self.grid_indx)),
+                                               shape=(np.prod(self.spatial_shape),)*2).tocsr()
         if self.binid is None:
             indx = self.grid_indx.copy()
         else:
@@ -251,8 +243,30 @@ class Kinematics(FitArgs):
 
     def _set_beam(self, psf, aperture):
         """
-        Construct the beam and beam FFT based on the input. If no psf
-        or aperture are provided, both are set to None.
+        Instantiate :attr:`beam` and :attr:`beam_fft`.
+
+        If both ``psf`` and ``aperture`` are None, the convolution
+        kernel for the data is assumed to be unknown.
+
+        Args:
+            psf (`numpy.ndarray`_):
+                An image of the point-spread function of the
+                observations. If ``aperture`` is None, this should be
+                the effective smoothing kernel for the kinematic
+                fields. Otherwise, this is the on-sky seeing kernel
+                and the effective smoothing kernel is constructed as
+                the convolution of this image with ``aperture``. If
+                None, the kernel will be set to the ``aperture``
+                value (if provided) or None.
+            aperture (`numpy.ndarray`_):
+                Monochromatic image of the spectrograph aperture. If
+                ``psf`` is None, this should be the effective
+                smoothing kernel for the kinematic fields. Otherwise,
+                this is the on-sky representation of the spectrograph
+                aperture and the effective smoothing kernel is
+                constructed as the convolution of this image with
+                ``psf``. If None, the kernel will be set to the
+                ``psf`` value (if provided) or None.
         """
         if psf is None and aperture is None:
             self.beam = None
@@ -271,7 +285,29 @@ class Kinematics(FitArgs):
 
     def _ingest(self, data, ivar, mask):
         """
-        Ingest data.
+        Check the data for ingestion into the object.
+
+        Args:
+            data (`numpy.ndarray`_, `numpy.ma.MaskedArray`_):
+                Kinematic measurements. Can be None.
+            ivar (`numpy.ndarray`_, `numpy.ma.MaskedArray`_):
+                Inverse variance in the kinematic measurements.
+                Regardless of the input, any pixel with an inverse
+                variance that is not greater than 0 is automatically
+                masked.
+            mask (`numpy.ndarray`_):
+                A boolean bad-pixel mask (i.e., values to ignore are
+                set to True). This is the baseline mask that is
+                combined with any masks provide by ``data`` and
+                ``ivar`` if either are provided as
+                `numpy.ma.MaskedArray`_ objects. The returned mask
+                also automatically masks any bad inverse-variance
+                values. If None, the baseline mask is set to be False
+                for all pixels.
+
+        Returns:
+            :obj:`tuple`: Return three `numpy.ndarray`_ objects with
+            the ingested data, inverse variance, and boolean mask.
         """
         if data is None:
             # No data, so do nothing
@@ -290,7 +326,7 @@ class Kinematics(FitArgs):
         # Set the error and incorporate the mask for a masked array
         if ivar is None:
             # Don't instantiate the array if we don't need to.
-            _ivar = None #np.ones(self.spatial_shape, dtype=float)
+            _ivar = None
         elif isinstance(ivar, np.ma.MaskedArray):
             _mask |= np.ma.getmaskarray(ivar)
             _ivar = ivar.data
@@ -302,56 +338,67 @@ class Kinematics(FitArgs):
 
         return _data, _ivar, _mask
 
-    def remap_data(self, data, masked=False):
-        if data.shape != self.vel.shape:
-            raise ValueError('To remap, must have the same shape as the internal data attributes.')
-        _data = np.ma.masked_all(self.spatial_shape, dtype=float) \
-                    if masked else np.zeros(self.spatial_shape, dtype=float)
-        _data[np.unravel_index(self.grid_indx, self.spatial_shape)] = data[self.bin_inverse]
-        return _data
+#    def remap_data(self, data, masked=False):
+#        if data.shape != self.vel.shape:
+#            raise ValueError('To remap, must have the same shape as the internal data attributes.')
+#        _data = np.ma.masked_all(self.spatial_shape, dtype=float) \
+#                    if masked else np.zeros(self.spatial_shape, dtype=float)
+#        _data[np.unravel_index(self.grid_indx, self.spatial_shape)] = data[self.bin_inverse]
+#        return _data
 
-    # TODO: include sigma correction when attr='sig'?
-    def remap(self, attr, masked=True, new_attr=True):
+    def remap(self, data, masked=True):
         """
         Remap the requested attribute to the full 2D array.
 
         Args:
-            attr (:obj:`str`):
-                The attribute to remap.  Must be a valid attribute.
+            data (`numpy.ndarray`_, :obj:`str`):
+                The data or attribute to remap. If the object is a
+                string, the string must be a valid attribute.
             masked (:obj:`bool`, optional):
-                If an associated mask exists for the selected
-                attribute, return the map as a
-                `numpy.ma.MaskedArray`_.
-            new_attr (:obj:`bool`, optional):
-                make a new attribute `attr_r` for the 2D array.
+                Return data as a masked array, where data that are
+                not filled by the provided data. If ``data`` is a
+                string selecting an attribute and an associated mask
+                exists for that attribute, also include the mask in
+                the output.
 
         Returns:
             `numpy.ndarray`_, `numpy.ma.MaskedArray`_: 2D array with
             the attribute remapped to the original on-sky locations.
 
         Raises:
+            ValueError:
+                Raised if ``data`` is a `numpy.ndarray`_ and the
+                shape does not match the expected 1d shape.
             AttributeError:
-                Raised if the requested attribute is invalid.
+                Raised if ``data`` is a string and the requested
+                attribute is invalid.
+
         """
-        if not hasattr(self, attr):
-            raise AttributeError('No attribute called {0}.'.format(attr))
-        if getattr(self, attr) is None:
+        if isinstance(data, np.ndarray):
+            if data.shape != self.vel.shape:
+                raise ValueError('To remap, must have the same shape as the internal data '
+                                 'attributes.')
+            _data = np.ma.masked_all(self.spatial_shape, dtype=float) \
+                        if masked else np.zeros(self.spatial_shape, dtype=float)
+            _data[np.unravel_index(self.grid_indx, self.spatial_shape)] = data[self.bin_inverse]
+            return _data
+
+        if not hasattr(self, data):
+            raise AttributeError('No attribute called {0}.'.format(data))
+        if getattr(self, data) is None:
             return None
 
-        data = np.zeros(self.spatial_shape, dtype=float)
-        data[np.unravel_index(self.grid_indx, self.spatial_shape)] \
-                = getattr(self, attr)[self.bin_inverse]
-        mask_attr = '{0}_mask'.format(attr)
-        if not masked or not hasattr(self, mask_attr) or getattr(self, mask_attr) is None:
-            if new_attr: setattr(self, attr+'_r', data)
-            return data
+        _data = np.zeros(self.spatial_shape, dtype=float)
+        _data[np.unravel_index(self.grid_indx, self.spatial_shape)] \
+                = getattr(self, data)[self.bin_inverse]
+        mask_data = '{0}_mask'.format(data)
+        if not masked or not hasattr(self, mask_data) or getattr(self, mask_data) is None:
+            return _data
 
         mask = np.ones(self.spatial_shape, dtype=bool)
         mask[np.unravel_index(self.grid_indx, self.spatial_shape)] \
-                = getattr(self, mask_attr)[self.bin_inverse]
-        masked_data = np.ma.MaskedArray(data, mask=mask)
-        if new_attr: setattr(self, attr+'_r', masked_data)
-        return masked_data
+                = getattr(self, mask_data)[self.bin_inverse]
+        return np.ma.MaskedArray(_data, mask=mask)
 
     def bin(self, data):
         """
@@ -371,11 +418,20 @@ class Kinematics(FitArgs):
             ValueError:
                 Raised if the shape of the input array is incorrect.
         """
-        # TODO: Speed this up.
         if data.shape != self.spatial_shape:
             raise ValueError('Data to rebin has incorrect shape; expected {0}, found {1}.'.format(
                               self.spatial_shape, data.shape))
         return self.bin_transform.dot(data.ravel())
+
+    def max_radius(self):
+        """
+        Calculate and return the maximum on-sky radius of the valid data.
+        """
+        minx = np.amin(self.x)
+        maxx = np.amax(self.x)
+        miny = np.amin(self.y)
+        maxy = np.amax(self.y)
+        return np.sqrt(max(abs(minx), maxx)**2 + max(abs(miny), maxy)**2)
 
     @classmethod
     def mock(cls, size, inc, pa, pab, vsys, vt, v2t, v2r, xc=0, yc=0, reff=10,r=15):

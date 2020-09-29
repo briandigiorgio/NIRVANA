@@ -45,21 +45,21 @@ def test_fft():
     _convolve_fft = ConvolveFFTW(synth.shape)
 
     # Compare numpy with direct vs. FFT kernel input
-    np_synth2 = convolve_fft(synth, synth)
-    _np_synth2 = convolve_fft(synth, synth_fft, kernel_fft=True)
-    assert numpy.allclose(np_synth2, _np_synth2), 'Difference if FFT is passed'
+    synth2 = convolve_fft(synth, synth)
+    _synth2 = convolve_fft(synth, synth_fft, kernel_fft=True)
+    assert numpy.allclose(synth2, _synth2), 'Difference if FFT is passed for numpy'
 
     # Compare numpy and FFTW with direct input
-    _np_synth2 = _convolve_fft(synth, synth)
-    assert numpy.allclose(np_synth2, _np_synth2), 'Difference between numpy and FFTW'
+    _synth2 = _convolve_fft(synth, synth)
+    assert numpy.allclose(synth2, _synth2), 'Difference between numpy and FFTW'
 
     # Compare FFTW with direct vs. FFT kernel input
-    np_synth2 = _convolve_fft(synth, synth_fft, kernel_fft=True)
-    assert numpy.allclose(np_synth2, _np_synth2), 'Difference between numpy and FFTW'
+    synth2 = _convolve_fft(synth, synth_fft, kernel_fft=True)
+    assert numpy.allclose(synth2, _synth2), 'Difference if FFT is passed for FFTW'
 
     # Compare numpy and FFTW with direct input and FFT output
-    np_synth2 = convolve_fft(synth, synth, return_fft=True)
-    _np_synth2 = _convolve_fft(synth, synth, return_fft=True)
-    assert numpy.allclose(np_synth2, _np_synth2), 'Difference between numpy and FFTW'
+    synth2 = convolve_fft(synth, synth, return_fft=True)
+    _synth2 = _convolve_fft(synth, synth, return_fft=True)
+    assert numpy.allclose(synth2, _synth2), 'Difference between numpy and FFTW'
 
 

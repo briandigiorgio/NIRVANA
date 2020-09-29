@@ -154,6 +154,7 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
         if _analysis_path is None:
             raise ValueError('Could not define top-level root for DAP output.')
         maps_path = os.path.join(os.path.abspath(_analysis_path), dr, daptype, str(plate), str(ifu))
+    print(maps_path, os.getenv('MANGA_SPECTRO_ANALYSIS'))
     if not os.path.isdir(maps_path):
         raise NotADirectoryError('No such directory: {0}'.format(maps_path))
 

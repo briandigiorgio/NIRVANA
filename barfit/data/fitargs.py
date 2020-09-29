@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 
 from ..models.geometry import projected_polar
 from ..models.axisym import rotcurveeval
+from ..models.beam import ConvolveFFTW
 
 class FitArgs:
     '''
@@ -50,6 +51,13 @@ class FitArgs:
         '''
 
         self.disp = disp
+
+    def setconv(self):
+        '''
+        Define the ConvolveFFTW class for the galaxy.
+        '''
+
+        self.conv = ConvolveFFTW(self.spatial_shape)
 
     def getguess(self):
         '''

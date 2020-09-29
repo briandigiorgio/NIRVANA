@@ -13,7 +13,7 @@ import pickle
 from .barfit import barmodel, unpack
 from .data.manga import MaNGAStellarKinematics, MaNGAGasKinematics
 from .data.kinematics import Kinematics
-from .models.beam import smear
+from .models.beam import smear, ConvolveFFTW
 
 def cornerplot(sampler, burn=-1000, **args):
     '''
@@ -207,7 +207,7 @@ def summaryplot(f,nbins,plate,ifu,smearing=True,stellar=False,fixcent=False):
         print('Using mock:', mock['name'])
         params = [mock['inc'], mock['pa'], mock['pab'], mock['vsys'], mock['vts'], mock['v2ts'], mock['v2rs'], mock['sig']]
         args = Kinematics.mock(56,*params)
-        cnvfftw = ConvolveFFTW(mock.spatial_shape)
+        cnvfftw = ConvolveFFTW(args.spatial_shape)
         smeared = smear(args.remap('vel'), args.beam_fft, beam_fft=True, sig=args.remap('sig'), sb=args.remap('sb'), cnvfftw=cnvfftw)
         args.sb  = args.bin(smeared[0])
         args.vel = args.bin(smeared[1])
@@ -223,6 +223,7 @@ def summaryplot(f,nbins,plate,ifu,smearing=True,stellar=False,fixcent=False):
     args.setfixcent(fixcent)
     args.setdisp(True)
     args.setnglobs(4)
+    args.setconv()
 
     resdict = dprofs(chains, args, stds=True)
     velmodel, sigmodel = barmodel(args,resdict,plot=True)
@@ -257,6 +258,8 @@ def summaryplot(f,nbins,plate,ifu,smearing=True,stellar=False,fixcent=False):
     plt.fill_between(args.edges[:-1], resdict['sigl'], resdict['sigu'], alpha=.5)
     plt.ylim(bottom=0)
     plt.title('Velocity Dispersion Profile')
+    plt.xlabel(r'$R_e')
+    plt.ylabel(r'$v$ (km/s)')
 
     #MaNGA Ha velocity field
     plt.subplot(334)

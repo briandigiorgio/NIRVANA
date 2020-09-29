@@ -15,6 +15,7 @@ from .fitargs import FitArgs
 
 from ..models.beam import construct_beam
 from ..models.geometry import projected_polar
+from ..models import oned
 
 class Kinematics(FitArgs):
     r"""
@@ -496,5 +497,5 @@ class Kinematics(FitArgs):
         model = vsys + np.sin(_inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-_pab))*np.cos(th)- v2rvals*np.sin(2*(th-_pab))*np.sin(th))
         if psf is None: psf = np.load('psfexample56.npy')
         binid = np.arange(np.product(model.shape)).reshape(model.shape)
-        sb = np.ones_like(x)
+        sb = oned.Sersic1D([1,10,1]).sample(r)
         return cls(model, x=x, y=y, grid_x=x, grid_y=y, reff=reff, binid=binid, sig=sigvals, psf=psf, sb=sb)

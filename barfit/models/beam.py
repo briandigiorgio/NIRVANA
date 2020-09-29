@@ -196,7 +196,7 @@ class ConvolveFFTW:
             return self.data_fft * self.kern_fft
         self.data_fft *= self.kern_fft
         self.ifft()
-        return self.dcnv.real
+        return self.dcnv.real.copy()
 
     def fft(self, data, copy=False):
         """
@@ -317,7 +317,7 @@ def smear(v, beam, beam_fft=False, sb=None, sig=None, cnvfftw=None):
         bfft = beam
     else:
         bfft = np.fft.ifftshift(beam)
-        bfft = np.fft.fftn(bfft) if cnvfftw is None else cnvfftw.fft(bfft)
+        bfft = np.fft.fftn(bfft) if cnvfftw is None else cnvfftw.fft(bfft, copy=True)
 
     # Get the first moment of the beam-smeared intensity distribution
     mom0 = None if sb is None else _cnv(sb, bfft, kernel_fft=True)

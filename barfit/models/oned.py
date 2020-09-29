@@ -6,6 +6,8 @@ import warnings
 from IPython import embed
 
 import numpy as np
+from scipy import special
+
 from .util import lin_interp
 
 
@@ -455,4 +457,76 @@ class Exponential(Func1D):
             self._set_par(par)
         return -self.sample(x)/self.par[1]
 
+
+class Sersic1D(Func1D):
+    """
+    Instantiates a 1D Sersic profile.
+
+    Parameters are (1) the surface brightness at 1 half-light radius,
+    (2) the half-life radius, and (3) the Sersic index.
+
+    Args:
+        par (array-like, optional):
+            The three model parameters. If None, set by
+            :func:`guess_par`.
+        lb (array-like, optional):
+            Lower bounds for the model parameters. If None, set by
+            :func:`par_bounds`.
+        ub (:obj:`float`, optional):
+            Upper bounds for the model parameters. If None, set by
+            :func:`par_bounds`.
+    """
+    def __init__(self, par=None, lb=None, ub=None):
+        super().__init__(self.guess_par() if par is None else par)
+        if lb is not None and len(lb) != self.np:
+            raise ValueError('Number of lower bounds does not match the number of parameters.')
+        if lb is not None and len(ub) != self.np:
+            raise ValueError('Number of upper bounds does not match the number of parameters.')
+        _lb, _ub = self.par_bounds()
+        self.lb = _lb if lb is None else np.atleast_1d(lb)
+        self.ub = _ub if ub is None else np.atleast_1d(ub)
+        self._set_par(self.par)
+
+    def _set_par(self, par):
+        super()._set_par(par)
+        self.bn = special.gammaincinv(2. * self.par[2], 0.5) 
+
+    @staticmethod
+    def guess_par():
+        """Return default guess parameters."""
+        return np.array([1., 10., 1.])
+
+    @staticmethod
+    def par_bounds():
+        """
+        Return default parameter boundaries.
+
+        Returns:
+            :obj:`tuple`: Two `numpy.ndarray`_ objects with,
+            respectively, the lower and upper bounds for the
+            parameters.
+        """
+        return np.array([0., 1e-3, 1e-2]), np.array([500., 100., 10.])
+
+    def sample(self, x, par=None, check=False):
+        """
+        Sample the function.
+
+        Args:
+            x (array-like):
+                Locations at which to sample the function.
+            par (array-like, optional):
+                The function parameters. If None, the current values
+                of :attr:`par` are used. Must have a length of
+                :attr:`np`.
+            check (:obj:`bool`, optional):
+                Ignored. Only included for a uniform interface with
+                other subclasses of :class:`Func1D`.
+
+        Returns:
+            `numpy.ndarray`_: Function evaluated at each ``x`` value.
+        """
+        if par is not None:
+            self._set_par(par)
+        return self.par[0]*np.exp(-self.bn * ((x/self.par[1])**(1/self.par[2]) - 1))
 

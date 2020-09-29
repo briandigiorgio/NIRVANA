@@ -7,12 +7,28 @@ from IPython import embed
 
 import numpy as np
 
+try:
+    import pyfftw
+except:
+    pyfftw = None
+
 
 def gauss2d_kernel(n, sigma):
     """
     Return a circular 2D Gaussian.
 
-    Shape of the returned map is nxn, and the sigma is provided in pixels.
+    The center of the Gaussian is centered at ``n//2``.
+
+    Args:
+        n (:obj:`int`):
+            The length of the axis of the square (n x n) output
+            array.
+        sigma (:obj:`float`):
+            The circular (symmetric) standard deviation of the 2D
+            Gaussian
+
+    Returns:
+        `numpy.ndarray`_: Gridded representation of the 2D Gaussian.
     """
     x, y = np.meshgrid(*(np.arange(n, dtype=float) - n//2,)*2)
     d = 2*sigma**2
@@ -31,9 +47,34 @@ def convolve_fft(data, kernel, kernel_fft=False, return_fft=False):
 
     Beware:
         - ``data`` and ``kernel`` must have the same shape.
-        - Kernel is assumed to sum to unity.
+        - For the sum of all pixels in the convolved image to be the
+          same as the input data, the kernel must sum to unity.
         - Padding is never added by default.
 
+    Args:
+        data (`numpy.ndarray`_):
+            Data to convolve.
+        kernel (`numpy.ndarray`_):
+            The convolution kernel, which must have the same shape as
+            ``data``. If ``kernel_fft`` is True, this is the FFT of
+            the kernel image; otherwise, this is the direct kernel
+            image with the center of the kernel at the center of the
+            array.
+        kernel_fft (:obj:`bool`, optional):
+            Flag that the provided ``kernel`` array is actually the
+            FFT of the kernel, not its direct image.
+        return_fft (:obj:`bool`, optional):
+            Flag to return the FFT of the convolved image, instead of
+            the direct image.
+
+    Returns:
+        `numpy.ndarray`_: The convolved image, or its FFT, with the
+        same shape as the provided ``data`` array.
+
+    Raises:
+        ValueError:
+            Raised if ``data`` and ``kernel`` do not have the same
+            shape or if any of their values are not finite.
     """
     if data.shape != kernel.shape:
         raise ValueError('Data and kernel must have the same shape.')
@@ -47,17 +88,177 @@ def convolve_fft(data, kernel, kernel_fft=False, return_fft=False):
     return fftmult if return_fft else np.fft.ifftn(fftmult).real
 
 
+class ConvolveFFTW:
+    """
+    Class to perform convolutions using the FFTW library.
+
+    Args:
+        shape (:obj:`tuple`):
+            Shape of the arrays to be convolved. Any arrays passed to
+            member functions of this instance must have this shape.
+        flags (:obj:`tuple`):
+            Flags passed to pyFFTW when setting up the FFTW
+            instances, describing how the FFTW performance
+            optimization is determined. The default is FFTW_MEASURE.
+    """
+    def __init__(self, shape, flags=None):
+        if pyfftw is None:
+            raise ImportError('Must install pyfftw to use ConvolveFFTW; run pip install pyfftw.')
+        # Dimensionality
+        self.shape = shape
+        self.ndim = len(self.shape)
+        # Array workspace
+        self.data = pyfftw.empty_aligned(shape, dtype='complex128')
+        self.data.imag[...] = 0.
+        self.kern = pyfftw.empty_aligned(shape, dtype='complex128')
+        self.kern.imag[...] = 0.
+
+        self.data_fft = pyfftw.empty_aligned(shape, dtype='complex128')
+        self.kern_fft = pyfftw.empty_aligned(shape, dtype='complex128')
+
+        self.dcnv = pyfftw.empty_aligned(shape, dtype='complex128')
+        self.dcnv.imag[...] = 0.
+
+        # FFTW algorithms
+        self.flags = ('FFTW_MEASURE',) if flags is None else flags
+        if not isinstance(self.flags, tuple):
+            raise TypeError('Provided flags must be strings in a tuple instance.')
+        self.dfft = pyfftw.FFTW(self.data, self.data_fft,
+                                axes=tuple(np.arange(self.ndim).tolist()),
+                                direction='FFTW_FORWARD', flags=self.flags)
+        self.kfft = pyfftw.FFTW(self.kern, self.kern_fft,
+                                axes=tuple(np.arange(self.ndim).tolist()),
+                                direction='FFTW_FORWARD', flags=self.flags)
+        self.ifft = pyfftw.FFTW(self.data_fft, self.dcnv,
+                                axes=tuple(np.arange(self.ndim).tolist()),
+                                direction='FFTW_BACKWARD', flags=self.flags)
+
+    def __call__(self, data, kernel, kernel_fft=False, return_fft=False):
+        """
+        Convolve data with a kernel using FFTW.
+
+        This method is identical to :func:`convolve_fft`, but uses
+        the pre-established memory working space setup during the
+        instantiation of the object.
+
+        Beware:
+            - ``data`` and ``kernel`` must have the same shape.
+            - For the sum of all pixels in the convolved image to be the
+              same as the input data, the kernel must sum to unity.
+            - Padding is never added by default.
+
+        Args:
+            data (`numpy.ndarray`_):
+                Data to convolve.
+            kernel (`numpy.ndarray`_):
+                The convolution kernel, which must have the same shape as
+                ``data``. If ``kernel_fft`` is True, this is the FFT of
+                the kernel image; otherwise, this is the direct kernel
+                image with the center of the kernel at the center of the
+                array.
+            kernel_fft (:obj:`bool`, optional):
+                Flag that the provided ``kernel`` array is actually the
+                FFT of the kernel, not its direct image.
+            return_fft (:obj:`bool`, optional):
+                Flag to return the FFT of the convolved image, instead of
+                the direct image.
+
+        Returns:
+            `numpy.ndarray`_: The convolved image, or its FFT, with the
+            same shape as the provided ``data`` array.
+
+        Raises:
+            ValueError:
+                Raised if ``data`` and ``kernel`` do not have the expected
+                shape or if any of their values are not finite.
+            TypeError:
+                Raised if the data types of either ``data`` or
+                ``kernel`` do not match the expected values
+                (np.float64 for direct data, np.complex128 for
+                Fourier Transform data).
+        """
+        if not np.all(np.isfinite(data)) or not np.all(np.isfinite(kernel)):
+            raise ValueError('Data and kernel must both have valid values.')
+        self.fft(data)
+
+        if kernel.shape != self.shape:
+            raise ValueError('Kernel has incorrect shape for this instance of ConvolveFFTW.')
+        if kernel_fft:
+            if kernel.dtype.type is not np.complex128:
+                raise TypeError('Kernel FFT must be of type numpy.complex128.')
+            self.kern_fft[...] = kernel
+        else:
+            if kernel.dtype.type is not np.float64:
+                raise TypeError('Kernel must be of type numpy.float64.')
+            self.kern.real[...] = np.fft.ifftshift(kernel)
+            self.kfft()
+        if return_fft:
+            return self.data_fft * self.kern_fft
+        self.data_fft *= self.kern_fft
+        self.ifft()
+        return self.dcnv.real
+
+    def fft(self, data, copy=False):
+        """
+        Calculate the FFT of the provided data array.
+
+        Args:
+            data (`numpy.ndarray`_):
+                Data for FFT computation.
+            copy (:obj:`bool`, optional):
+                The result of the FFT is computed using the
+                :attr:`data_fft` workspace. If False, the
+                :attr:`data_fft` *is* the returned array; if True,
+                returned array is a copy.
+
+        Returns:
+            `numpy.ndarray`_: The FFT of the provided data.
+
+        Raises:
+            ValueError:
+                Raised if the shape of the data array does not match
+                :attr:`shape`.
+            TypeError:
+                Raised if the type of the array is not np.float64.
+        """
+        if data.shape != self.shape:
+            raise ValueError('Data has incorrect shape for this instance of ConvolveFFTW.')
+        if data.dtype.type is not np.float64:
+            raise TypeError('Data must be of type numpy.float64.')
+
+        self.data.real[...] = data
+        self.dfft()
+        return self.data_fft.copy() if copy else self.data_fft
+        
+
 def construct_beam(psf, aperture, return_fft=False):
     """
     Construct the beam profile.
 
-    psf and aperture must have the same shape.
-    psf and aperture are both expected to sum to 1.
+    This is a simple wrapper for :func:`convolve_fft`. Nominally,
+    both arrays should sum to unity.
+
+    Args:
+        psf (`numpy.ndarray`_):
+            An image of the point-spread function of the
+            observations. Must have the same shape as ``aperture``.
+        aperture (`numpy.ndarray`_):
+            Monochromatic image of the spectrograph aperture. Must
+            have the same shape as ``psf``.
+        return_fft (:obj:`bool`, optional):
+            Flag to return the FFT of the beam profile, instead of
+            its the direct image.
+
+    Returns:
+        `numpy.ndarray`_: The 2D image of the beam profile, or its
+        FFT, with the same shape as the provided ``psf`` and
+        ``aperture`` arrays.
     """
     return convolve_fft(psf, aperture, return_fft=return_fft)
 
 
-def smear(v, beam, beam_fft=False, sb=None, sig=None):
+# TODO: Include higher moments?
+def smear(v, beam, beam_fft=False, sb=None, sig=None, cnvfftw=None):
     """
     Get the beam-smeared surface brightness, velocity, and velocity
     dispersion fields.
@@ -82,6 +283,10 @@ def smear(v, beam, beam_fft=False, sb=None, sig=None):
         sig (`numpy.ndarray`_, optional):
             2D array with the velocity dispersion measurements. Must
             have the same shape as ``v``.
+        cnvfftw (:class:`barfit.models.beam.ConvolveFFTW`, optional):
+            An object that expedites the convolutions using
+            FFTW/pyFFTW. If None, the convolution is done using numpy
+            FFT routines.
 
     Returns:
         :obj:`tuple`: Tuple of three objects, which are nominally the
@@ -105,14 +310,20 @@ def smear(v, beam, beam_fft=False, sb=None, sig=None):
     if sig is not None and sig.shape != v.shape:
         raise ValueError('Input velocity dispersion and velocity field array sizes must match.')
 
+    _cnv = convolve_fft if cnvfftw is None else cnvfftw
+
     # Pre-compute the beam FFT
-    bfft = beam if beam_fft else np.fft.fftn(np.fft.ifftshift(beam))
+    if beam_fft:
+        bfft = beam
+    else:
+        bfft = np.fft.ifftshift(beam)
+        bfft = np.fft.fftn(bfft) if cnvfftw is None else cnvfftw.fft(bfft)
 
     # Get the first moment of the beam-smeared intensity distribution
-    mom0 = None if sb is None else convolve_fft(sb, bfft, kernel_fft=True)
+    mom0 = None if sb is None else _cnv(sb, bfft, kernel_fft=True)
 
     # First moment
-    mom1 = convolve_fft(v if sb is None else sb*v, bfft, kernel_fft=True)
+    mom1 = _cnv(v if sb is None else sb*v, bfft, kernel_fft=True)
     if mom0 is not None:
         mom1 /= (mom0 + (mom0 == 0.0))
 
@@ -122,114 +333,8 @@ def smear(v, beam, beam_fft=False, sb=None, sig=None):
 
     # Second moment
     _sig = np.square(v) + np.square(sig)
-    mom2 = convolve_fft(_sig if sb is None else sb*_sig, bfft, kernel_fft=True)
+    mom2 = _cnv(_sig if sb is None else sb*_sig, bfft, kernel_fft=True)
     mom2 = mom2 / (mom0 + (mom0 == 0.0)) - mom1**2
     mom2[mom2 < 0] = 0.0
     return mom0, mom1, np.sqrt(mom2)
-
-
-def apply_beam_smearing_old(v, psf, sb=None, sig=None, aperture=None, mask=None, fftw=False):
-    """
-    Get the beam-smeared surface brightness, velocity, and velocity
-    dispersion fields.
-    
-    Args:
-        v (np.ndarray):
-            2D array with the discretely sampled velocity field. Must
-            be square.
-        psf (np.ndarray):
-            An image of the point-spread function. If ``aperture`` is
-            not provided, this should be the effective smoothing
-            kernel for the kinematic fields. Otherwise, this is the
-            on-sky seeing kernel and the effective smoothing kernel
-            is constructed as the convolution of this image with
-            ``aperture``.  Must be the same shape as ``v``.
-        sb (np.ndarray, optional):
-            2D array with the surface brightness of the object. This
-            is used to weight the convolution of the kinematic fields
-            according to the luminosity distribution of the object.
-            Must have the same shape as ``v``. If None, the
-            convolution is unweighted.
-        sig (np.ndarray, optional):
-            2D array with the velocity dispersion measurements. Must
-            have the same shape as ``v``.
-        aperture (np.ndarray, optional):
-            Monochromatic image of the spectrograph aperture. See
-            ``psf`` for how this is used.
-        mask (np.ndarray, optional):
-            2D Boolean array to mask the results with.
-        fftw (bool, optional):
-            Will use ``pyfftw`` FFT library if set to true which
-            should save some time in the convolution but doesn't in this
-            implementation and causes the fit to hang. Will use
-            ``scipy.signal.fftconvolve`` if set to false (default).
-
-    Returns:
-        :obj:`tuple`: Tuple of three objects, which are nominally the
-        beam-smeared surface brightness, velocity, and velocity
-        dispersion fields. The first and last objects in the tuple
-        can be None, if ``sb`` or ``sig`` are not provided,
-        respectively. The 2nd returned object is always the
-        beam-smeared velocity field.
-
-    Raises:
-        ValueError:
-            Raised if the provided arrays are not 2D, if they are not
-            square, or if the shapes of the arrays are not all the
-            same.
-    """
-    nimg = v.shape[0]
-    if len(v.shape) != 2:
-        raise ValueError('Can only accept 2D images.')
-    if v.shape[1] != nimg:
-        raise ValueError('Input array must be square.')
-    if psf.shape != v.shape:
-        raise ValueError('Input point-spread function and velocity field array sizes must match.')
-    if sb is not None and sb.shape != v.shape:
-        raise ValueError('Input surface-brightness and velocity field array sizes must match.')
-    if sig is not None and sig.shape != v.shape:
-        raise ValueError('Input velocity dispersion and velocity field array sizes must match.')
-    if aperture is not None and aperture.shape != v.shape:
-        raise ValueError('Input spectrograph aperture and velocity field array sizes must match.')
-
-    # Get the image of the beam and ensure it's normalized to unity
-    beam = psf if aperture is None else scipy.signal.fftconvolve(psf, aperture, mode='same')
-    beam /= np.sum(beam)
-
-    if fftw:
-        import pyfftw
-        scipy.fftpack = pyfftw.interfaces.scipy_fftpack
-        v = pyfftw.byte_align(v)
-        beam = pyfftw.byte_align(beam)
-        if sb is not None: sb = pyfftw.byte_align(sb)
-
-    # Get the first moment of the beam-smeared intensity distribution
-    mom0 = None if sb is None else scipy.signal.fftconvolve(sb, beam, mode='same')
-    if mask is not None and mom0 is not None: mom0 = np.ma.array(mom0, mask=mask)
-
-    # First moment
-    if fftw: mom1 = scipy.signal.fftconvolve(v if sb is None else pyfftw.byte_align(sb*v), beam, mode='same')
-    else: mom1 = scipy.signal.fftconvolve(v if sb is None else sb*v, beam, mode='same')
-    if mom0 is not None:
-        mom1 = np.ma.divide(mom1, mom0).filled(0.0)
-        if mask is not None: mom1 = np.ma.array(mom1, mask=mask)
-
-    if sig is None:
-        # Sigma not provided so we're done
-        return mom0, mom1, None
-
-    # Second moment
-    if fftw: 
-        _sig = pyfftw.byte_align(np.square(v) + np.square(sig))
-        mom2 = scipy.signal.fftconvolve(_sig if sb is None else pyfftw.byte_align(sb*_sig), beam, mode='same')
-    else:
-        _sig = np.square(v) + np.square(sig)
-        mom2 = scipy.signal.fftconvolve(_sig if sb is None else sb*_sig, beam, mode='same')
-    if mom2 is not None and mom0 is not None:
-        mom2 = np.ma.sqrt(np.ma.divide(mom2,mom0) - np.square(mom1)).filled(0.0)
-        if mask is not None: mom2 = np.ma.array(mom2, mask=mask)
-
-    # Finish
-    return mom0, mom1, mom2
-
 

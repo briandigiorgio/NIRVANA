@@ -75,10 +75,9 @@ class AxisymmetricDisk:
         miny = np.amin(self.y)
         maxy = np.amax(self.y)
         maxr = np.sqrt(max(abs(minx), maxx)**2 + max(abs(miny), maxy)**2)
-        rclb, rcub = self.rc.par_bounds(maxr)
         # Minimum and maximum allowed values for xc, yc, pa, inc, vsys, vrot, hrot
-        return np.concatenate(([minx, miny, -350., 0., -300.], rclb)), \
-               np.concatenate(([maxx, maxy, 350., 89., 300.], rcub))
+        return np.concatenate(([minx, miny, -350., 0., -300.], self.rc.lb)), \
+               np.concatenate(([maxx, maxy, 350., 89., 300.], self.rc.ub))
 
     def _set_par(self, par):
         """

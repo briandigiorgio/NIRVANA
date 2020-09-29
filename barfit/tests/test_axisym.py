@@ -33,7 +33,7 @@ def test_lsq_nopsf():
     kin = manga.MaNGAGasKinematics.from_plateifu(8138, 12704, cube_path=data_root,
                                                  maps_path=data_root, ignore_psf=True)
     # Set the rotation curve
-    rc = HyperbolicTangent()
+    rc = HyperbolicTangent(lb=numpy.array([0., 1e-3]), ub=numpy.array([500., kin.max_radius()]))
     # Set the disk velocity field
     disk = AxisymmetricDisk(rc)
     # Fit it with a non-linear least-squares optimizer
@@ -53,7 +53,7 @@ def test_lsq_psf():
     kin = manga.MaNGAGasKinematics.from_plateifu(8138, 12704, cube_path=data_root,
                                                  maps_path=data_root)
     # Set the rotation curve
-    rc = HyperbolicTangent()
+    rc = HyperbolicTangent(lb=numpy.array([0., 1e-3]), ub=numpy.array([500., kin.max_radius()]))
     # Set the disk velocity field
     disk = AxisymmetricDisk(rc)
     # Fit it with a non-linear least-squares optimizer
@@ -63,6 +63,4 @@ def test_lsq_psf():
     assert 165. < disk.par[2] < 167., 'PA changed'
     assert 56. < disk.par[3] < 57., 'Inclination changed'
     assert 250. < disk.par[5] < 252., 'Projected rotation changed'
-
-
 

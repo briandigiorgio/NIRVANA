@@ -1,14 +1,3 @@
-0.0.2dev
---------
-
- - Added in fitting of dispersion in radial bins
- - Changed `barfit.barfit.unpack` to use a dictionary
- - Lots of changes to `barfit.barfit` code to utilize dictionary
- - Various changes to `FitArgs` and script to accommadate dictionary
- - Huge changes to `barfit.plotting` for disperion and dictionary
- - Switched to using `MPL-10` by default
-
-
 0.0.1dev
 --------
 
@@ -26,3 +15,14 @@
  - Begins the implementation of a general `AxisymmetricDisk` class.
  - Adds fixing of center
  - Adds mock data set
+ - Added in fitting of dispersion in radial bins
+ - Changed `barfit.barfit.unpack` to use a dictionary
+ - Lots of changes to `barfit.barfit` code to utilize dictionary
+ - Various changes to `FitArgs` and script to accommodate dictionary
+ - Huge changes to `barfit.plotting` for dispersion and dictionary
+ - Switched to using `MPL-10` by default
+ - Tests and docs for `barfit.models.oned`.
+ - Added `barfit.models.beam.ConvolveFFTW` class for doing
+   convolutions with the FFTW library.
+
+

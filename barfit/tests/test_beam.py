@@ -84,36 +84,30 @@ def test_smear():
 
     cnvlv = beam.ConvolveFFTW(x.shape)
     synth = beam.gauss2d_kernel(n, 3.)
+    synth_fft = cnvlv.fft(synth, shift=True)
 
-#    import time
-#    t = time.perf_counter()
     vel_smear = beam.smear(vel_field, synth)[1]
-#    nptime = time.perf_counter() - t
-#    t = time.perf_counter()
     _vel_smear = beam.smear(vel_field, synth, cnvfftw=cnvlv)[1]
-#    fwtime = time.perf_counter() - t
-#    print('{0:5.2f} {1:5.2f} {2:5.2f}'.format(nptime*1e3, fwtime*1e3, nptime/fwtime))
-
     assert numpy.allclose(vel_smear, _vel_smear), 'Velocity-field-only convolution difference.'
 
-#    t = time.perf_counter()
+    vel_smear = beam.smear(vel_field, synth)[1]
+    _vel_smear = beam.smear(vel_field, synth_fft, beam_fft=True)[1]
+    assert numpy.allclose(vel_smear, _vel_smear), \
+            'Velocity-field difference w/ vs. w/o precomputing the beam FFT for numpy.'
+
+    vel_smear = beam.smear(vel_field, synth, cnvfftw=cnvlv)[1]
+    _vel_smear = beam.smear(vel_field, synth_fft, beam_fft=True, cnvfftw=cnvlv)[1]
+    assert numpy.allclose(vel_smear, _vel_smear), \
+            'Velocity-field difference w/ vs. w/o precomputing the beam FFT for ConvolveFFTW.'
+
     sb_smear, vel_smear, _ = beam.smear(vel_field, synth, sb=sb_field)
-#    nptime = time.perf_counter() - t
-#    t = time.perf_counter()
     _sb_smear, _vel_smear, _ = beam.smear(vel_field, synth, sb=sb_field, cnvfftw=cnvlv)
-#    fwtime = time.perf_counter() - t
-#    print('{0:5.2f} {1:5.2f} {2:5.2f}'.format(nptime*1e3, fwtime*1e3, nptime/fwtime))
     assert numpy.allclose(sb_smear, _sb_smear), 'SB+Vel convolution difference in SB.'
     assert numpy.allclose(vel_smear, _vel_smear), 'SB+Vel convolution difference in Vel.'
 
-#    t = time.perf_counter()
     sb_smear, vel_smear, sig_smear = beam.smear(vel_field, synth, sb=sb_field, sig=sig_field)
-#    nptime = time.perf_counter() - t
-#    t = time.perf_counter()
     _sb_smear, _vel_smear, _sig_smear = beam.smear(vel_field, synth, sb=sb_field, sig=sig_field,
                                                    cnvfftw=cnvlv)
-#    fwtime = time.perf_counter() - t
-#    print('{0:5.2f} {1:5.2f} {2:5.2f}'.format(nptime*1e3, fwtime*1e3, nptime/fwtime))
     assert numpy.allclose(sb_smear, _sb_smear), 'SB+Vel+Sig convolution difference in SB.'
     assert numpy.allclose(vel_smear, _vel_smear), 'SB+Vel+Sig convolution difference in vel.'
     assert numpy.allclose(sig_smear, _sig_smear), 'SB+Vel+Sig convolution difference in sig.'

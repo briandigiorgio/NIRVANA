@@ -39,7 +39,7 @@ except:
 
 import dynesty
 
-from .models.beam import smear
+from .models.beam import smear, ConvolveFFTW
 from .data.manga import MaNGAGasKinematics, MaNGAStellarKinematics
 from .data.kinematics import Kinematics
 from .data.fitargs import FitArgs
@@ -86,8 +86,9 @@ def barmodel(args,paramdict,plot=False):
 
     #spekkens and sellwood 2nd order vf model (from andrew's thesis)
     velmodel = paramdict['vsys']+ np.sin(inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-pab))*np.cos(th)- v2rvals*np.sin(2*(th-pab))*np.sin(th))
+    cnvfftw = ConvolveFFTW(args.spatial_shape)
     if args.beam_fft is not None:
-        sbmodel, velmodel, sigmodel = smear(velmodel, args.beam_fft, sb=sb, sig=sigmodel, beam_fft=True)
+        sbmodel, velmodel, sigmodel = smear(velmodel, args.beam_fft, sb=sb, sig=sigmodel, beam_fft=True, cnvfftw=cnvfftw)
 
     binvel = np.ma.MaskedArray(args.bin(velmodel), mask=args.vel_mask)
     if sigmodel is not None: binsig = np.ma.MaskedArray(args.bin(sigmodel), mask=args.sig_mask)
@@ -282,7 +283,8 @@ def barfit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=10,
         print('Using mock:', mock['name'])
         params = [mock['inc'], mock['pa'], mock['pab'], mock['vsys'], mock['vts'], mock['v2ts'], mock['v2rs'], mock['sig']]
         args = Kinematics.mock(56,*params)
-        smeared = smear(args.remap('vel'), args.beam_fft, beam_fft=True, sig=args.remap('sig'), sb=args.remap('sb'))
+        cnvfftw = ConvolveFFTW(mock.spatial_shape)
+        smeared = smear(args.remap('vel'), args.beam_fft, beam_fft=True, sig=args.remap('sig'), sb=args.remap('sb'), cnvfftw=cnvfftw)
         args.sb  = args.bin(smeared[0])
         args.vel = args.bin(smeared[1])
         args.sig = args.bin(smeared[2])

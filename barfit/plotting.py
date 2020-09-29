@@ -207,7 +207,8 @@ def summaryplot(f,nbins,plate,ifu,smearing=True,stellar=False,fixcent=False):
         print('Using mock:', mock['name'])
         params = [mock['inc'], mock['pa'], mock['pab'], mock['vsys'], mock['vts'], mock['v2ts'], mock['v2rs'], mock['sig']]
         args = Kinematics.mock(56,*params)
-        smeared = smear(args.remap('vel'), args.beam_fft, beam_fft=True, sig=args.remap('sig'), sb=args.remap('sb'))
+        cnvfftw = ConvolveFFTW(mock.spatial_shape)
+        smeared = smear(args.remap('vel'), args.beam_fft, beam_fft=True, sig=args.remap('sig'), sb=args.remap('sb'), cnvfftw=cnvfftw)
         args.sb  = args.bin(smeared[0])
         args.vel = args.bin(smeared[1])
         args.sig = args.bin(smeared[2])
@@ -226,7 +227,8 @@ def summaryplot(f,nbins,plate,ifu,smearing=True,stellar=False,fixcent=False):
     resdict = dprofs(chains, args, stds=True)
     velmodel, sigmodel = barmodel(args,resdict,plot=True)
 
-    [args.remap(a) for a in ['vel','sig']]
+    vel_r = args.remap('vel')
+    sig_r = args.remap('sig')
 
     plt.figure(figsize = (12,12))
 
@@ -259,46 +261,46 @@ def summaryplot(f,nbins,plate,ifu,smearing=True,stellar=False,fixcent=False):
     #MaNGA Ha velocity field
     plt.subplot(334)
     plt.title(r'H$\alpha$ Velocity Data')
-    plt.imshow(args.vel_r,cmap='jet',origin='lower')
+    plt.imshow(vel_r,cmap='jet',origin='lower')
     plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')
 
     #VF model from dynesty fit
     plt.subplot(335)
     plt.title('Velocity Model')
-    plt.imshow(velmodel,'jet',origin='lower',vmin=args.vel_r.min(),vmax=args.vel_r.max()) 
+    plt.imshow(velmodel,'jet',origin='lower',vmin=vel_r.min(),vmax=vel_r.max()) 
     plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')
 
     #Residuals from fit
     plt.subplot(336)
     plt.title('Velocity Residuals')
-    resid = args.vel_r-velmodel
-    vmax = min(np.abs(args.vel_r-velmodel).max(),50)
-    plt.imshow(args.vel_r-velmodel,'jet',origin='lower',vmin=-vmax,vmax=vmax)
+    resid = vel_r-velmodel
+    vmax = min(np.abs(vel_r-velmodel).max(),50)
+    plt.imshow(vel_r-velmodel,'jet',origin='lower',vmin=-vmax,vmax=vmax)
     plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')
 
     #MaNGA Ha velocity disp
     plt.subplot(337)
     plt.title(r'H$\alpha$ Velocity Dispersion Data')
-    plt.imshow(args.sig_r,cmap='jet',origin='lower')
+    plt.imshow(sig_r,cmap='jet',origin='lower')
     plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')
 
     #disp model from dynesty fit
     plt.subplot(338)
     plt.title('Velocity Dispersion Model')
-    plt.imshow(sigmodel,'jet',origin='lower',vmin=args.sig_r.min(),vmax=args.sig_r.max()) 
+    plt.imshow(sigmodel,'jet',origin='lower',vmin=sig_r.min(),vmax=sig_r.max()) 
     plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')
 
     #Residuals from disp fit
     plt.subplot(339)
     plt.title('Dispersion Residuals')
-    resid = args.sig_r-sigmodel
-    vmax = min(np.abs(args.sig_r-sigmodel).max(),50)
-    plt.imshow(args.sig_r-sigmodel,'jet',origin='lower',vmin=-vmax,vmax=vmax)
+    resid = sig_r-sigmodel
+    vmax = min(np.abs(sig_r-sigmodel).max(),50)
+    plt.imshow(sig_r-sigmodel,'jet',origin='lower',vmin=-vmax,vmax=vmax)
     plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')
 

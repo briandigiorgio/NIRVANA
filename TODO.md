@@ -6,9 +6,10 @@
 - ~~test on mock data (no bad points?)~~
 - ~~fix edges of model data (interpolation errors)~~
 - ~~error bars on plots~~
-- multiple mocks with different characteristics
-- pick out bad points
+- ~~multiple mocks with different characteristics~~
 - binning schemes
+- projected velocities
+- pick out bad points
 - add error term
 - stellar fits
 - ~~adding in dispersion~~
@@ -20,6 +21,6 @@
 - ~~fix multiprocessing~~ (don't know why it works now)
 - Renaming
     - NASKAR: NonAxiSymmetric Kinematic Analysis Routine
-    - NIRVANA: Nonaxisymmetric Irregular Rotational Velocity ANAlysis
+    - *NIRVANA: Nonaxisymmetric Irregular Rotational Velocity ANAlysis*
 - Jacobians?
 - Fisher matrix?

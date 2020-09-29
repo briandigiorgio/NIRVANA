@@ -259,7 +259,7 @@ def logpost(params, args):
     llike = loglike(params, args)
     return lprior + llike
 
-def barfit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=10, cores=20,
+def barfit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=10, cores=10,
            walkers=100, steps=1000, maxr=1.5, ntemps=None, cen=False, start=False, dyn=True,
            weight=10, smearing=True, points=500, stellar=False, root=None, verbose=False,
            fixcent=True, disp=True):
@@ -276,10 +276,16 @@ def barfit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=10,
     chosen package.  
     '''
 
-    #mock galaxy using Andrew's values for 8078-12703
-    if plate == 0 and ifu == 0 :
-        mockparams = np.load('mockparams.npy', allow_pickle=True)
-        args = Kinematics.mock(55,*mockparams)
+    #mock galaxy using stored values
+    if plate == 0:
+        mock = np.load('mockparams.npy', allow_pickle=True)[ifu]
+        print('Using mock:', mock['name'])
+        params = [mock['inc'], mock['pa'], mock['pab'], mock['vsys'], mock['vts'], mock['v2ts'], mock['v2rs'], mock['sig']]
+        args = Kinematics.mock(56,*params)
+        smeared = smear(args.remap('vel'), args.beam_fft, beam_fft=True, sig=args.remap('sig'), sb=args.remap('sb'))
+        args.sb  = args.bin(smeared[0])
+        args.vel = args.bin(smeared[1])
+        args.sig = args.bin(smeared[2])
 
     #get info on galaxy and define bins and starting guess
     else:

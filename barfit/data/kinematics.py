@@ -378,7 +378,7 @@ class Kinematics(FitArgs):
         return self.bin_transform.dot(data.ravel())
 
     @classmethod
-    def mock(cls, size, inc, pa, pab, vsys, vt, v2t, v2r, xc=0, yc=0, reff=10,r=15):
+    def mock(cls, size, inc, pa, pab, vsys, vt, v2t, v2r, sig, xc=0, yc=0, reff=10,r=15,psf=None):
         '''
         Makes a `:class:`barfit.data.kinematics.Kinematics` object with a mock
         velocity field with input parameters using similar code to :func:`barfit.barfit.barmodel`.
@@ -403,6 +403,9 @@ class Kinematics(FitArgs):
             v2r (`numpy.ndarray`_):
                 Second order radial velocities. Must have same length as
                 :attr:`vt` and :attr:`v2t`.
+            sig (`numpy.ndarray`_):
+                Velocity dispersion values for each radial bin. Must have same
+                length as other velocity arrays. 
             xc (:obj:`float`, optional):
                 Offset of center on x axis. Optional, defaults to 0.
             yc (:obj:`float`, optional):
@@ -422,7 +425,7 @@ class Kinematics(FitArgs):
                 Raises if input velocity arrays are not the same length.
                 
         '''
-        if len(vt) != len(v2t) or len(vt) != len(v2r):
+        if len(vt) != len(v2t) or len(vt) != len(v2r) or len(vt) != len(sig):
             raise ValueError('Velocity arrays must be the same length.')
 
         #make grid of x and y
@@ -439,8 +442,11 @@ class Kinematics(FitArgs):
         vtvals  = np.interp(r,bincents,vt)
         v2tvals = np.interp(r,bincents,v2t)
         v2rvals = np.interp(r,bincents,v2r)
+        sigvals = np.interp(r,bincents,sig)
 
         #spekkens and sellwood 2nd order vf model (from andrew's thesis)
         model = vsys + np.sin(_inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-_pab))*np.cos(th)- v2rvals*np.sin(2*(th-_pab))*np.sin(th))
+        if psf is None: psf = np.load('psfexample56.npy')
         binid = np.arange(np.product(model.shape)).reshape(model.shape)
-        return cls(model, x=x, y=y, grid_x=x, grid_y=y, reff=reff,binid=binid)
+        sb = np.ones_like(x)
+        return cls(model, x=x, y=y, grid_x=x, grid_y=y, reff=reff, binid=binid, sig=sigvals, psf=psf, sb=sb)

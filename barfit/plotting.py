@@ -13,6 +13,7 @@ import pickle
 from .barfit import barmodel, unpack
 from .data.manga import MaNGAStellarKinematics, MaNGAGasKinematics
 from .data.kinematics import Kinematics
+from .models.beam import smear
 
 def cornerplot(sampler, burn=-1000, **args):
     '''
@@ -200,27 +201,32 @@ def summaryplot(f,nbins,plate,ifu,smearing=True,stellar=False,fixcent=False):
     elif type(f) == np.ndarray: chains = f
     elif type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler: chains = f.results
 
-
-    #mock galaxy using Andrew's values for 8078-12703
-    if plate == 0 and ifu == 0 :
-        mockparams = dprofs(pickle.load(open('mock.out','rb')))
-        gal = Kinematics.mock(55,mockparams['inc'],mockparams['pa'],mockparams['pab'], mockparams['vsys'], mockparams['vts'], mockparams['v2ts'], mockparams['v2rs'])
+    #mock galaxy using stored values
+    if plate == 0:
+        mock = np.load('mockparams.npy', allow_pickle=True)[ifu]
+        print('Using mock:', mock['name'])
+        params = [mock['inc'], mock['pa'], mock['pab'], mock['vsys'], mock['vts'], mock['v2ts'], mock['v2rs'], mock['sig']]
+        args = Kinematics.mock(56,*params)
+        smeared = smear(args.remap('vel'), args.beam_fft, beam_fft=True, sig=args.remap('sig'), sb=args.remap('sb'))
+        args.sb  = args.bin(smeared[0])
+        args.vel = args.bin(smeared[1])
+        args.sig = args.bin(smeared[2])
 
     else:
         if stellar:
-            gal = MaNGAStellarKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing)
+            args = MaNGAStellarKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing)
         else:
-            gal = MaNGAGasKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing)
+            args = MaNGAGasKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing)
 
-    gal.setedges(nbins,1.5)
-    gal.setfixcent(fixcent)
-    gal.setdisp(True)
-    gal.setnglobs(4)
+    args.setedges(nbins,1.5)
+    args.setfixcent(fixcent)
+    args.setdisp(True)
+    args.setnglobs(4)
 
-    resdict = dprofs(chains, gal, stds=True)
-    velmodel, sigmodel = barmodel(gal,resdict,plot=True)
+    resdict = dprofs(chains, args, stds=True)
+    velmodel, sigmodel = barmodel(args,resdict,plot=True)
 
-    [gal.remap(a) for a in ['vel','sig']]
+    [args.remap(a) for a in ['vel','sig']]
 
     plt.figure(figsize = (12,12))
 
@@ -239,62 +245,62 @@ def summaryplot(f,nbins,plate,ifu,smearing=True,stellar=False,fixcent=False):
 
     #Radial velocity profiles
     plt.subplot(332)
-    dprofs(chains, gal, plt.gca(), stds=True)
+    dprofs(chains, args, plt.gca(), stds=True)
     plt.ylim(bottom=0)
     plt.title('Velocity Profiles')
 
     #dispersion profile
     plt.subplot(333)
-    plt.plot(gal.edges[:-1], resdict['sig'])
-    plt.fill_between(gal.edges[:-1], resdict['sigl'], resdict['sigu'], alpha=.5)
+    plt.plot(args.edges[:-1], resdict['sig'])
+    plt.fill_between(args.edges[:-1], resdict['sigl'], resdict['sigu'], alpha=.5)
     plt.ylim(bottom=0)
     plt.title('Velocity Dispersion Profile')
 
     #MaNGA Ha velocity field
     plt.subplot(334)
     plt.title(r'H$\alpha$ Velocity Data')
-    plt.imshow(gal.vel_r,cmap='jet',origin='lower')
+    plt.imshow(args.vel_r,cmap='jet',origin='lower')
     plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')
 
     #VF model from dynesty fit
     plt.subplot(335)
     plt.title('Velocity Model')
-    plt.imshow(velmodel,'jet',origin='lower',vmin=gal.vel_r.min(),vmax=gal.vel_r.max()) 
+    plt.imshow(velmodel,'jet',origin='lower',vmin=args.vel_r.min(),vmax=args.vel_r.max()) 
     plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')
 
     #Residuals from fit
     plt.subplot(336)
     plt.title('Velocity Residuals')
-    resid = gal.vel_r-velmodel
-    vmax = min(np.abs(gal.vel_r-velmodel).max(),50)
-    plt.imshow(gal.vel_r-velmodel,'jet',origin='lower',vmin=-vmax,vmax=vmax)
+    resid = args.vel_r-velmodel
+    vmax = min(np.abs(args.vel_r-velmodel).max(),50)
+    plt.imshow(args.vel_r-velmodel,'jet',origin='lower',vmin=-vmax,vmax=vmax)
     plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')
 
     #MaNGA Ha velocity disp
     plt.subplot(337)
     plt.title(r'H$\alpha$ Velocity Dispersion Data')
-    plt.imshow(gal.sig_r,cmap='jet',origin='lower')
+    plt.imshow(args.sig_r,cmap='jet',origin='lower')
     plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')
 
     #disp model from dynesty fit
     plt.subplot(338)
     plt.title('Velocity Dispersion Model')
-    plt.imshow(sigmodel,'jet',origin='lower',vmin=gal.sig_r.min(),vmax=gal.sig_r.max()) 
+    plt.imshow(sigmodel,'jet',origin='lower',vmin=args.sig_r.min(),vmax=args.sig_r.max()) 
     plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')
 
     #Residuals from disp fit
     plt.subplot(339)
     plt.title('Dispersion Residuals')
-    resid = gal.sig_r-sigmodel
-    vmax = min(np.abs(gal.sig_r-sigmodel).max(),50)
-    plt.imshow(gal.sig_r-sigmodel,'jet',origin='lower',vmin=-vmax,vmax=vmax)
+    resid = args.sig_r-sigmodel
+    vmax = min(np.abs(args.sig_r-sigmodel).max(),50)
+    plt.imshow(args.sig_r-sigmodel,'jet',origin='lower',vmin=-vmax,vmax=vmax)
     plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')
 
     plt.tight_layout()
-    return dprofs(chains, gal)
+    return dprofs(chains, args)

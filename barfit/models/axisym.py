@@ -123,7 +123,7 @@ class AxisymmetricDisk:
         self.free = _free
         self.nfree = np.sum(self.free)
 
-    def model(self, par=None, x=None, y=None, beam=None, is_fft=False):
+    def model(self, par=None, x=None, y=None, beam=None, is_fft=False, cnvfftw=None):
         """
         Evaluate the model.
         """
@@ -140,7 +140,8 @@ class AxisymmetricDisk:
         # NOTE: This doesn't include the sin(inclination) term because
         # this is absorbed into the rotation curve amplitude.
         vel = self.rc.sample(r, par=self.par[self.nbp:])*np.cos(theta) + self.par[4]
-        return vel if self.beam_fft is None else smear(vel, self.beam_fft, beam_fft=True)[1]
+        return vel if self.beam_fft is None else smear(vel, self.beam_fft, beam_fft=True,
+                                                       cnvfftw=cnvfftw)[1]
 
     def _resid(self, par):
         self._set_par(par)

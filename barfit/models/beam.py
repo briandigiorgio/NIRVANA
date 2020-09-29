@@ -196,9 +196,9 @@ class ConvolveFFTW:
             return self.data_fft * self.kern_fft
         self.data_fft *= self.kern_fft
         self.ifft()
-        return self.dcnv.real
+        return self.dcnv.real.copy()
 
-    def fft(self, data, copy=False):
+    def fft(self, data, copy=True, shift=False):
         """
         Calculate the FFT of the provided data array.
 
@@ -210,6 +210,11 @@ class ConvolveFFTW:
                 :attr:`data_fft` workspace. If False, the
                 :attr:`data_fft` *is* the returned array; if True,
                 returned array is a copy.
+            shift (:obj:`bool`, optional):
+                Before computing, use ``numpy.fft.iffshift` to shift
+                the spatial coordinates of the image such that the 0
+                frequency component of the FFT is shifted to the
+                center of the image.
 
         Returns:
             `numpy.ndarray`_: The FFT of the provided data.
@@ -226,7 +231,7 @@ class ConvolveFFTW:
         if data.dtype.type is not np.float64:
             raise TypeError('Data must be of type numpy.float64.')
 
-        self.data.real[...] = data
+        self.data.real[...] = np.fft.ifftshift(data) if shift else data
         self.dfft()
         return self.data_fft.copy() if copy else self.data_fft
         
@@ -313,11 +318,8 @@ def smear(v, beam, beam_fft=False, sb=None, sig=None, cnvfftw=None):
     _cnv = convolve_fft if cnvfftw is None else cnvfftw
 
     # Pre-compute the beam FFT
-    if beam_fft:
-        bfft = beam
-    else:
-        bfft = np.fft.ifftshift(beam)
-        bfft = np.fft.fftn(bfft) if cnvfftw is None else cnvfftw.fft(bfft)
+    bfft = beam if beam_fft else (np.fft.fftn(np.fft.ifftshift(beam))
+                                    if cnvfftw is None else cnvfftw.fft(beam, shift=True))
 
     # Get the first moment of the beam-smeared intensity distribution
     mom0 = None if sb is None else _cnv(sb, bfft, kernel_fft=True)

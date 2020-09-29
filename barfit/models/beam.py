@@ -320,7 +320,7 @@ def smear(v, beam, beam_fft=False, sb=None, sig=None, cnvfftw=None):
         bfft = np.fft.fftn(bfft) if cnvfftw is None else cnvfftw.fft(bfft)
 
     # Get the first moment of the beam-smeared intensity distribution
-    mom0 = None if sb is None else convolve_fft(sb, bfft, kernel_fft=True)
+    mom0 = None if sb is None else _cnv(sb, bfft, kernel_fft=True)
 
     # First moment
     mom1 = _cnv(v if sb is None else sb*v, bfft, kernel_fft=True)

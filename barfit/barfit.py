@@ -84,6 +84,9 @@ def barmodel(args,paramdict,plot=False):
         sigmodel = None
         sb = None
 
+    try: conv
+    except: conv = None
+
     #spekkens and sellwood 2nd order vf model (from andrew's thesis)
     velmodel = paramdict['vsys']+ np.sin(inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-pab))*np.cos(th)- v2rvals*np.sin(2*(th-pab))*np.sin(th))
     if args.beam_fft is not None:
@@ -314,7 +317,8 @@ def barfit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=10,
     if fixcent: ndim -= 3
 
     if disp: ndim += len(args.edges)-1
-
+    print(f'{len(args.edges)-1} radial bins')
+    
     #open up multiprocessing pool if needed
     if cores > 1 and not ntemps:
         pool = mp.Pool(cores)

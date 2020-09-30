@@ -219,7 +219,8 @@ def summaryplot(f,nbins,plate,ifu,smearing=True,stellar=False,fixcent=False):
         else:
             args = MaNGAGasKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing)
 
-    args.setedges(nbins,1.5)
+    vmax,inc,pa,h,vsys = args.getguess()
+    args.setedges(inc)
     args.setfixcent(fixcent)
     args.setdisp(True)
     args.setnglobs(4)

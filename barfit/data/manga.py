@@ -47,7 +47,7 @@ def channel_dictionary(hdu, ext, prefix='C'):
     return channel_dict
 
 
-def read_manga_psf(cube_file, psf_ext, quiet=False):
+def read_manga_psf(cube_file, psf_ext, fwhm=False, quiet=False):
     """
     Read the image of the reconstructed datacube point-spread
     function from the MaNGA DRP CUBE file.
@@ -64,6 +64,8 @@ def read_manga_psf(cube_file, psf_ext, quiet=False):
         psf_ext (:obj:`str`):
             The name of the extension with the reconstructed PSF;
             e.g. ``'GPSF'``.
+        fwhm (:obj:`bool`, optional):
+            If true, will return the g band FWHM as well
         quiet (:obj:`bool`, optional):
             Suppress printed output.
 
@@ -89,8 +91,10 @@ def read_manga_psf(cube_file, psf_ext, quiet=False):
             raise KeyError('{0} does not include an extension {1}.'.format(
                             cube_file, psf_ext))
         psf = hdu[psf_ext].data
+        if fwhm: fwhm = hdu[0].header['GFWHM']
     if not quiet:
         print('Done')
+    if fwhm: return psf, fwhm
     return psf
 
 
@@ -281,7 +285,7 @@ class MaNGAGasKinematics(MaNGAKinematics):
             raise FileNotFoundError('File does not exist: {0}'.format(maps_file))
 
         # Get the PSF, if possible
-        psf = None if cube_file is None else read_manga_psf(cube_file, psf_ext)
+        psf,fwhm = (None,None) if cube_file is None else read_manga_psf(cube_file, psf_ext, fwhm=True)
 
         # Establish whether or not the gas kinematics were determined
         # on a spaxel-by-spaxel basis, which determines which extension
@@ -323,7 +327,7 @@ class MaNGAGasKinematics(MaNGAKinematics):
                          sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sig=sig, 
                          sig_ivar=sig_ivar, sig_mask=sig_mask, 
                          sig_corr=sig_corr, psf=psf, binid=binid, grid_x=grid_x, 
-                         grid_y=grid_y, reff=reff)
+                         grid_y=grid_y, reff=reff ,fwhm=fwhm)
 
 
 class MaNGAStellarKinematics(MaNGAKinematics):
@@ -349,7 +353,7 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             raise FileNotFoundError('File does not exist: {0}'.format(maps_file))
 
         # Get the PSF, if possible
-        psf = None if cube_file is None else read_manga_psf(cube_file, psf_ext)
+        psf,fwhm = (None,None) if cube_file is None else read_manga_psf(cube_file, psf_ext, fwhm=True)
 
         # Establish whether or not the stellar kinematics were
         # determined on a spaxel-by-spaxel basis, which determines

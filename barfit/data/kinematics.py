@@ -138,7 +138,7 @@ class Kinematics(FitArgs):
     """
     def __init__(self, vel, vel_ivar=None, vel_mask=None, x=None, y=None, sb=None, sb_ivar=None,
                  sb_mask=None, sig=None, sig_ivar=None, sig_mask=None, sig_corr=None, psf=None,
-                 aperture=None, binid=None, grid_x=None, grid_y=None, reff=None):
+                 aperture=None, binid=None, grid_x=None, grid_y=None, reff=None, fwhm=None):
 
         # Check shape of input arrays
         self.nimg = vel.shape[0]
@@ -160,6 +160,7 @@ class Kinematics(FitArgs):
         self.spatial_shape = vel.shape
         self._set_beam(psf, aperture)
         self.reff = reff
+        self.fwhm = fwhm
 
         # Build coordinate arrays
         if x is None:

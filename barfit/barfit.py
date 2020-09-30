@@ -87,7 +87,7 @@ def barmodel(args,paramdict,plot=False):
     #spekkens and sellwood 2nd order vf model (from andrew's thesis)
     velmodel = paramdict['vsys']+ np.sin(inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-pab))*np.cos(th)- v2rvals*np.sin(2*(th-pab))*np.sin(th))
     if args.beam_fft is not None:
-        sbmodel, velmodel, sigmodel = smear(velmodel, args.beam_fft, sb=sb, sig=sigmodel, beam_fft=True, cnvfftw=args.conv)
+        sbmodel, velmodel, sigmodel = smear(velmodel, args.beam_fft, sb=sb, sig=sigmodel, beam_fft=True, cnvfftw=conv)
 
     binvel = np.ma.MaskedArray(args.bin(velmodel), mask=args.vel_mask)
     if sigmodel is not None: binsig = np.ma.MaskedArray(args.bin(sigmodel), mask=args.sig_mask)
@@ -299,18 +299,21 @@ def barfit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=10,
                                                     dr=dr, ignore_psf=not smearing, cube_path=root,
                                                     maps_path=root)
 
+    vmax, inc, pa, h, vsys = args.getguess()
     args.setnglobs(6) if cen else args.setnglobs(4)
     args.setfixcent(fixcent)
-    args.setedges(nbins, maxr)
+    args.setedges(inc)
     args.setweight(weight)
     args.setdisp(disp)
-    args.setconv()
+    #args.setconv()
+    global conv
+    conv = ConvolveFFTW(args.spatial_shape)
 
     theta0 = args.getguess()
     ndim = len(theta0)
     if fixcent: ndim -= 3
 
-    if disp: ndim += nbins
+    if disp: ndim += len(args.edges)-1
 
     #open up multiprocessing pool if needed
     if cores > 1 and not ntemps:
@@ -322,7 +325,7 @@ def barfit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=10,
     if dyn:
         #dynesty sampler with periodic pa and pab
         sampler = dynesty.NestedSampler(loglike, dynprior, ndim , pool=pool,
-                periodic=[1,2], nlive=points,# queue_size=cores, 
+                periodic=[1,2], nlive=points,
                 ptform_args = [args], logl_args = [args], verbose=verbose)
         sampler.run_nested()#maxiter=1000)
     

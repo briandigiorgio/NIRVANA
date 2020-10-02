@@ -285,11 +285,12 @@ def barfit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=10,
         print('Using mock:', mock['name'])
         params = [mock['inc'], mock['pa'], mock['pab'], mock['vsys'], mock['vts'], mock['v2ts'], mock['v2rs'], mock['sig']]
         args = Kinematics.mock(56,*params)
-        cnvfftw = ConvolveFFTW(mock.spatial_shape)
+        cnvfftw = ConvolveFFTW(args.spatial_shape)
         smeared = smear(args.remap('vel'), args.beam_fft, beam_fft=True, sig=args.remap('sig'), sb=args.remap('sb'), cnvfftw=cnvfftw)
         args.sb  = args.bin(smeared[0])
         args.vel = args.bin(smeared[1])
         args.sig = args.bin(smeared[2])
+        args.fwhm = 2.44
 
     #get info on galaxy and define bins and starting guess
     else:

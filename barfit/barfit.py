@@ -92,10 +92,12 @@ def barmodel(args,paramdict,plot=False):
     if args.beam_fft is not None:
         sbmodel, velmodel, sigmodel = smear(velmodel, args.beam_fft, sb=sb, sig=sigmodel, beam_fft=True, cnvfftw=conv)
 
+    #rebin data
     binvel = np.ma.MaskedArray(args.bin(velmodel), mask=args.vel_mask)
     if sigmodel is not None: binsig = np.ma.MaskedArray(args.bin(sigmodel), mask=args.sig_mask)
     else: binsig = None
 
+    #return a 2D array for plotting reasons
     if plot:
         velremap = args.remap(binvel, masked=True)
         if sigmodel is not None: 
@@ -105,7 +107,7 @@ def barmodel(args,paramdict,plot=False):
 
     return binvel, binsig
 
-def unpack(params, args):
+def unpack(params, args, jump=None):
     '''
     Utility function to carry around a bunch of values in the Bayesian fit.
     Now a dictionary!
@@ -119,10 +121,13 @@ def unpack(params, args):
     elif args.nglobs == 6:
         paramdict['inc'],paramdict['pa'],paramdict['pab'],paramdict['vsys'],paramdict['xc'],paramdict['yc'] = params[:args.nglobs]
 
-    #velocities
+    #figure out what indices to get velocities from
     start = args.nglobs
-    jump = len(args.edges)-1
-    if args.fixcent: jump -= 1
+    if jump is None: 
+        jump = len(args.edges)-1
+        if args.fixcent: jump -= 1
+
+    #velocities
     paramdict['vts']  = params[start:start + jump]
     paramdict['v2ts'] = params[start + jump:start + 2*jump]
     paramdict['v2rs'] = params[start + 2*jump:start + 3*jump]
@@ -233,8 +238,15 @@ def loglike(params, args):
     paramdict = unpack(params,args)
 
     #make vf model and perform chisq
-    vfmodel, sigmodel = barmodel(args,paramdict)
-    llike = (vfmodel - args.vel)**2
+    velmodel, sigmodel = barmodel(args,paramdict)
+
+    #mask border if necessary
+    if args.bordermask is not None:
+        velmodel = np.ma.array(velmodel, mask=args.bordermask)
+        if sigmodel is not None:
+            sigmodel = np.ma.array(sigmodel, mask=args.bordermask)
+
+    llike = (velmodel - args.vel)**2
     if args.vel_ivar is not None: llike *= args.vel_ivar
     llike = -.5*np.ma.sum(llike)
 
@@ -290,7 +302,7 @@ def barfit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=10,
         args.sb  = args.bin(smeared[0])
         args.vel = args.bin(smeared[1])
         args.sig = args.bin(smeared[2])
-        args.fwhm = 2.44
+        args.fwhm  = 2.44
 
     #get info on galaxy and define bins and starting guess
     else:
@@ -303,20 +315,27 @@ def barfit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=10,
                                                     dr=dr, ignore_psf=not smearing, cube_path=root,
                                                     maps_path=root)
 
-    vmax, inc, pa, h, vsys = args.getguess()
+    #set basic parameters for galaxy
     args.setnglobs(6) if cen else args.setnglobs(4)
     args.setfixcent(fixcent)
-    args.setedges(inc)
     args.setweight(weight)
     args.setdisp(disp)
-    #args.setconv()
+
+    #do a quick fit to get inclination to set bin edges
+    vmax, inc, pa, h, vsys = args.getguess()
+    args.setedges(inc)
+
+    #define a variable for speeding up convolutions
+    #has to be a global because multiprocessing can't pickle cython
     global conv
     conv = ConvolveFFTW(args.spatial_shape)
 
+    #starting positions for all parameters based on quick fit
     theta0 = args.getguess()
     ndim = len(theta0)
-    if fixcent: ndim -= 3
 
+    #adjust dimensions accordingly
+    if fixcent: ndim -= 3
     if disp: ndim += len(args.edges)-1
     print(f'{len(args.edges)-1} radial bins')
     

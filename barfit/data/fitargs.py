@@ -30,17 +30,31 @@ class FitArgs:
 
         self.weight = weight
 
-    def setedges(self, inc, maxr=None):
+    def setedges(self, inc, maxr=None, nbin=False):
         '''
         Construct array of bin edges for the galaxy.
 
 
         '''
 
-        if maxr is None: maxr = np.max(np.sqrt(self.x**2 + self.y**2))/self.reff
-        maxr *= self.reff
-        binwidth = min(self.fwhm/2/np.cos(np.radians(inc)), self.fwhm)
-        self.edges = np.arange(0,maxr,binwidth)/self.reff
+        #calculate maximum radius of image if none is given
+        if maxr is None: 
+            if self.bordermask is not None:
+                x = self.x * (1-self.bordermask)
+                y = self.y * (1-self.bordermask)
+            else: x,y = (self.x, self.y)
+
+            maxr = np.max(np.sqrt(x**2 + y**2))/self.reff
+            print(maxr)
+        maxr *= self.reff #change to arcsec
+
+        #specify number of bins manually if desired
+        if nbin: self.edges = np.linspace(0, maxr, inc+1)/self.reff
+
+        else:
+            #calculate smart bin width based off fwhm and inc
+            binwidth = min(self.fwhm/2/np.cos(np.radians(inc)), self.fwhm)
+            self.edges = np.arange(0,maxr,binwidth)/self.reff
 
     def setfixcent(self, fixcent):
         '''

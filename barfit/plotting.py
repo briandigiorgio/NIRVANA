@@ -127,7 +127,7 @@ def checkbins(plate,ifu,nbins):
         cut = (er>edges[i])*(er<edges[i+1])
         plt.imshow(np.ma.array(vf, mask=~cut), cmap='RdBu')
 
-def dprofs(samp, args, plot=None, stds=False, **kwargs):
+def dprofs(samp, args, plot=None, stds=False, jump=None, **kwargs):
     '''
     Turn a dynesty sampler output by barfit into a set of radial velocity
     profiles. Can plot if edges are given and will plot on a given axis ax if
@@ -137,7 +137,7 @@ def dprofs(samp, args, plot=None, stds=False, **kwargs):
     #get and unpack median values for params
     meds = dmeds(samp, stds)
     if stds: meds, lstd, ustd = meds
-    paramdict = unpack(meds, args)
+    paramdict = unpack(meds, args, jump=jump)
 
     #insert 0 for center bin if necessary
     if args.fixcent:
@@ -189,7 +189,7 @@ def dprofs(samp, args, plot=None, stds=False, **kwargs):
 
     return paramdict
 
-def summaryplot(f,nbins,plate,ifu,smearing=True,stellar=False,fixcent=False):
+def summaryplot(f,nbins,plate,ifu,smearing=True,stellar=False,fixcent=True):
     '''
     Make a summary plot for a given dynesty file with MaNGA velocity field, the
     model that dynesty fit, the residuals of the fit, and the velocity
@@ -212,28 +212,44 @@ def summaryplot(f,nbins,plate,ifu,smearing=True,stellar=False,fixcent=False):
         args.sb  = args.bin(smeared[0])
         args.vel = args.bin(smeared[1])
         args.sig = args.bin(smeared[2])
+        args.fwhm  = 2.44
 
+    #load in MaNGA data
     else:
         if stellar:
             args = MaNGAStellarKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing)
         else:
             args = MaNGAGasKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing)
 
-    vmax,inc,pa,h,vsys = args.getguess()
-    args.setedges(inc)
+    #set releavant parameters for galaxy
     args.setfixcent(fixcent)
     args.setdisp(True)
     args.setnglobs(4)
     args.setconv()
-
-    resdict = dprofs(chains, args, stds=True)
-    velmodel, sigmodel = barmodel(args,resdict,plot=True)
-
     vel_r = args.remap('vel')
     sig_r = args.remap('sig')
 
-    plt.figure(figsize = (12,12))
+    #get appropriate number of edges  by looking at length of meds
+    nbins = (len(dmeds(chains)) - args.nglobs - args.fixcent)/4
+    if not nbins.is_integer(): raise ValueError('Dynesty output array has a bad shape.')
+    else: nbins = int(nbins)
+    args.setedges(nbins, nbin=True)
+    print(args.edges)
 
+    #recalculate model that was fit
+    resdict = dprofs(chains, args, stds=True)
+    velmodel, sigmodel = barmodel(args,resdict,plot=True)
+
+    #mask border if necessary
+    if args.bordermask is not None:
+        velmodel = np.ma.array(velmodel, mask=args.bordermask)
+        vel_r = np.ma.array(vel_r, mask=args.bordermask)
+        if sigmodel is not None:
+            sigmodel = np.ma.array(sigmodel, mask=args.bordermask)
+            sig_r = np.ma.array(sig_r, mask=args.bordermask)
+
+    #print global parameters on figure
+    plt.figure(figsize = (12,12))
     plt.subplot(331)
     ax = plt.gca()
     plt.axis('off')

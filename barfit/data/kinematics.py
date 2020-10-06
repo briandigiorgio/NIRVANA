@@ -138,7 +138,7 @@ class Kinematics(FitArgs):
     """
     def __init__(self, vel, vel_ivar=None, vel_mask=None, x=None, y=None, sb=None, sb_ivar=None,
                  sb_mask=None, sig=None, sig_ivar=None, sig_mask=None, sig_corr=None, psf=None,
-                 aperture=None, binid=None, grid_x=None, grid_y=None, reff=None, fwhm=None):
+                 aperture=None, binid=None, grid_x=None, grid_y=None, reff=None, fwhm=None, bordermask=None):
 
         # Check shape of input arrays
         self.nimg = vel.shape[0]
@@ -161,6 +161,7 @@ class Kinematics(FitArgs):
         self._set_beam(psf, aperture)
         self.reff = reff
         self.fwhm = fwhm
+        self.bordermask = bordermask.astype(bool) if bordermask is not None else None
 
         # Build coordinate arrays
         if x is None:
@@ -239,9 +240,14 @@ class Kinematics(FitArgs):
 
         # Unravel and select the valid values for all arrays
         for attr in ['x', 'y', 'sb', 'sb_ivar', 'sb_mask', 'vel', 'vel_ivar', 'vel_mask', 'sig', 
-                     'sig_ivar', 'sig_mask']:
+                     'sig_ivar', 'sig_mask', 'bordermask']:
             if getattr(self, attr) is not None:
                 setattr(self, attr, getattr(self, attr).ravel()[indx])
+
+        #if self.bordermask is not None:
+        #    self.sb_mask  |= self.bordermask
+        #    self.vel_mask |= self.bordermask
+        #    self.sig_mask |= self.bordermask
 
     def _set_beam(self, psf, aperture):
         """
@@ -428,7 +434,7 @@ class Kinematics(FitArgs):
         return np.sqrt(max(abs(minx), maxx)**2 + max(abs(miny), maxy)**2)
 
     @classmethod
-    def mock(cls, size, inc, pa, pab, vsys, vt, v2t, v2r, sig, xc=0, yc=0, reff=10,r=15,psf=None):
+    def mock(cls, size, inc, pa, pab, vsys, vt, v2t, v2r, sig, xc=0, yc=0, reff=10, maxr=15, psf=None, border=3, fwhm=2.44):
         '''
         Makes a `:class:`barfit.data.kinematics.Kinematics` object with a mock
         velocity field with input parameters using similar code to :func:`barfit.barfit.barmodel`.
@@ -463,8 +469,22 @@ class Kinematics(FitArgs):
             reff (:obj:`float`, optional):
                 Effective radius of the mock galaxy. Units are arbitrary
                 but must be the same as :attr:`r`. Defaults to 10.
-            r (:obj:`float`, optional):
+            maxr (:obj:`float`, optional):
                 Maximum absolute value for the x and y arrays. Defaults to 15.
+            psf (`numpy.ndarray`_, optional):
+                2D array of the point-spread function of the simulated galaxy.
+                Must have dimensions of `size` by `size`. If not given, it will
+                load a default PSF taken from a MaNGA observation that is 55 by
+                55.
+            border (:obj:`float`, optional):
+                How many FWHM widths of a border to make around the central
+                part of the galaxy you actually care about. This is to mitigate
+                the edge effects of the PSF convolution that create erroneous
+                values. Bigger borders will lead to smaller edge effects but
+                will cost computational time in model fitting. Defaults to 3. 
+            fwhm (:obj:`float`, optional):
+                FWHM of PSF in same units as :attr:`size`. Defaults to 2.44 for
+                example MaNGA PSF.
 
         Returns:
             :class:`barfit.data.kinematics.Kinematics` object with the velocity
@@ -479,8 +499,14 @@ class Kinematics(FitArgs):
             raise ValueError('Velocity arrays must be the same length.')
 
         #make grid of x and y
-        a = np.linspace(-r,r,size)
-        edges = np.linspace(0,r,len(vt)+1)
+        if border: 
+            _r = maxr + border * fwhm
+            _size = int(_r/maxr * size)+1
+            _bsize = (_size - size)//2
+        else: _r,_size = (maxr,size)
+
+        a = np.linspace(-_r,_r,_size)
+        edges = np.linspace(0, maxr, len(vt)+1)
         x,y = np.meshgrid(a,a)
 
         #convert angles to polar and normalize radial coorinate
@@ -489,14 +515,40 @@ class Kinematics(FitArgs):
 
         #interpolate velocity values for all r 
         bincents = (edges[:-1] + edges[1:])/2
-        vtvals  = np.interp(r,bincents,vt)
-        v2tvals = np.interp(r,bincents,v2t)
-        v2rvals = np.interp(r,bincents,v2r)
-        sigvals = np.interp(r,bincents,sig)
+        vtvals  = np.interp(r, bincents, vt)
+        v2tvals = np.interp(r, bincents, v2t)
+        v2rvals = np.interp(r, bincents, v2r)
+        sig = np.interp(r, bincents, sig)
+        sb = oned.Sersic1D([1,10,1]).sample(r)
 
         #spekkens and sellwood 2nd order vf model (from andrew's thesis)
-        model = vsys + np.sin(_inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-_pab))*np.cos(th)- v2rvals*np.sin(2*(th-_pab))*np.sin(th))
+        vel = vsys + np.sin(_inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-_pab))*np.cos(th)- v2rvals*np.sin(2*(th-_pab))*np.sin(th))
+
+        #load example MaNGA PSF if none is provided
         if psf is None: psf = np.load('psfexample56.npy')
-        binid = np.arange(np.product(model.shape)).reshape(model.shape)
-        sb = oned.Sersic1D([1,10,1]).sample(r)
-        return cls(model, x=x, y=y, grid_x=x, grid_y=y, reff=reff, binid=binid, sig=sigvals, psf=psf, sb=sb)
+
+        #make border around PSF if necessary
+        if border:
+            bordermask = np.ones((_size,_size))
+            bordermask[_bsize:-_bsize,_bsize:-_bsize] = 0
+
+            _vel = np.ma.array(vel, mask=bordermask)
+            _x   = np.ma.array(x,   mask=bordermask)
+            _y   = np.ma.array(y,   mask=bordermask)
+            _sig = np.ma.array(sig, mask=bordermask)
+            _sb  = np.ma.array(sb,  mask=bordermask)
+
+            _psf = np.zeros((_size,_size))
+            _psf[_bsize:-_bsize,_bsize:-_bsize] = psf
+           
+        _vel, _x, _y, _sig, _sb = [vel, x, y, sig, sb]
+
+        binid = np.arange(np.product(_vel.shape)).reshape(_vel.shape)
+        return cls(_vel, x=_x, y=_y, grid_x=_x, grid_y=_y, reff=reff, binid=binid, sig=_sig, psf=_psf, sb=_sb, bordermask=bordermask)
+
+    def border(self):
+        if self.bordermask is None:
+            raise ValueError('Must set bordermask first')
+        for attr in ['x', 'y', 'sb', 'sb_ivar', 'sb_mask', 'vel', 'vel_ivar', 'vel_mask', 'sig', 'sig_ivar', 'sig_mask']:
+            if getattr(self, attr) is not None:
+                setattr(self, attr, np.ma.array(getattr(self, attr), mask=self.bordermask))

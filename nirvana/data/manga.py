@@ -99,7 +99,8 @@ def read_manga_psf(cube_file, psf_ext, fwhm=False, quiet=False):
 
 
 def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10',
-                              redux_path=None, cube_path=None, analysis_path=None, maps_path=None):
+                              redux_path=None, cube_path=None, analysis_path=None, maps_path=None,
+                              check=True):
     """
     Get the DAP maps and DRP datacube files for a given plate and
     IFU.
@@ -129,6 +130,8 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
         maps_path (:obj:`str`, optional):
             This provides the *direct* path to the maps file,
             circumventing the use of ``dr`` and ``analysis_path``.
+        check (:obj:`bool`, optional):
+            Check that the directories with the expected files exist.
 
     Returns:
         :obj:`tuple`: The full path to the maps file followed by the
@@ -146,7 +149,7 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
         if _redux_path is None:
             raise ValueError('Could not define top-level root for DRP output.')
         cube_path = os.path.join(os.path.abspath(_redux_path), dr, str(plate), 'stack')
-    if not os.path.isdir(cube_path):
+    if check and not os.path.isdir(cube_path):
         raise NotADirectoryError('No such directory: {0}'.format(cube_path))
 
     cube_file = os.path.abspath(os.path.join(cube_path,
@@ -158,8 +161,8 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
         if _analysis_path is None:
             raise ValueError('Could not define top-level root for DAP output.')
         maps_path = os.path.join(os.path.abspath(_analysis_path), dr, daptype, str(plate), str(ifu))
-    print(maps_path, os.getenv('MANGA_SPECTRO_ANALYSIS'))
-    if not os.path.isdir(maps_path):
+
+    if check and not os.path.isdir(maps_path):
         raise NotADirectoryError('No such directory: {0}'.format(maps_path))
 
     maps_file = os.path.abspath(os.path.join(maps_path, 'manga-{0}-{1}-MAPS-{2}.fits.gz'.format(

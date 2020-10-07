@@ -56,7 +56,7 @@ def run_setup(data_files, scripts, packages, install_requires):
           author='Brian DiGiorgio',
           author_email='bdigiorg@ucsc.edu',
           keywords='astronomy, disk galaxies, kinematics, modeling',
-          url='https://github.com/briandigiorgio/BarFit',
+          url='https://github.com/briandigiorgio/NIRVANA',
           packages=packages,
           package_data={'nirvana': data_files, '': ['*.rst', '*.txt']},
           python_requires='>=3.7',

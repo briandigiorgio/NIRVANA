@@ -8,6 +8,7 @@ from astropy import convolution
 from nirvana.models import beam
 from nirvana.models import oned
 from nirvana.models.geometry import projected_polar
+from nirvana.tests.util import requires_pyfftw
 
 def test_convolve():
     """
@@ -40,7 +41,7 @@ def test_beam():
     assert numpy.argmax(synth) == numpy.argmax(_synth), \
             'Beam kernel shifted the center for an odd image size.'
 
-
+@requires_pyfftw
 def test_fft():
     synth = beam.gauss2d_kernel(73, 3.)
     synth_fft = numpy.fft.fftn(numpy.fft.ifftshift(synth))
@@ -65,6 +66,7 @@ def test_fft():
     assert numpy.allclose(synth2, _synth2), 'Difference between numpy and FFTW'
 
 
+@requires_pyfftw
 def test_smear():
 
     n = 51

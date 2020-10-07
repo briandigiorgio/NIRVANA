@@ -42,7 +42,7 @@ install:
     - python setup.py install
 
 script:
-    - pytest barfit/tests --cov barfit --cov-report html
+    - pytest nirvana/tests --cov nirvana --cov-report html
 
 after_success:
     - coveralls

@@ -2,7 +2,7 @@ include *.md
 include setup.cfg
 
 recursive-include docs *
-recursive-include barfit *.pyx *.c *.pxd *.h
+recursive-include nirvana *.pyx *.c *.pxd *.h
 
 include requirements.txt
 

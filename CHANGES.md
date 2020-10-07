@@ -24,5 +24,6 @@
  - Tests and docs for `barfit.models.oned`.
  - Added `barfit.models.beam.ConvolveFFTW` class for doing
    convolutions with the FFTW library.
-
+ - Added masking of edges of mocks to mitigate convolution edge effects
+ - renamed to NIRVANA
 

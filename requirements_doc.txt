@@ -1,4 +1,4 @@
-# barfit documentation requirements
+# nirvana documentation requirements
 
 -r requirements.txt
 

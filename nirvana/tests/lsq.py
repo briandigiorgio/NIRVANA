@@ -3,10 +3,10 @@ from IPython import embed
 
 import numpy
 
-from barfit.data import manga
-from barfit.tests.util import remote_data_file
-from barfit.models.oned import HyperbolicTangent
-from barfit.models.axisym import AxisymmetricDisk
+from nirvana.data import manga
+from nirvana.tests.util import remote_data_file
+from nirvana.models.oned import HyperbolicTangent
+from nirvana.models.axisym import AxisymmetricDisk
 
 # Benchmarking test for the least-squares fit
 def test_lsq_nopsf():

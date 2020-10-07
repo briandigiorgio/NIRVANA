@@ -5,8 +5,8 @@ import tqdm
 import requests
 import netrc
 
-from barfit.tests.util import remote_data_file, remote_drp_test_files, remote_dap_test_files
-from barfit.tests.util import drp_test_version, dap_test_version, dap_test_daptype
+from nirvana.tests.util import remote_data_file, remote_drp_test_files, remote_dap_test_files
+from nirvana.tests.util import drp_test_version, dap_test_version, dap_test_daptype
 
 try:
     NETRC = netrc.netrc()

@@ -271,7 +271,7 @@ class MaNGAGasKinematics(MaNGAKinematics):
             The name of the DRP-produced LOGCUBE file with the
             reconstructed PSF. If None, the PSF image will not be
             used in constructing the base
-            :class:`~barfit.data.kinematics.Kinematics` object.
+            :class:`~nirvana.data.kinematics.Kinematics` object.
         psf_ext (:obj:`str`, optional):
             The name of the extension with the reconstructed PSF.
         line (:obj:`str`, optional):
@@ -341,7 +341,7 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             The name of the DRP-produced LOGCUBE file with the
             reconstructed PSF. If None, the PSF image will not be
             used in constructing the base
-            :class:`~barfit.data.kinematics.Kinematics` object.
+            :class:`~nirvana.data.kinematics.Kinematics` object.
         psf_ext (:obj:`str`, optional):
             The name of the extension with the reconstructed PSF.
         quiet (:obj:`bool`, optional):

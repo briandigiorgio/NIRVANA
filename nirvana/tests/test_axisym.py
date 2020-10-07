@@ -3,11 +3,11 @@ from IPython import embed
 
 import numpy
 
-from barfit.data import manga
-from barfit.tests.util import remote_data_file, requires_remote, dap_test_daptype
-from barfit.models.oned import HyperbolicTangent
-from barfit.models.axisym import AxisymmetricDisk
-from barfit.models.beam import convolve_fft, smear, gauss2d_kernel
+from nirvana.data import manga
+from nirvana.tests.util import remote_data_file, requires_remote, dap_test_daptype
+from nirvana.models.oned import HyperbolicTangent
+from nirvana.models.axisym import AxisymmetricDisk
+from nirvana.models.beam import convolve_fft, smear, gauss2d_kernel
 
 def test_disk():
     disk = AxisymmetricDisk()

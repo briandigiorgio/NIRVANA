@@ -436,8 +436,8 @@ class Kinematics(FitArgs):
     @classmethod
     def mock(cls, size, inc, pa, pab, vsys, vt, v2t, v2r, sig, xc=0, yc=0, reff=10, maxr=15, psf=None, border=3, fwhm=2.44):
         '''
-        Makes a `:class:`barfit.data.kinematics.Kinematics` object with a mock
-        velocity field with input parameters using similar code to :func:`barfit.barfit.barmodel`.
+        Makes a `:class:`nirvana.data.kinematics.Kinematics` object with a mock
+        velocity field with input parameters using similar code to :func:`nirvana.fiting.bisym_model`.
 
         Args:
             size (:obj:`int`):
@@ -487,7 +487,7 @@ class Kinematics(FitArgs):
                 example MaNGA PSF.
 
         Returns:
-            :class:`barfit.data.kinematics.Kinematics` object with the velocity
+            :class:`nirvana.data.kinematics.Kinematics` object with the velocity
             field and x and y coordinates of the mock galaxy. 
 
         Raises:

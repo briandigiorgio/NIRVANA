@@ -6,7 +6,7 @@ from IPython import embed
 
 import numpy
 
-from barfit.models.geometry import rotate, projected_polar
+from nirvana.models.geometry import rotate, projected_polar
 
 def test_polar():
 

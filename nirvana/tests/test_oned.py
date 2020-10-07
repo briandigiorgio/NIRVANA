@@ -2,7 +2,7 @@ from IPython import embed
 
 import numpy
 
-from barfit.models import oned
+from nirvana.models import oned
 
 def test_step():
     n = 10

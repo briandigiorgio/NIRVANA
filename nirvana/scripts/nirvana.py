@@ -8,12 +8,13 @@ import argparse
 import pickle
 import os
 
-from barfit.barfit import barfit
+from nirvana.fitting import fit
 
 def parse_args(options=None):
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('plateifu', nargs=2, type=int, help='MaNGA plate and ifu identifiers')
+    parser.add_argument('plateifu', nargs=2, type=int, 
+                        help='MaNGA plate and ifu identifiers')
     parser.add_argument('--daptype', default='HYB10-MILESHC-MASTARHC2', type=str,
                         help='DAP analysis key used to select the data files.  This is needed '
                              'regardless of whether or not you specify the directory with the '
@@ -26,7 +27,7 @@ def parse_args(options=None):
                         help='Number of threads to utilize.')
     parser.add_argument('-f', '--outfile', default=None, type=str,
                         help='Outfile to dump results in.')
-    parser.add_argument('-n', '--nbins', default=10, type=int,
+    parser.add_argument('-n', '--nbins', default=0, type=int,
                         help='Number of radial bins in fit.')
     parser.add_argument('-w', '--weight', default=10, type=int,
                         help='How much to weight smoothness of rotation curves in fit')
@@ -53,11 +54,13 @@ def parse_args(options=None):
 def main(args):
 
     if args.dir == '':
-        args.dir = '/data/manga/digiorgio/barfit/'
+        args.dir = '/data/manga/digiorgio/nirvana/'
     if not os.path.isdir(args.dir):
         raise NotADirectoryError(f'Outfile directory does not exist: {args.dir}')
+    if args.nbins == 0: args.nbins = None
+
     plate, ifu = args.plateifu
-    samp = barfit(plate, ifu, daptype=args.daptype, dr=args.dr, cores=args.cores, nbins=args.nbins,
+    samp = fit(plate, ifu, daptype=args.daptype, dr=args.dr, cores=args.cores, nbins=args.nbins,
                   weight=args.weight, maxr=args.maxr, smearing=args.smearing, root=args.root,
                   verbose=args.verbose, fixcent=args.fixcent, disp=args.disp)
     if args.outfile is None:

@@ -8,10 +8,10 @@ from astropy.io import fits
 from scipy import signal
 from astropy import convolution
 
-from barfit.data import manga
-from barfit.tests.util import remote_data_file, requires_remote, dap_test_daptype
+from nirvana.data import manga
+from nirvana.tests.util import remote_data_file, requires_remote, dap_test_daptype
 
-from barfit.models.beam import convolve_fft, gauss2d_kernel
+from nirvana.models.beam import convolve_fft, gauss2d_kernel
 
 # TODO: Test remapping
 

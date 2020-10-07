@@ -5,9 +5,9 @@ import numpy
 
 from astropy import convolution
 
-from barfit.models import beam
-from barfit.models import oned
-from barfit.models.geometry import projected_polar
+from nirvana.models import beam
+from nirvana.models import oned
+from nirvana.models.geometry import projected_polar
 
 def test_convolve():
     """

@@ -288,7 +288,7 @@ def smear(v, beam, beam_fft=False, sb=None, sig=None, cnvfftw=None):
         sig (`numpy.ndarray`_, optional):
             2D array with the velocity dispersion measurements. Must
             have the same shape as ``v``.
-        cnvfftw (:class:`barfit.models.beam.ConvolveFFTW`, optional):
+        cnvfftw (:class:`nirvana.models.beam.ConvolveFFTW`, optional):
             An object that expedites the convolutions using
             FFTW/pyFFTW. If None, the convolution is done using numpy
             FFT routines.

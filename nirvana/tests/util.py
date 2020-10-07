@@ -2,7 +2,7 @@
 Testing utilities
 """
 
-# TODO: Put most/all of this in barfit/tests/__init__.py ?
+# TODO: Put most/all of this in nirvana/tests/__init__.py ?
 
 import os
 import warnings
@@ -12,7 +12,7 @@ import pytest
 from pkg_resources import resource_filename
 
 def data_file(filename=None):
-    root = resource_filename('barfit', 'data')
+    root = resource_filename('nirvana', 'data')
     return root if filename is None else os.path.join(root, filename)
 
 def remote_data_file(filename=None):

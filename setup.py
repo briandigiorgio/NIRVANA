@@ -14,7 +14,7 @@ def get_data_files():
     data_files = []
 
     # Walk through the data directory, adding all files
-    data_generator = os.walk('barfit/data')
+    data_generator = os.walk('nirvana/data')
     for path, directories, files in data_generator:
         for f in files:
             data_path = '/'.join(path.split('/')[1:])
@@ -37,7 +37,7 @@ def get_requirements():
     return [line.strip().replace('==', '>=') for line in open(requirements_file)
                         if not line.strip().startswith('#') and line.strip() != '']
 
-NAME = 'barfit'
+NAME = 'nirvana'
 # do not use x.x.x-dev.  things complain.  instead use x.x.xdev
 VERSION = '0.0.1dev'
 RELEASE = 'dev' not in VERSION
@@ -58,7 +58,7 @@ def run_setup(data_files, scripts, packages, install_requires):
           keywords='astronomy, disk galaxies, kinematics, modeling',
           url='https://github.com/briandigiorgio/BarFit',
           packages=packages,
-          package_data={'barfit': data_files, '': ['*.rst', '*.txt']},
+          package_data={'nirvana': data_files, '': ['*.rst', '*.txt']},
           python_requires='>=3.7',
           include_package_data=True,
           scripts=scripts,

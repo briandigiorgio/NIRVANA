@@ -1,4 +1,4 @@
-# barfit development requirements
+# nirvana development requirements
 
 -r requirements.txt
 

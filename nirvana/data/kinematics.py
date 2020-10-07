@@ -126,7 +126,13 @@ class Kinematics(FitArgs):
             element in the data grid. See the description of
             ``grid_x``.
         reff (:obj:`float`, optional):
-            Effective radius in same units as `x` and `y`.
+            Effective radius in same units as :attr:`x` and :attr:`y`.
+        fwhm (:obj:`float`, optional):
+            The FWHM of the PSF of the galaxy in the same units as :attr:`x` and
+            :attr:`y`.
+        bordermask (`np.ndarray`_):
+            Boolean array containing the mask for a ring around the outside of
+            the data. Meant to mask bad data from convolution errors.
 
     Raises:
         ValueError:
@@ -138,7 +144,8 @@ class Kinematics(FitArgs):
     """
     def __init__(self, vel, vel_ivar=None, vel_mask=None, x=None, y=None, sb=None, sb_ivar=None,
                  sb_mask=None, sig=None, sig_ivar=None, sig_mask=None, sig_corr=None, psf=None,
-                 aperture=None, binid=None, grid_x=None, grid_y=None, reff=None, fwhm=None, bordermask=None):
+                 aperture=None, binid=None, grid_x=None, grid_y=None, reff=None, fwhm=None, 
+                 bordermask=None):
 
         # Check shape of input arrays
         self.nimg = vel.shape[0]
@@ -495,23 +502,27 @@ class Kinematics(FitArgs):
                 Raises if input velocity arrays are not the same length.
                 
         '''
+
+        #check that velocities are compatible
         if len(vt) != len(v2t) or len(vt) != len(v2r) or len(vt) != len(sig):
             raise ValueError('Velocity arrays must be the same length.')
 
-        #make grid of x and y
+        #if the border needs to be masked, increase the size of the array to
+        #make up for it so it ends up the right size in the end 
         if border: 
             _r = maxr + border * fwhm
             _size = int(_r/maxr * size)+1
             _bsize = (_size - size)//2
         else: _r,_size = (maxr,size)
 
+        #make grid of x and y and define edges
         a = np.linspace(-_r,_r,_size)
-        edges = np.linspace(0, maxr, len(vt)+1)
         x,y = np.meshgrid(a,a)
+        edges = np.linspace(0, maxr, len(vt)+1)
 
-        #convert angles to polar and normalize radial coorinate
-        _inc,_pa,_pab = np.radians([inc,pa,pab])
-        r, th = projected_polar(x-xc,y-yc,_pa,_inc)
+        #convert angles to polar
+        _inc,_pa,_pab = np.radians([inc, pa, pab])
+        r, th = projected_polar(x - xc, y - yc, _pa, _inc)
 
         #interpolate velocity values for all r 
         bincents = (edges[:-1] + edges[1:])/2
@@ -519,36 +530,35 @@ class Kinematics(FitArgs):
         v2tvals = np.interp(r, bincents, v2t)
         v2rvals = np.interp(r, bincents, v2r)
         sig = np.interp(r, bincents, sig)
-        sb = oned.Sersic1D([1,10,1]).sample(r)
+        sb = oned.Sersic1D([1,10,1]).sample(r) #sersic profile for flux
 
         #spekkens and sellwood 2nd order vf model (from andrew's thesis)
-        vel = vsys + np.sin(_inc) * (vtvals*np.cos(th) - v2tvals*np.cos(2*(th-_pab))*np.cos(th)- v2rvals*np.sin(2*(th-_pab))*np.sin(th))
+        vel = vsys + np.sin(_inc) * (vtvals * np.cos(th) - 
+              v2tvals * np.cos(2*(th - _pab)) * np.cos(th) -
+              v2rvals * np.sin(2*(th - _pab)) * np.sin(th))
 
         #load example MaNGA PSF if none is provided
+        #TODO: construct a general PSF instead
         if psf is None: psf = np.load('psfexample56.npy')
 
         #make border around PSF if necessary
         if border:
-            bordermask = np.ones((_size,_size))
-            bordermask[_bsize:-_bsize,_bsize:-_bsize] = 0
+            #make the mask for the border
+            bordermask = np.ones((_size, _size))
+            bordermask[_bsize:-_bsize, _bsize:-_bsize] = 0
 
+            #define masked versions of all the arrays
             _vel = np.ma.array(vel, mask=bordermask)
             _x   = np.ma.array(x,   mask=bordermask)
             _y   = np.ma.array(y,   mask=bordermask)
             _sig = np.ma.array(sig, mask=bordermask)
             _sb  = np.ma.array(sb,  mask=bordermask)
 
-            _psf = np.zeros((_size,_size))
-            _psf[_bsize:-_bsize,_bsize:-_bsize] = psf
+            #make bigger masked psf
+            _psf = np.zeros((_size, _size))
+            _psf[_bsize:-_bsize, _bsize:-_bsize] = psf
            
-        _vel, _x, _y, _sig, _sb = [vel, x, y, sig, sb]
+        else: _vel, _x, _y, _sig, _sb = [vel, x, y, sig, sb]
 
         binid = np.arange(np.product(_vel.shape)).reshape(_vel.shape)
         return cls(_vel, x=_x, y=_y, grid_x=_x, grid_y=_y, reff=reff, binid=binid, sig=_sig, psf=_psf, sb=_sb, bordermask=bordermask)
-
-    def border(self):
-        if self.bordermask is None:
-            raise ValueError('Must set bordermask first')
-        for attr in ['x', 'y', 'sb', 'sb_ivar', 'sb_mask', 'vel', 'vel_ivar', 'vel_mask', 'sig', 'sig_ivar', 'sig_mask']:
-            if getattr(self, attr) is not None:
-                setattr(self, attr, np.ma.array(getattr(self, attr), mask=self.bordermask))

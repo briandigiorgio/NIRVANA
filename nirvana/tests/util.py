@@ -39,3 +39,10 @@ requires_remote = pytest.mark.skipif(not remote_available, reason='Remote data f
 if not remote_available:
     warnings.warn('Remote data not available.  Some tests will be skipped.')
 
+try:
+    import pyfftw
+except:
+    pyfftw = None
+
+requires_pyfftw = pytest.mark.skipif(pyfftw is None, reason='pyfftw is not installed')
+

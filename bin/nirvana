@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+
+from nirvana.scripts import nirvana
+
+if __name__ == '__main__':
+    nirvana.main(nirvana.parse_args())
+

@@ -1,5 +1,4 @@
-# NIRVANA
-## **N**onaxisymmetric **I**rregular **R**otational **V**elocity **ANA**lysis
+## NIRVANA:  **N**onaxisymmetric **I**rregular **R**otational **V**elocity **ANA**lysis
 
 NIRVANA forward models galaxy velocity fields using a second-order nonaxisymmetric model. This enables it to reproduce bisymmetric features like bars. It also accounts for beam smearing and velocity dispersion in the resolved spectra. 
 

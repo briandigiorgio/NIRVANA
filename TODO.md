@@ -2,26 +2,29 @@
 
 ## Main tasks
 
-- ~~multiple mocks with different characteristics~~
-- ~~binning schemes~~
-- projected velocities
+- squaring sigma:
+    - new variable sigma2 = sigma^2 - sigmacorr^2
+    - new error by propagating errors through
+    - in likelihood, compute chisq of square of sigma instead
+- maximum radius to avoid edge effects
 - pick out bad points
+    - sigma clip outliers
+- projected velocities
+    - just take out sini
 - add error term
+    -hogg 2010
 - stellar fits
-- ~~adding in dispersion~~
-- ~~add in surface brightness~~
 - allow Kinematics to include (inverse) covariance
     - Include nominal MaNGA covariance for MaNGAKinematics
 - Treatment of the velocity dispersion and correction
+- smarter surface brightness with all gas channels
 
 ## Side tasks
 
 - optimize runtime by switching on beam smearing running?
-- Renaming
-    - NASKAR: NonAxiSymmetric Kinematic Analysis Routine
-    - *NIRVANA: Nonaxisymmetric Irregular Rotational Velocity ANAlysis*
 - Jacobians?
 - Fisher matrix?
+- Only one mask?
 
 ## Back-burner development
 

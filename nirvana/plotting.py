@@ -260,7 +260,6 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True):
     args.setfixcent(fixcent)
     args.setdisp(True)
     args.setnglobs(4)
-    args.setconv()
     vel_r = args.remap('vel')
     sig_r = args.remap('sig')
 

@@ -13,7 +13,8 @@ from nirvana.fitting import fit
 def parse_args(options=None):
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('plateifu', nargs=2, type=int, help='MaNGA plate and ifu identifiers')
+    parser.add_argument('plateifu', nargs=2, type=int, 
+                        help='MaNGA plate and ifu identifiers')
     parser.add_argument('--daptype', default='HYB10-MILESHC-MASTARHC2', type=str,
                         help='DAP analysis key used to select the data files.  This is needed '
                              'regardless of whether or not you specify the directory with the '

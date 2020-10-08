@@ -192,6 +192,19 @@ class Kinematics(FitArgs):
         else:
             self.sig_corr = sig_corr
 
+        #square of physical velocity dispersion 
+        #corrected for instrumental dispersion with new error
+        if self.sig_corr is not None:
+            self.sig_phys2 = self.sig**2 - self.sig_corr**2
+            if self.sig_ivar is not None:
+                self.sig_phys2_ivar = 1/((2*self.sig * self.sig_ivar**-.5)**2 
+                                 + (-2*self.sig_corr * self.sig_ivar**-.5)**2)
+            else: self.sig_phys2_ivar = None
+
+        else:
+            self.sig_phys2 = None
+            self.sig_phys2_ivar = None
+
         # The following are arrays used to convert between arrays
         # holding the data for the unique bins to arrays with the full
         # data map.
@@ -247,7 +260,7 @@ class Kinematics(FitArgs):
 
         # Unravel and select the valid values for all arrays
         for attr in ['x', 'y', 'sb', 'sb_ivar', 'sb_mask', 'vel', 'vel_ivar', 'vel_mask', 'sig', 
-                     'sig_ivar', 'sig_mask', 'bordermask']:
+                     'sig_ivar', 'sig_mask', 'sig_phys2', 'sig_phys2_ivar', 'bordermask']:
             if getattr(self, attr) is not None:
                 setattr(self, attr, getattr(self, attr).ravel()[indx])
 

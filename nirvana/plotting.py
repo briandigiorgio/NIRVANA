@@ -306,7 +306,7 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True):
     plt.fill_between(args.edges[:-1], resdict['sigl'], resdict['sigu'], alpha=.5)
     plt.ylim(bottom=0)
     plt.title('Velocity Dispersion Profile')
-    plt.xlabel(r'$R_e')
+    plt.xlabel(r'$R_e$')
     plt.ylabel(r'$v$ (km/s)')
 
     #MaNGA Ha velocity field

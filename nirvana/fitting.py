@@ -1,14 +1,5 @@
 #!/usr/bin/env python
 
-'''
-TODO:
-fit dispersion
-fit stars
-binning scheme
-fake data
-spekkens code pitfalls
-'''
-
 import sys
 import argparse
 import multiprocessing as mp
@@ -69,7 +60,7 @@ def bisym_model(args, paramdict, plot=False):
     r /= args.reff
 
     #insert a fixed central bin if it is being ignored by fit
-    if args.fixcent:
+    if args.fixcent and paramdict['vts'][0] != 0:
         vts  = np.insert(paramdict['vts'],  0, 0)
         v2ts = np.insert(paramdict['v2ts'], 0, 0)
         v2rs = np.insert(paramdict['v2rs'], 0, 0)

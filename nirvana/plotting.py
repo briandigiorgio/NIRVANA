@@ -86,7 +86,7 @@ def dcorner(f, **args):
 
     dynesty.plotting.cornerplot(res, **args)
 
-def dprofs(samp, args, plot=None, stds=False, jump=None, **kwargs):
+def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
     '''
     Turn a sampler output by `nirvana` into a set of rotation curves.
     
@@ -132,27 +132,25 @@ def dprofs(samp, args, plot=None, stds=False, jump=None, **kwargs):
 
     #insert 0 for fixed center bin if necessary
     if args.fixcent:
-        vts  = np.insert(paramdict['vts'],  0, 0)
-        v2ts = np.insert(paramdict['v2ts'], 0, 0)
-        v2rs = np.insert(paramdict['v2rs'], 0, 0)
-    else:
-        vts  = paramdict['vts']
-        v2ts = paramdict['v2ts']
-        v2rs = paramdict['v2rs']
+        paramdict['vts']  = np.insert(paramdict['vts'],  0, 0)
+        paramdict['v2ts'] = np.insert(paramdict['v2ts'], 0, 0)
+        paramdict['v2rs'] = np.insert(paramdict['v2rs'], 0, 0)
 
     #get standard deviations and put them into the dictionary
     if stds:
         start = args.nglobs
         jump = len(args.edges)-1
-        if args.fixcent: jump -= 1
+        if args.fixcent: jump -= 1 #doesn't store inner bin if fixcent
         paramdict['vtl']  = lstd[start:start + jump]
         paramdict['v2tl'] = lstd[start + jump:start + 2*jump]
         paramdict['v2rl'] = lstd[start + 2*jump:start + 3*jump]
         paramdict['vtu']  = ustd[start:start + jump]
         paramdict['v2tu'] = ustd[start + jump:start + 2*jump]
         paramdict['v2ru'] = ustd[start + 2*jump:start + 3*jump]
+
+        #dispersion stds
         if args.disp: 
-            if args.fixcent: sigjump = jump+1
+            if args.fixcent: sigjump = jump+1 #no fixed center for disp
             else: sigjump = jump
             paramdict['sigl'] = lstd[start + 3*jump:start + 3*jump + sigjump]
             paramdict['sigu'] = ustd[start + 3*jump:start + 3*jump + sigjump]
@@ -171,7 +169,7 @@ def dprofs(samp, args, plot=None, stds=False, jump=None, **kwargs):
         if not isinstance(plot, matplotlib.axes._subplots.Axes): f,plot = plt.subplots()
         ls = [r'$V_t$',r'$V_{2t}$',r'$V_{2r}$']
         [plot.plot(args.edges[:-1], p, label=ls[i], **kwargs) 
-                for i,p in enumerate([vts,v2ts,v2rs])]
+                for i,p in enumerate([paramdict['vts'], paramdict['v2ts'], paramdict['v2rs']])]
 
         #add in lower and upper bounds
         if stds: 
@@ -264,13 +262,13 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True):
     sig_r = args.remap('sig')
 
     #get appropriate number of edges  by looking at length of meds
-    nbins = (len(dynmeds(chains)) - args.nglobs - args.fixcent)/4
+    nbins = (len(dynmeds(chains)) - args.nglobs + 3*args.fixcent)/4
     if not nbins.is_integer(): raise ValueError('Dynesty output array has a bad shape.')
     else: nbins = int(nbins)
     args.setedges(nbins, nbin=True)
 
     #recalculate model that was fit
-    resdict = dprofs(chains, args, stds=True)
+    resdict = profs(chains, args, stds=True)
     velmodel, sigmodel = bisym_model(args,resdict,plot=True)
 
     #mask border if necessary
@@ -298,7 +296,7 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True):
 
     #Radial velocity profiles
     plt.subplot(332)
-    dprofs(chains, args, plt.gca(), stds=True)
+    profs(chains, args, plt.gca(), stds=True)
     plt.ylim(bottom=0)
     plt.title('Velocity Profiles')
 
@@ -358,4 +356,4 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True):
     plt.colorbar(label='km/s')
 
     plt.tight_layout()
-    return dprofs(chains, args)
+    return profs(chains, args)

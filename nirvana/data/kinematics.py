@@ -17,6 +17,9 @@ from ..models.beam import construct_beam
 from ..models.geometry import projected_polar
 from ..models import oned
 
+# TODO: We should separate the needs of the model from the needs of the
+# data. I.e., I don't think that Kinematics should inherit from
+# FitArgs.
 class Kinematics(FitArgs):
     r"""
     Base class to hold data fit by the kinematic model.
@@ -130,7 +133,7 @@ class Kinematics(FitArgs):
         fwhm (:obj:`float`, optional):
             The FWHM of the PSF of the galaxy in the same units as :attr:`x` and
             :attr:`y`.
-        bordermask (`np.ndarray`_):
+        bordermask (`numpy.ndarray`_):
             Boolean array containing the mask for a ring around the outside of
             the data. Meant to mask bad data from convolution errors.
 
@@ -168,6 +171,9 @@ class Kinematics(FitArgs):
         self._set_beam(psf, aperture)
         self.reff = reff
         self.fwhm = fwhm
+
+        # TODO: This has more to do with the model than the data, so we
+        # should put in the relevant model class/method
         self.bordermask = bordermask.astype(bool) if bordermask is not None else None
 
         # Build coordinate arrays
@@ -191,19 +197,6 @@ class Kinematics(FitArgs):
             self.sig_corr = sig_corr.data
         else:
             self.sig_corr = sig_corr
-
-        #square of physical velocity dispersion 
-        #corrected for instrumental dispersion with new error
-        if self.sig_corr is not None:
-            self.sig_phys2 = self.sig**2 - self.sig_corr**2
-            if self.sig_ivar is not None:
-                self.sig_phys2_ivar = 1/((2*self.sig * self.sig_ivar**-.5)**2 
-                                 + (-2*self.sig_corr * self.sig_ivar**-.5)**2)
-            else: self.sig_phys2_ivar = None
-
-        else:
-            self.sig_phys2 = None
-            self.sig_phys2_ivar = None
 
         # The following are arrays used to convert between arrays
         # holding the data for the unique bins to arrays with the full
@@ -260,9 +253,17 @@ class Kinematics(FitArgs):
 
         # Unravel and select the valid values for all arrays
         for attr in ['x', 'y', 'sb', 'sb_ivar', 'sb_mask', 'vel', 'vel_ivar', 'vel_mask', 'sig', 
-                     'sig_ivar', 'sig_mask', 'sig_phys2', 'sig_phys2_ivar', 'bordermask']:
+                     'sig_ivar', 'sig_mask', 'sig_corr', 'bordermask']:
             if getattr(self, attr) is not None:
                 setattr(self, attr, getattr(self, attr).ravel()[indx])
+
+        # Calculate the square of the astrophysical velocity
+        # dispeersion. This is just the square of the velocity
+        # dispersion if no correction is provided. The error
+        # calculation assumes there is no error on the correction.
+        self.sig_phys2 = self.sig**2 if self.sig_corr is None else self.sig**2 - self.sig_corr**2
+        self.sig_phys2_ivar = None if self.sig_ivar is None \
+                                    else self.sig_ivar/(2*self.sig + (self.sig == 0.0))**2
 
         #if self.bordermask is not None:
         #    self.sb_mask  |= self.bordermask
@@ -301,15 +302,15 @@ class Kinematics(FitArgs):
             self.beam_fft = None
             return
         if psf is None:
-            self.beam = aperture
+            self.beam = aperture/np.sum(aperture)
             self.beam_fft = np.fft.fftn(np.fft.ifftshift(aperture))
             return
         if aperture is None:
-            self.beam = psf
+            self.beam = psf/np.sum(psf)
             self.beam_fft = np.fft.fftn(np.fft.ifftshift(psf))
             return
-        self.beam_fft = construct_beam(psf, aperture, return_fft=True)
-        self.beam = np.fft.ifftn(self.beam_fft).real
+        self.beam_fft = construct_beam(psf/np.sum(psf), aperture/np.sum(aperture), return_fft=True)
+        self.beam = np.fft.fftshift(np.fft.ifftn(self.beam_fft).real)
 
     def _ingest(self, data, ivar, mask):
         """
@@ -408,7 +409,9 @@ class Kinematics(FitArgs):
         if getattr(self, data) is None:
             return None
 
-        _data = np.zeros(self.spatial_shape, dtype=float)
+        _data = np.ma.masked_all(self.spatial_shape, dtype=float) \
+                        if masked else np.zeros(self.spatial_shape, dtype=float)
+#        _data = np.zeros(self.spatial_shape, dtype=float)
         _data[np.unravel_index(self.grid_indx, self.spatial_shape)] \
                 = getattr(self, data)[self.bin_inverse]
         mask_data = '{0}_mask'.format(data)
@@ -418,7 +421,9 @@ class Kinematics(FitArgs):
         mask = np.ones(self.spatial_shape, dtype=bool)
         mask[np.unravel_index(self.grid_indx, self.spatial_shape)] \
                 = getattr(self, mask_data)[self.bin_inverse]
-        return np.ma.MaskedArray(_data, mask=mask)
+        _data[mask] = np.ma.masked
+#        return np.ma.MaskedArray(_data, mask=mask)
+        return _data
 
     def bin(self, data):
         """
@@ -453,6 +458,7 @@ class Kinematics(FitArgs):
         maxy = np.amax(self.y)
         return np.sqrt(max(abs(minx), maxx)**2 + max(abs(miny), maxy)**2)
 
+    # TODO: This should be in a different method/class
     @classmethod
     def mock(cls, size, inc, pa, pab, vsys, vt, v2t, v2r, sig, xc=0, yc=0, reff=10, maxr=15, psf=None, border=3, fwhm=2.44):
         '''

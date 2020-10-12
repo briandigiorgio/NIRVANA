@@ -39,14 +39,18 @@ class AxisymmetricDisk:
     Full parameters include number of *projected* rotation curve
     parameters.
     """
-    def __init__(self, rc=None):
+    def __init__(self, rc=None, dc=None):
         # Rotation curve
         self.rc = HyperbolicTangent() if rc is None else rc
+        # Velocity dispersion curve (can be None)
+        self.dc = dc
 
         # Number of "base" parameters
         self.nbp = 5
         # Total number parameters
         self.np = self.nbp + self.rc.np
+        if self.dc is not None:
+            self.np += self.dc.np
         # Initialize the parameters
         self.par = self.guess_par()
         self.par_err = None
@@ -59,9 +63,13 @@ class AxisymmetricDisk:
         self.y = None
         self.beam_fft = None
         self.kin = None
+        self.sb = None
+        self.vel_gpm = None
+        self.sig_gpm = None
 
     def guess_par(self):
-        return np.concatenate(([0., 0., 45., 30., 0.], self.rc.guess_par()))
+        gp = np.concatenate(([0., 0., 45., 30., 0.], self.rc.guess_par()))
+        return gp if self.dc is None else np.append(gp, self.dc.guess_par())
 
     def base_par(self):
         """
@@ -76,8 +84,10 @@ class AxisymmetricDisk:
         maxy = np.amax(self.y)
         maxr = np.sqrt(max(abs(minx), maxx)**2 + max(abs(miny), maxy)**2)
         # Minimum and maximum allowed values for xc, yc, pa, inc, vsys, vrot, hrot
-        return np.concatenate(([minx, miny, -350., 0., -300.], self.rc.lb)), \
-               np.concatenate(([maxx, maxy, 350., 89., 300.], self.rc.ub))
+        lb = np.concatenate(([minx, miny, -350., 0., -300.], self.rc.lb))
+        ub = np.concatenate(([maxx, maxy, 350., 89., 300.], self.rc.ub))
+        return (lb, ub) if self.dc is None \
+                    else (np.append(lb, self.dc.lb), np.append(ub, self.dc.ub))
 
     def _set_par(self, par):
         """
@@ -123,7 +133,8 @@ class AxisymmetricDisk:
         self.free = _free
         self.nfree = np.sum(self.free)
 
-    def model(self, par=None, x=None, y=None, beam=None, is_fft=False, cnvfftw=None):
+    def model(self, par=None, x=None, y=None, beam=None, is_fft=False, cnvfftw=None,
+              ignore_beam=False):
         """
         Evaluate the model.
         """
@@ -137,33 +148,58 @@ class AxisymmetricDisk:
         r, theta = projected_polar(self.x - self.par[0], self.y - self.par[1],
                                    *np.radians(self.par[2:4]))
 
-        # NOTE: This doesn't include the sin(inclination) term because
-        # this is absorbed into the rotation curve amplitude.
-        vel = self.rc.sample(r, par=self.par[self.nbp:])*np.cos(theta) + self.par[4]
-        return vel if self.beam_fft is None else smear(vel, self.beam_fft, beam_fft=True,
-                                                       cnvfftw=cnvfftw)[1]
+        # NOTE: The velocity-field construction does not include the
+        # sin(inclination) term because this is absorbed into the
+        # rotation curve amplitude.
+        ps = self.nbp
+        pe = ps + self.rc.np
+        vel = self.rc.sample(r, par=self.par[ps:pe])*np.cos(theta) + self.par[4]
+        if self.dc is None:
+            # Only fitting the velocity field
+            return vel if self.beam_fft is None or ignore_beam \
+                        else smear(vel, self.beam_fft, beam_fft=True, sb=self.sb,
+                                   cnvfftw=cnvfftw)[1]
+
+        # Fitting both the velocity and velocity-dispersion field
+        ps = pe
+        pe = ps + self.dc.np
+        sig = self.dc.sample(r, par=self.par[ps:pe])
+        return (vel, sig) if self.beam_fft is None or ignore_beam \
+                        else smear(vel, self.beam_fft, beam_fft=True, sb=self.sb, sig=sig,
+                                   cnvfftw=cnvfftw)[1:]
 
     def _resid(self, par):
         self._set_par(par)
-        return self.kin.vel[self.vel_gpm] - self.kin.bin(self.model())[self.vel_gpm]
+        if self.dc is None:
+            return self.kin.vel[self.vel_gpm] - self.kin.bin(self.model())[self.vel_gpm]
+        vel, sig = self.model()
+        return np.append(self.kin.vel[self.vel_gpm] - self.kin.bin(vel)[self.vel_gpm],
+                         self.kin.sig_phys2[self.sig_gpm] - self.kin.bin(sig)[self.sig_gpm]**2)
 
     def _chisqr(self, par): 
-        return self._resid(par) * np.sqrt(self.kin.vel_ivar[self.vel_gpm])
+        if self.dc is None:
+            return self._resid(par) * np.sqrt(self.kin.vel_ivar[self.vel_gpm])
+        ivar = np.append(self.kin.vel_ivar[self.vel_gpm], self.kin.sig_phys2_ivar[self.sig_gpm])
+        return self._resid(par) * np.sqrt(ivar)
 
-    def _fit_prep(self, kin, p0, fix):
+    def _fit_prep(self, kin, p0, fix, sb_wgt):
         self._init_par(p0, fix)
         self.kin = kin
         self.x = self.kin.grid_x
         self.y = self.kin.grid_y
+        self.sb = self.kin.remap('sb').filled(0.0) if sb_wgt else None
         self.beam_fft = self.kin.beam_fft
         self.vel_gpm = np.logical_not(self.kin.vel_mask)
-        return self._resid if self.kin.vel_ivar is None else self._chisqr
+        self.sig_gpm = np.logical_not(self.kin.sig_mask)
+        use_resid = self.kin.vel_ivar is None \
+                    or (self.dc is not None and self.kin.sig_ivar is None)
+        return self._resid if use_resid else self._chisqr
 
-    def lsq_fit(self, kin, p0=None, fix=None, verbose=0):
+    def lsq_fit(self, kin, sb_wgt=False, p0=None, fix=None, verbose=0):
         """
         Use least_squares to fit kinematics.
         """
-        fom = self._fit_prep(kin, p0, fix)
+        fom = self._fit_prep(kin, p0, fix, sb_wgt)
         lb, ub = self.par_bounds()
         diff_step = np.full(self.np, 0.1, dtype=float)
         result = optimize.least_squares(fom, self.par[self.free], method='trf',

@@ -322,7 +322,8 @@ def smear(v, beam, beam_fft=False, sb=None, sig=None, cnvfftw=None):
                                     if cnvfftw is None else cnvfftw.fft(beam, shift=True))
 
     # Get the first moment of the beam-smeared intensity distribution
-    mom0 = None if sb is None else _cnv(sb, bfft, kernel_fft=True)
+    mom0 = _cnv(np.ones(v.shape, dtype=float) if sb is None else sb, bfft, kernel_fft=True)
+#    mom0 = None if sb is None else _cnv(sb, bfft, kernel_fft=True)
 
     # First moment
     mom1 = _cnv(v if sb is None else sb*v, bfft, kernel_fft=True)
@@ -336,7 +337,9 @@ def smear(v, beam, beam_fft=False, sb=None, sig=None, cnvfftw=None):
     # Second moment
     _sig = np.square(v) + np.square(sig)
     mom2 = _cnv(_sig if sb is None else sb*_sig, bfft, kernel_fft=True)
-    mom2 = mom2 / (mom0 + (mom0 == 0.0)) - mom1**2
+    if mom0 is not None:
+        mom2 /= (mom0 + (mom0 == 0.0))
+    mom2 -= mom1**2
     mom2[mom2 < 0] = 0.0
     return mom0, mom1, np.sqrt(mom2)
 

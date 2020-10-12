@@ -265,7 +265,7 @@ def dynprior(params, args, gaussprior=False):
         vtsp = 400 * paramdict['vts']
         v2tsp = 200 * paramdict['v2ts']
         v2rsp = 200 * paramdict['v2rs']
-        if args.disp: sigp = 200 * paramdict['sig']
+        if args.disp: sigp = 300 * paramdict['sig']
 
     #reassemble params array
     repack = [incp,pap,pabp,vsysp]
@@ -327,26 +327,11 @@ def loglike(params, args):
 
     #add in sigma model if applicable
     if sigmodel is not None:
-#        #use corrected physical dispersion if it is defined
-#        if args.sig_phys2 is not None: 
-#            sigdata = args.sig_phys2
-#            if args.sig_phys2_ivar is not None:
-#                sigdataivar = args.sig_phys2_ivar
-#            else: sigdataivar = None
-#
-#        #otherwise use normal dispersion
-#        else:
-#            sigdata = args.sig**2
-#            if args.sig_ivar is not None:
-#                sigdataivar = args.sig_ivar**2
-#            else: sigdataivar = None
-
         sigdata = args.sig_phys2
         sigdataivar = args.sig_phys2_ivar
 
         #compute chisq
-        # TODO: Shouldn't this be (sigmodel**2 - sigdata)**2?
-        siglike = (sigmodel - sigdata)**2
+        siglike = (sigmodel**2 - sigdata)**2
         if sigdataivar is not None: siglike *= sigdataivar
         llike = llike - .5*np.ma.sum(siglike)
         llike = llike - smoothing(paramdict['sig'], args.weight)

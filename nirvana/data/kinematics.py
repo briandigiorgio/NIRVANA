@@ -258,7 +258,7 @@ class Kinematics(FitArgs):
                 setattr(self, attr, getattr(self, attr).ravel()[indx])
 
         # Calculate the square of the astrophysical velocity
-        # dispeersion. This is just the square of the velocity
+        # dispersion. This is just the square of the velocity
         # dispersion if no correction is provided. The error
         # calculation assumes there is no error on the correction.
         self.sig_phys2 = self.sig**2 if self.sig_corr is None else self.sig**2 - self.sig_corr**2

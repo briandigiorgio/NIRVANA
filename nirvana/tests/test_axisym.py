@@ -4,10 +4,11 @@ from IPython import embed
 import numpy
 
 from nirvana.data import manga
-from nirvana.tests.util import remote_data_file, requires_remote, dap_test_daptype
-from nirvana.models.oned import HyperbolicTangent
+from nirvana.tests.util import remote_data_file, requires_remote
+from nirvana.models.oned import HyperbolicTangent, Exponential
 from nirvana.models.axisym import AxisymmetricDisk
-from nirvana.models.beam import convolve_fft, smear, gauss2d_kernel
+from nirvana.models.beam import gauss2d_kernel
+
 
 def test_disk():
     disk = AxisymmetricDisk()
@@ -25,6 +26,7 @@ def test_disk():
 
     assert numpy.isclose(vel[n//2,n//2], _vel[n//2,n//2]), 'Smearing moved the center.'
 
+
 @requires_remote
 def test_lsq_nopsf():
 
@@ -35,7 +37,7 @@ def test_lsq_nopsf():
     # Set the rotation curve
     rc = HyperbolicTangent(lb=numpy.array([0., 1e-3]), ub=numpy.array([500., kin.max_radius()]))
     # Set the disk velocity field
-    disk = AxisymmetricDisk(rc)
+    disk = AxisymmetricDisk(rc=rc)
     # Fit it with a non-linear least-squares optimizer
     disk.lsq_fit(kin)
 
@@ -55,12 +57,35 @@ def test_lsq_psf():
     # Set the rotation curve
     rc = HyperbolicTangent(lb=numpy.array([0., 1e-3]), ub=numpy.array([500., kin.max_radius()]))
     # Set the disk velocity field
-    disk = AxisymmetricDisk(rc)
+    disk = AxisymmetricDisk(rc=rc)
     # Fit it with a non-linear least-squares optimizer
     disk.lsq_fit(kin)
 
     assert numpy.all(numpy.absolute(disk.par[:2]) < 0.1), 'Center changed'
     assert 165. < disk.par[2] < 167., 'PA changed'
     assert 56. < disk.par[3] < 57., 'Inclination changed'
-    assert 250. < disk.par[5] < 252., 'Projected rotation changed'
+    assert 251. < disk.par[5] < 254., 'Projected rotation changed'
+
+
+@requires_remote
+def test_lsq_with_sig():
+
+    # Read the data to fit
+    data_root = remote_data_file()
+    kin = manga.MaNGAGasKinematics.from_plateifu(8138, 12704, cube_path=data_root,
+                                                 maps_path=data_root)
+    # Set the rotation curve
+    rc = HyperbolicTangent(lb=numpy.array([0., 1e-3]), ub=numpy.array([500., kin.max_radius()]))
+    # Set the dispersion profile
+    dc = Exponential(lb=numpy.array([0., 1e-3]), ub=numpy.array([500., kin.max_radius()]))
+    # Set the disk velocity field
+    disk = AxisymmetricDisk(rc=rc, dc=dc)
+    # Fit it with a non-linear least-squares optimizer
+    disk.lsq_fit(kin, sb_wgt=True)
+
+    assert numpy.all(numpy.absolute(disk.par[:2]) < 0.1), 'Center changed'
+    assert 165. < disk.par[2] < 167., 'PA changed'
+    assert 56. < disk.par[3] < 58., 'Inclination changed'
+    assert 250. < disk.par[5] < 253., 'Projected rotation changed'
+    assert 28. < disk.par[7] < 30., 'Central velocity dispersion changed'
 

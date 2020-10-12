@@ -27,3 +27,7 @@
  - Added masking of edges of mocks to mitigate convolution edge effects
  - Renamed to NIRVANA
  - Removed MCMC and associated arguments
+ - Enable fit to velocity dispersion using `AxisymmetricDisk`.
+ - Force calculation of `mom0` in `nirvana.model.beam.smear` even if the
+   surface brightness is not provided, using a unity array.
+

@@ -280,8 +280,8 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True):
             sig_r = np.ma.array(sig_r, mask=args.bordermask)
 
     #print global parameters on figure
-    plt.figure(figsize = (12,12))
-    plt.subplot(331)
+    plt.figure(figsize = (16,12))
+    plt.subplot(3,4,1)
     ax = plt.gca()
     plt.axis('off')
     plt.title(f'{plate}-{ifu}',size=20)
@@ -294,14 +294,19 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True):
     plt.text(.1, .2, r'$v_{{sys}}$: %0.1f km/s'%resdict['vsys'], 
             transform=ax.transAxes, size=20)
 
+    #image
+    plt.subplot(3,4,2)
+    plt.imshow(args.image)
+    plt.axis('off')
+
     #Radial velocity profiles
-    plt.subplot(332)
+    plt.subplot(3,4,3)
     profs(chains, args, plt.gca(), stds=True)
     plt.ylim(bottom=0)
     plt.title('Velocity Profiles')
 
     #dispersion profile
-    plt.subplot(333)
+    plt.subplot(3,4,4)
     plt.plot(args.edges[:-1], resdict['sig'])
     plt.fill_between(args.edges[:-1], resdict['sigl'], resdict['sigu'], alpha=.5)
     plt.ylim(bottom=0)
@@ -310,21 +315,21 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True):
     plt.ylabel(r'$v$ (km/s)')
 
     #MaNGA Ha velocity field
-    plt.subplot(334)
+    plt.subplot(3,4,5)
     plt.title(r'H$\alpha$ Velocity Data')
     plt.imshow(vel_r,cmap='jet',origin='lower')
     plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')
 
-    #VF model from dynesty fit
-    plt.subplot(335)
+    #Vel model from dynesty fit
+    plt.subplot(3,4,6)
     plt.title('Velocity Model')
     plt.imshow(velmodel,'jet',origin='lower',vmin=vel_r.min(),vmax=vel_r.max()) 
     plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')
 
-    #Residuals from fit
-    plt.subplot(336)
+    #Residuals from vel fit
+    plt.subplot(3,4,7)
     plt.title('Velocity Residuals')
     resid = vel_r-velmodel
     vmax = min(np.abs(vel_r-velmodel).max(),50)
@@ -332,28 +337,44 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True):
     plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')
 
+    #Chisq from vel fit
+    plt.subplot(3,4,8)
+    plt.title('Velocity Chi Squared')
+    velchisq = (vel_r - velmodel)**2 * args.remap('vel_ivar')
+    plt.imshow(velchisq, 'jet', origin='lower', vmin=0, vmax=50)
+    plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
+    plt.colorbar()
+
     #MaNGA Ha velocity disp
-    plt.subplot(337)
+    plt.subplot(3,4,9)
     plt.title(r'H$\alpha$ Velocity Dispersion Data')
     plt.imshow(sig_r,cmap='jet',origin='lower')
     plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')
 
     #disp model from dynesty fit
-    plt.subplot(338)
+    plt.subplot(3,4,10)
     plt.title('Velocity Dispersion Model')
     plt.imshow(sigmodel,'jet',origin='lower',vmin=sig_r.min(),vmax=sig_r.max()) 
     plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')
 
     #Residuals from disp fit
-    plt.subplot(339)
+    plt.subplot(3,4,11)
     plt.title('Dispersion Residuals')
     resid = sig_r-sigmodel
     vmax = min(np.abs(sig_r-sigmodel).max(),50)
     plt.imshow(sig_r-sigmodel,'jet',origin='lower',vmin=-vmax,vmax=vmax)
     plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')
+
+    #Chisq from sig fit
+    plt.subplot(3,4,12)
+    plt.title('Dispersion Chi Squared')
+    sigchisq = (sig_r - sigmodel)**2 * args.remap('sig_ivar')
+    plt.imshow(sigchisq, 'jet', origin='lower', vmin=0, vmax=50)
+    plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
+    plt.colorbar()
 
     plt.tight_layout()
     return profs(chains, args)

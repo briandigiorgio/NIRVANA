@@ -5,6 +5,7 @@ Plotting for nirvana outputs.
 import numpy as np
 from matplotlib import pyplot as plt
 import matplotlib
+from mpl_toolkits.axes_grid1 import make_axes_locatable as mal
 
 import dynesty
 import dynesty.plotting
@@ -317,64 +318,81 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True, maxr=
     #MaNGA Ha velocity field
     plt.subplot(3,4,5)
     plt.title(r'H$\alpha$ Velocity Data')
-    plt.imshow(vel_r,cmap='jet',origin='lower')
-    plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
-    plt.colorbar(label='km/s')
+    vmax = np.max(np.abs(vel_r))
+    plt.imshow(vel_r, cmap='jet', origin='lower', vmin=-vmax, vmax=vmax)
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
+    cb = plt.colorbar(cax=cax)
+    cb.set_label('km/s', labelpad=-10)
 
     #Vel model from dynesty fit
     plt.subplot(3,4,6)
     plt.title('Velocity Model')
-    plt.imshow(velmodel,'jet',origin='lower',vmin=vel_r.min(),vmax=vel_r.max()) 
-    plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
-    plt.colorbar(label='km/s')
+    plt.imshow(velmodel,'jet', origin='lower', vmin=-vmax, vmax=vmax) 
+    plt.tick_params(left=False, bottom=False,labelleft=False, labelbottom=False)
+    cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
+    plt.colorbar(label='km/s', cax=cax)
+    cb = plt.colorbar(cax=cax)
+    cb.set_label('km/s', labelpad=-10)
 
     #Residuals from vel fit
     plt.subplot(3,4,7)
     plt.title('Velocity Residuals')
-    resid = vel_r-velmodel
-    vmax = min(np.abs(vel_r-velmodel).max(),50)
-    plt.imshow(vel_r-velmodel,'jet',origin='lower',vmin=-vmax,vmax=vmax)
-    plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
-    plt.colorbar(label='km/s')
+    resid = vel_r - velmodel
+    vmax = min(np.abs(vel_r-velmodel).max(), 50)
+    plt.imshow(vel_r-velmodel, 'jet', origin='lower', vmin=-vmax, vmax=vmax)
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
+    plt.colorbar(label='km/s', cax=cax)
+    cb = plt.colorbar(cax=cax)
+    cb.set_label('km/s', labelpad=-10)
 
     #Chisq from vel fit
     plt.subplot(3,4,8)
     plt.title('Velocity Chi Squared')
     velchisq = (vel_r - velmodel)**2 * args.remap('vel_ivar')
     plt.imshow(velchisq, 'jet', origin='lower', vmin=0, vmax=50)
-    plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
-    plt.colorbar()
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
+    plt.colorbar(cax=cax)
 
     #MaNGA Ha velocity disp
     plt.subplot(3,4,9)
     plt.title(r'H$\alpha$ Dispersion Data')
-    plt.imshow(sig_r,cmap='jet',origin='lower')
-    plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
-    plt.colorbar(label='km/s')
+    plt.imshow(sig_r, cmap='jet', origin='lower', vmin=0)
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
+    cb = plt.colorbar(cax=cax)
+    cb.set_label('km/s', labelpad=0)
 
     #disp model from dynesty fit
     plt.subplot(3,4,10)
     plt.title('Dispersion Model')
-    plt.imshow(sigmodel,'jet',origin='lower',vmin=sig_r.min(),vmax=sig_r.max()) 
-    plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
-    plt.colorbar(label='km/s')
+    plt.imshow(sigmodel, 'jet', origin='lower', vmin=0, vmax=sig_r.max()) 
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
+    cb = plt.colorbar(cax=cax)
+    cb.set_label('km/s', labelpad=0)
 
     #Residuals from disp fit
     plt.subplot(3,4,11)
     plt.title('Dispersion Residuals')
-    resid = sig_r-sigmodel
-    vmax = min(np.abs(sig_r-sigmodel).max(),50)
-    plt.imshow(sig_r-sigmodel,'jet',origin='lower',vmin=-vmax,vmax=vmax)
-    plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
-    plt.colorbar(label='km/s')
+    resid = sig_r - sigmodel
+    vmax = min(np.abs(sig_r - sigmodel).max(),50)
+    plt.imshow(sig_r-sigmodel, 'jet', origin='lower', vmin=-vmax, vmax=vmax)
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
+    cb = plt.colorbar(cax=cax)
+    cb.set_label('km/s', labelpad=-10)
 
     #Chisq from sig fit
     plt.subplot(3,4,12)
     plt.title('Dispersion Chi Squared')
     sigchisq = (sig_r - sigmodel)**2 * args.remap('sig_ivar')
     plt.imshow(sigchisq, 'jet', origin='lower', vmin=0, vmax=50)
-    plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
-    plt.colorbar()
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
+    plt.colorbar(cax=cax)
 
     plt.tight_layout()
     return profs(chains, args)

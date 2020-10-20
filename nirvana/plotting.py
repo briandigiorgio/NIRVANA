@@ -16,6 +16,7 @@ from .fitting import bisym_model, unpack
 from .data.manga import MaNGAStellarKinematics, MaNGAGasKinematics
 from .data.kinematics import Kinematics
 from .models.beam import smear, ConvolveFFTW
+from .models.geometry import projected_polar
 
 def dynmeds(samp, stds=False):
     '''
@@ -270,6 +271,12 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True, maxr=
 
     #recalculate model that was fit
     resdict = profs(chains, args, stds=True)
+    if maxr is not None:
+        r,th = projected_polar(args.x, args.y, resdict['pa'], resdict['inc'])
+        r /= args.reff
+        rmask = r > maxr
+        args.vel_mask |= rmask
+        args.sig_mask |= rmask
     velmodel, sigmodel = bisym_model(args,resdict,plot=True)
 
     #mask border if necessary

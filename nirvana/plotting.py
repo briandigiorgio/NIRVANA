@@ -184,7 +184,7 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
 
     return paramdict
 
-def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True):
+def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True, maxr=None):
     '''
     Make a summary plot for a `nirvana` output file with MaNGA velocity field.
 
@@ -259,13 +259,13 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True):
     args.setdisp(True)
     args.setnglobs(4)
     vel_r = args.remap('vel')
-    sig_r = args.remap('sig')
+    sig_r = args.remap('sig') if args.sig_phys2 is None else np.sqrt(np.abs(args.remap('sig_phys2')))
 
     #get appropriate number of edges  by looking at length of meds
     nbins = (len(dynmeds(chains)) - args.nglobs + 3*args.fixcent)/4
     if not nbins.is_integer(): raise ValueError('Dynesty output array has a bad shape.')
     else: nbins = int(nbins)
-    args.setedges(nbins, nbin=True)
+    args.setedges(nbins, nbin=True, maxr=maxr)
 
     #recalculate model that was fit
     resdict = profs(chains, args, stds=True)
@@ -280,7 +280,7 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True):
             sig_r = np.ma.array(sig_r, mask=args.bordermask)
 
     #print global parameters on figure
-    plt.figure(figsize = (16,12))
+    plt.figure(figsize = (12,9))
     plt.subplot(3,4,1)
     ax = plt.gca()
     plt.axis('off')
@@ -347,14 +347,14 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True):
 
     #MaNGA Ha velocity disp
     plt.subplot(3,4,9)
-    plt.title(r'H$\alpha$ Velocity Dispersion Data')
+    plt.title(r'H$\alpha$ Dispersion Data')
     plt.imshow(sig_r,cmap='jet',origin='lower')
     plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')
 
     #disp model from dynesty fit
     plt.subplot(3,4,10)
-    plt.title('Velocity Dispersion Model')
+    plt.title('Dispersion Model')
     plt.imshow(sigmodel,'jet',origin='lower',vmin=sig_r.min(),vmax=sig_r.max()) 
     plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
     plt.colorbar(label='km/s')

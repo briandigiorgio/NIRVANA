@@ -63,8 +63,9 @@ class FitArgs:
                 True`, this is instead the number of bins to make (must be an
                 :obj:`int`)
             maxr (:obj:`float`, optional):
-                Maximum radius for the bins. If not specified, it will default
-                to the maximum unmasked radius of the galaxy.
+                Maximum radius for the bins in effective radii. If not
+                specified, it will default to the maximum unmasked radius of
+                the galaxy.
             nbin (:obj:`bool`):
                 Flag for whether or not to set the number of bins manually.
         '''
@@ -86,7 +87,7 @@ class FitArgs:
         #calculate nyquist bin width based off fwhm and inc
         else:
             binwidth = min(self.fwhm/2/np.cos(np.radians(inc)), self.fwhm)
-            self.edges = np.arange(0,maxr,binwidth)/self.reff
+            self.edges = np.arange(0, maxr, binwidth)/self.reff
 
     def setfixcent(self, fixcent):
         '''

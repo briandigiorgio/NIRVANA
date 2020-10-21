@@ -56,7 +56,7 @@ def bisym_model(args, paramdict, plot=False):
 
     #convert angles to polar and normalize radial coorinate
     inc,pa,pab = np.radians([paramdict['inc'],paramdict['pa'],paramdict['pab']])
-    r, th = projected_polar(args.grid_x-paramdict['xc'],args.grid_y-paramdict['yc'],pa,inc)
+    r, th = projected_polar(args.grid_x-paramdict['xc'] ,args.grid_y-paramdict['yc'], pa, inc)
     r /= args.reff
 
     #insert a fixed central bin if it is being ignored by fit
@@ -285,7 +285,7 @@ def dynprior(params, args, gaussprior=False):
     if args.disp: repack += [*sigp]
     return repack
 
-def loglike(params, args):
+def loglike(params, args, squared=False):
     '''
     Log likelihood for :class:`dynesty.NestedSampler` fit. 
     
@@ -296,9 +296,12 @@ def loglike(params, args):
         params (:obj:`tuple`):
             Tuple of parameters that are being fit. Assumes the standard order
             of parameters constructed in :func:`nirvana.fitting.fit`.
-        args (:class:`nirvana.data.fitargs`):
+        args (:class:`~nirvana.data.fitargs`):
             Object containing all of the data and settings needed for the
             galaxy.  
+        squared (:obj:`bool`, optional):
+            Whether to compute the chi squared against the square of the
+            dispersion profile or not. 
 
     Returns:
         :obj:`float`: Log likelihood value associated with parameters.
@@ -327,11 +330,16 @@ def loglike(params, args):
 
     #add in sigma model if applicable
     if sigmodel is not None:
-        sigdata = args.sig_phys2
-        sigdataivar = args.sig_phys2_ivar
+        #compute chisq with squared sigma or not
+        if squared:
+            sigdata = args.sig_phys2
+            sigdataivar = args.sig_phys2_ivar
+            siglike = (sigmodel**2 - sigdata)**2
+        else:
+            sigdata = np.sqrt(args.sig_phys2)
+            sigdataivar = np.sqrt(args.sig_phys2_ivar)
+            siglike = (sigmodel - sigdata)**2
 
-        #compute chisq
-        siglike = (sigmodel**2 - sigdata)**2
         if sigdataivar is not None: siglike *= sigdataivar
         llike = llike - .5*np.ma.sum(siglike)
         llike = llike - smoothing(paramdict['sig'], args.weight)

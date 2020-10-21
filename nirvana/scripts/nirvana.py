@@ -23,7 +23,7 @@ def parse_args(options=None):
                         help='The MaNGA data release.  This is only used to automatically '
                              'construct the directory to the MaNGA galaxy data, and it will be '
                              'ignored if the root directory is set directly (using --root).')
-    parser.add_argument('-c', '--cores', default=20, type=int,
+    parser.add_argument('-c', '--cores', default=10, type=int,
                         help='Number of threads to utilize.')
     parser.add_argument('-f', '--outfile', default=None, type=str,
                         help='Outfile to dump results in.')
@@ -69,6 +69,7 @@ def main(args):
     if args.outfile is None:
         args.outfile = f'{plate}-{ifu}_{args.weight}w_{args.points}p'
         if args.nbins is not None: args.outfile += f'_{args.nbins}bin'
+        if args.maxr  is not None: args.outfile += f'_{args.maxr}r'
         if not args.smearing: args.outfile += '_nosmear'
         if not args.fixcent: args.outfile += '_unfixed'
         if not args.disp: args.outfile += '_nodisp'

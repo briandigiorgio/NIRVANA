@@ -582,3 +582,18 @@ class Kinematics(FitArgs):
 
         binid = np.arange(np.product(_vel.shape)).reshape(_vel.shape)
         return cls(_vel, x=_x, y=_y, grid_x=_x, grid_y=_y, reff=reff, binid=binid, sig=_sig, psf=_psf, sb=_sb, bordermask=bordermask)
+
+    def remask(self, mask):
+        if mask.ndim > 1 and mask.shape != self.spatial_shape:
+            raise ValueError('Mask is not the same shape as data.')
+        if mask.ndim == 1 and len(mask) != len(args.vel):
+            raise ValueError('Mask is not the same length as data')
+
+        for m in ['sb_mask', 'vel_mask', 'sig_mask']:
+            if m is None: continue
+            #if mask.ndim > 1: newmask = self.remap(m)
+            #else: newmask = getattr(self, m)
+            #newmask |= mask
+            #if mask.ndim > 1: newmask = self.bin(newmask)
+            if mask.ndim > 1: mask = self.bin(mask)
+            setattr(self, m, np.array(getattr(self, m) + mask, dtype=bool))

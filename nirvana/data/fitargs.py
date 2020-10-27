@@ -3,11 +3,12 @@
 from IPython import embed
 
 import numpy as np
-from scipy.optimize import leastsq
+from scipy.optimize import leastsq, least_squares
 import matplotlib.pyplot as plt
+from astropy.stats import sigma_clip
 
 from ..models.geometry import projected_polar
-from ..models.axisym import rotcurveeval
+from ..models.axisym import rotcurveeval, AxisymmetricDisk
 from ..models.beam import ConvolveFFTW
 
 class FitArgs:
@@ -111,7 +112,7 @@ class FitArgs:
 
         self.disp = disp
 
-    def getguess(self, fill=10):
+    def getguess(self, fill=10, clip=True):
         '''
         Generate a set of guess parameters for the galaxy using a simple least
         squares fit.
@@ -130,6 +131,12 @@ class FitArgs:
         Args:
             fill (:obj:`float`, optional):
                 Fill value for second order velocities.
+            clip (:obj:`bool`, optional):
+                Whether to clean up the data. if `True`, it will do a 7 sigma
+                clip on the residuals from the initial round of the fit and
+                the chi squared of that fit. This is arbitrary but seems to
+                remove regions of bad data without removing regions of
+                legitimate but weird data.
 
         Returns:
             :obj:`tuple`: Tuple of guesses for the parameters. Will be in the
@@ -144,20 +151,42 @@ class FitArgs:
         else: ivar = self.vel_ivar
 
         #define a minimization function and feed it to simple leastsquares
-        minfunc = lambda params,vf,x,y,e,reff: np.array((vf - \
-                rotcurveeval(x,y,*params,reff=reff))/e).flatten()
-        vmax,inc,pa,h,vsys = leastsq(minfunc, (200,45,180,3,0), 
-                args = (self.vel,self.x,self.y,ivar**-.5,self.reff))[0]
+        #minfunc = lambda params,vf,x,y,e,reff: np.array((vf - \
+        #        rotcurveeval(x,y,*params,reff=reff))/e).flatten()
+        #vmax,inc,pa,h,vsys = leastsq(minfunc, (200,45,180,3,0), 
+        ##vmax,inc,pa,h,vsys = least_squares(minfunc, (200,45,180,3,0), 
+        #        #method='lm', bounds=[[0,0,0,0,-50], [500,90,360,10,50]],
+        #        args = (self.vel,self.x,self.y,ivar**-.5,self.reff))[0]
 
-        #check and fix signs if galaxy was fit upside down
-        if np.product(np.sign([vmax,h])) < 0: pa += 180
-        pa %= 360
-        if inc%180 != inc%90: pa += 180
-        inc %= 90
-        vmax,inc,h = np.abs([vmax,inc,h])
+        ##check and fix signs if galaxy was fit upside down
+        #if np.product(np.sign([vmax,h])) < 0: pa += 180
+        #pa %= 360
+        #if inc%180 != inc%90: pa += 180
+        #inc %= 90
+        #vmax,inc,h = np.abs([vmax,inc,h])
+
+        fit = AxisymmetricDisk()
+        fit.lsq_fit(self)
+
+        #clean up the data by sigma clipping residuals and chisq if desired
+        if clip:
+            model = fit.model()
+            resid = self.remap('vel')-model
+            chisq = resid**2 * self.remap('vel_ivar') if self.vel_ivar is not None else resid**2
+            mask = sigma_clip(chisq, sigma=7, masked=True).mask \
+                 + sigma_clip(resid, sigma=7, masked=True).mask
+
+            #apply mask to data and refit
+            self.remask(mask)
+            fit.lsq_fit(self)
+
+        #get fit params
+        xc, yc, pa, inc, vsys, vsini, h = fit.par
+        vmax = vsini/np.sin(np.radians(inc))
 
         #generate model velocity field, start assembling array of guess values
-        model = rotcurveeval(self.grid_x,self.grid_y,vmax,inc,pa,h,vsys,reff=self.reff)
+        #model = rotcurveeval(self.grid_x,self.grid_y,vmax,inc,pa,h,vsys,reff=self.reff)
+        model = fit.model()
         guess = [inc,pa,pa,vsys,0,0,0]
 
         #if edges have not been defined, just return global parameters

@@ -55,8 +55,9 @@ def bisym_model(args, paramdict, plot=False):
     '''
 
     #convert angles to polar and normalize radial coorinate
-    inc,pa,pab = np.radians([paramdict['inc'],paramdict['pa'],paramdict['pab']])
-    r, th = projected_polar(args.grid_x-paramdict['xc'] ,args.grid_y-paramdict['yc'], pa, inc)
+    inc, pa, pab = np.radians([paramdict['inc'], paramdict['pa'], paramdict['pab']])
+    #pa = np.radians(183)
+    r, th = projected_polar(args.grid_x-paramdict['xc'], args.grid_y-paramdict['yc'], pa, inc)
     r /= args.reff
 
     #insert a fixed central bin if it is being ignored by fit
@@ -261,10 +262,10 @@ def dynprior(params, args, gaussprior=False):
         pabp = 180 * paramdict['pab']
 
         #uniform guesses for reasonable values for velocities
-        vsysp = (2*paramdict['vsys']- 1) * 20
+        vsysp = (2*paramdict['vsys']- 1) * 100
         vtsp = 400 * paramdict['vts']
-        v2tsp = 200 * paramdict['v2ts']
-        v2rsp = 200 * paramdict['v2rs']
+        v2tsp = 400 * paramdict['v2ts']
+        v2rsp = 400 * paramdict['v2rs']
         if args.disp: sigp = 300 * paramdict['sig']
 
     #reassemble params array
@@ -442,6 +443,7 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
     conv = ConvolveFFTW(args.spatial_shape)
 
     #starting positions for all parameters based on a quick fit
+    args.clip()
     theta0 = args.getguess()
     ndim = len(theta0)
 

@@ -10,12 +10,13 @@ from IPython import embed
 
 import numpy as np
 from scipy import sparse
+from astropy.stats import sigma_clip
 
 from .fitargs import FitArgs
 
 from ..models.beam import construct_beam
 from ..models.geometry import projected_polar
-from ..models import oned
+from ..models import oned, axisym
 
 # TODO: We should separate the needs of the model from the needs of the
 # data. I.e., I don't think that Kinematics should inherit from
@@ -583,7 +584,53 @@ class Kinematics(FitArgs):
         binid = np.arange(np.product(_vel.shape)).reshape(_vel.shape)
         return cls(_vel, x=_x, y=_y, grid_x=_x, grid_y=_y, reff=reff, binid=binid, sig=_sig, psf=_psf, sb=_sb, bordermask=bordermask)
 
+    def clip(self, sigma=7, sb=.1):
+        '''
+        Filter out bad data in kinematic data.
+        
+        Performs a quick axisymmetric least squares fit and sigma clipping the
+        residuals and chisq. Also cuts based on a surface brightness
+        threshold. Remasks the data to get rid of bad stuff.
+
+        Args: 
+            sigma (:obj:`float`, optional): 
+                Significance threshold to be passed to
+                `astropy.stats.sigma_clip` for sigma clipping the residuals
+                and chi squared. Can't be too low or it will cut out
+                nonaxisymmetric features. 
+            sb (:obj:`float`, optional): 
+                Flux threshold below which spaxels are masked.
+        '''
+
+        #quick axisymmetric least squares fit
+        fit = axisym.AxisymmetricDisk()
+        fit.lsq_fit(self)
+
+        #clean up the data by sigma clipping residuals and chisq if desired
+        model = fit.model()
+        resid = self.remap('vel') - model
+        chisq = resid**2 * self.remap('vel_ivar') if self.vel_ivar is not None else resid**2
+        mask = sigma_clip(chisq, sigma=sigma, masked=True).mask \
+             + sigma_clip(resid, sigma=sigma, masked=True).mask \
+             + self.remap('sb') > sb
+
+        #apply mask to data
+        self.remask(mask)
+
     def remask(self, mask):
+        '''
+        Apply a given mask to the masks that are already in the object.
+
+        Args:
+            mask (`numpy.ndarray`):
+                Mask to apply to the data. Should be the same shape as the
+                data (either 1D binned or 2D). Will be interpreted as boolean.
+
+        Raises:
+            ValueError:
+                Thrown if input mask is not the same shape as the data.
+        '''
+
         if mask.ndim > 1 and mask.shape != self.spatial_shape:
             raise ValueError('Mask is not the same shape as data.')
         if mask.ndim == 1 and len(mask) != len(args.vel):
@@ -591,9 +638,5 @@ class Kinematics(FitArgs):
 
         for m in ['sb_mask', 'vel_mask', 'sig_mask']:
             if m is None: continue
-            #if mask.ndim > 1: newmask = self.remap(m)
-            #else: newmask = getattr(self, m)
-            #newmask |= mask
-            #if mask.ndim > 1: newmask = self.bin(newmask)
             if mask.ndim > 1: mask = self.bin(mask)
             setattr(self, m, np.array(getattr(self, m) + mask, dtype=bool))

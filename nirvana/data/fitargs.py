@@ -150,35 +150,10 @@ class FitArgs:
         if self.vel_ivar is None: ivar = np.ones_like(self.vel)
         else: ivar = self.vel_ivar
 
-        #define a minimization function and feed it to simple leastsquares
-        #minfunc = lambda params,vf,x,y,e,reff: np.array((vf - \
-        #        rotcurveeval(x,y,*params,reff=reff))/e).flatten()
-        #vmax,inc,pa,h,vsys = leastsq(minfunc, (200,45,180,3,0), 
-        ##vmax,inc,pa,h,vsys = least_squares(minfunc, (200,45,180,3,0), 
-        #        #method='lm', bounds=[[0,0,0,0,-50], [500,90,360,10,50]],
-        #        args = (self.vel,self.x,self.y,ivar**-.5,self.reff))[0]
-
-        ##check and fix signs if galaxy was fit upside down
-        #if np.product(np.sign([vmax,h])) < 0: pa += 180
-        #pa %= 360
-        #if inc%180 != inc%90: pa += 180
-        #inc %= 90
-        #vmax,inc,h = np.abs([vmax,inc,h])
-
+        #quick fit of data
+        if clip: self.clip()
         fit = AxisymmetricDisk()
         fit.lsq_fit(self)
-
-        #clean up the data by sigma clipping residuals and chisq if desired
-        if clip:
-            model = fit.model()
-            resid = self.remap('vel')-model
-            chisq = resid**2 * self.remap('vel_ivar') if self.vel_ivar is not None else resid**2
-            mask = sigma_clip(chisq, sigma=7, masked=True).mask \
-                 + sigma_clip(resid, sigma=7, masked=True).mask
-
-            #apply mask to data and refit
-            self.remask(mask)
-            fit.lsq_fit(self)
 
         #get fit params
         xc, yc, pa, inc, vsys, vsini, h = fit.par

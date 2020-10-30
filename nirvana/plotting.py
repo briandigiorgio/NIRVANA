@@ -325,7 +325,7 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True, maxr=
     #MaNGA Ha velocity field
     plt.subplot(3,4,5)
     plt.title(r'H$\alpha$ Velocity Data')
-    vmax = np.max(np.abs(vel_r))
+    vmax = min(np.max(np.abs(vel_r)), 300)
     plt.imshow(vel_r, cmap='jet', origin='lower', vmin=-vmax, vmax=vmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
@@ -366,7 +366,8 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True, maxr=
     #MaNGA Ha velocity disp
     plt.subplot(3,4,9)
     plt.title(r'H$\alpha$ Dispersion Data')
-    plt.imshow(sig_r, cmap='jet', origin='lower', vmin=0)
+    vmax = min(np.max(sig_r), 200)
+    plt.imshow(sig_r, cmap='jet', origin='lower', vmax=vmax, vmin=0)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
     cb = plt.colorbar(cax=cax)
@@ -375,7 +376,7 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True, maxr=
     #disp model from dynesty fit
     plt.subplot(3,4,10)
     plt.title('Dispersion Model')
-    plt.imshow(sigmodel, 'jet', origin='lower', vmin=0, vmax=sig_r.max()) 
+    plt.imshow(sigmodel, 'jet', origin='lower', vmin=0, vmax=vmax) 
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
     cb = plt.colorbar(cax=cax)
@@ -385,7 +386,7 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True, maxr=
     plt.subplot(3,4,11)
     plt.title('Dispersion Residuals')
     resid = sig_r - sigmodel
-    vmax = min(np.abs(sig_r - sigmodel).max(),50)
+    vmax = min(np.abs(sig_r - sigmodel).max(), 50)
     plt.imshow(sig_r-sigmodel, 'jet', origin='lower', vmin=-vmax, vmax=vmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)

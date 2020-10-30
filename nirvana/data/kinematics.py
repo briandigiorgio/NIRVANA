@@ -612,7 +612,7 @@ class Kinematics(FitArgs):
         chisq = resid**2 * self.remap('vel_ivar') if self.vel_ivar is not None else resid**2
         mask = sigma_clip(chisq, sigma=sigma, masked=True).mask \
              + sigma_clip(resid, sigma=sigma, masked=True).mask \
-             + self.remap('sb') > sb
+             + self.remap('sb') < sb
 
         #apply mask to data
         self.remask(mask)

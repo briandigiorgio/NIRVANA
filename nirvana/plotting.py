@@ -5,6 +5,7 @@ Plotting for nirvana outputs.
 import numpy as np
 from matplotlib import pyplot as plt
 import matplotlib
+from mpl_toolkits.axes_grid1 import make_axes_locatable as mal
 
 import dynesty
 import dynesty.plotting
@@ -15,6 +16,7 @@ from .fitting import bisym_model, unpack
 from .data.manga import MaNGAStellarKinematics, MaNGAGasKinematics
 from .data.kinematics import Kinematics
 from .models.beam import smear, ConvolveFFTW
+from .models.geometry import projected_polar
 
 def dynmeds(samp, stds=False):
     '''
@@ -184,7 +186,7 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
 
     return paramdict
 
-def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True):
+def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True, maxr=None):
     '''
     Make a summary plot for a `nirvana` output file with MaNGA velocity field.
 
@@ -259,16 +261,22 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True):
     args.setdisp(True)
     args.setnglobs(4)
     vel_r = args.remap('vel')
-    sig_r = args.remap('sig')
+    sig_r = args.remap('sig') if args.sig_phys2 is None else np.sqrt(np.abs(args.remap('sig_phys2')))
 
     #get appropriate number of edges  by looking at length of meds
     nbins = (len(dynmeds(chains)) - args.nglobs + 3*args.fixcent)/4
     if not nbins.is_integer(): raise ValueError('Dynesty output array has a bad shape.')
     else: nbins = int(nbins)
-    args.setedges(nbins, nbin=True)
+    args.setedges(nbins, nbin=True, maxr=maxr)
 
     #recalculate model that was fit
     resdict = profs(chains, args, stds=True)
+    if maxr is not None:
+        r,th = projected_polar(args.x, args.y, resdict['pa'], resdict['inc'])
+        r /= args.reff
+        rmask = r > maxr
+        args.vel_mask |= rmask
+        args.sig_mask |= rmask
     velmodel, sigmodel = bisym_model(args,resdict,plot=True)
 
     #mask border if necessary
@@ -280,8 +288,8 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True):
             sig_r = np.ma.array(sig_r, mask=args.bordermask)
 
     #print global parameters on figure
-    plt.figure(figsize = (12,12))
-    plt.subplot(331)
+    plt.figure(figsize = (12,9))
+    plt.subplot(3,4,1)
     ax = plt.gca()
     plt.axis('off')
     plt.title(f'{plate}-{ifu}',size=20)
@@ -294,14 +302,19 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True):
     plt.text(.1, .2, r'$v_{{sys}}$: %0.1f km/s'%resdict['vsys'], 
             transform=ax.transAxes, size=20)
 
+    #image
+    plt.subplot(3,4,2)
+    plt.imshow(args.image)
+    plt.axis('off')
+
     #Radial velocity profiles
-    plt.subplot(332)
+    plt.subplot(3,4,3)
     profs(chains, args, plt.gca(), stds=True)
     plt.ylim(bottom=0)
     plt.title('Velocity Profiles')
 
     #dispersion profile
-    plt.subplot(333)
+    plt.subplot(3,4,4)
     plt.plot(args.edges[:-1], resdict['sig'])
     plt.fill_between(args.edges[:-1], resdict['sigl'], resdict['sigu'], alpha=.5)
     plt.ylim(bottom=0)
@@ -310,50 +323,193 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True):
     plt.ylabel(r'$v$ (km/s)')
 
     #MaNGA Ha velocity field
-    plt.subplot(334)
+    plt.subplot(3,4,5)
     plt.title(r'H$\alpha$ Velocity Data')
-    plt.imshow(vel_r,cmap='jet',origin='lower')
-    plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
-    plt.colorbar(label='km/s')
+    vmax = min(np.max(np.abs(vel_r)), 300)
+    plt.imshow(vel_r, cmap='jet', origin='lower', vmin=-vmax, vmax=vmax)
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
+    cb = plt.colorbar(cax=cax)
+    cb.set_label('km/s', labelpad=-10)
 
-    #VF model from dynesty fit
-    plt.subplot(335)
+    #Vel model from dynesty fit
+    plt.subplot(3,4,6)
     plt.title('Velocity Model')
-    plt.imshow(velmodel,'jet',origin='lower',vmin=vel_r.min(),vmax=vel_r.max()) 
-    plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
-    plt.colorbar(label='km/s')
+    plt.imshow(velmodel,'jet', origin='lower', vmin=-vmax, vmax=vmax) 
+    plt.tick_params(left=False, bottom=False,labelleft=False, labelbottom=False)
+    cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
+    plt.colorbar(label='km/s', cax=cax)
+    cb = plt.colorbar(cax=cax)
+    cb.set_label('km/s', labelpad=-10)
 
-    #Residuals from fit
-    plt.subplot(336)
+    #Residuals from vel fit
+    plt.subplot(3,4,7)
     plt.title('Velocity Residuals')
-    resid = vel_r-velmodel
-    vmax = min(np.abs(vel_r-velmodel).max(),50)
-    plt.imshow(vel_r-velmodel,'jet',origin='lower',vmin=-vmax,vmax=vmax)
-    plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
-    plt.colorbar(label='km/s')
+    resid = vel_r - velmodel
+    vmax = min(np.abs(vel_r-velmodel).max(), 50)
+    plt.imshow(vel_r-velmodel, 'jet', origin='lower', vmin=-vmax, vmax=vmax)
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
+    plt.colorbar(label='km/s', cax=cax)
+    cb = plt.colorbar(cax=cax)
+    cb.set_label('km/s', labelpad=-10)
+
+    #Chisq from vel fit
+    plt.subplot(3,4,8)
+    plt.title('Velocity Chi Squared')
+    velchisq = (vel_r - velmodel)**2 * args.remap('vel_ivar')
+    plt.imshow(velchisq, 'jet', origin='lower', vmin=0, vmax=50)
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
+    plt.colorbar(cax=cax)
 
     #MaNGA Ha velocity disp
-    plt.subplot(337)
-    plt.title(r'H$\alpha$ Velocity Dispersion Data')
-    plt.imshow(sig_r,cmap='jet',origin='lower')
-    plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
-    plt.colorbar(label='km/s')
+    plt.subplot(3,4,9)
+    plt.title(r'H$\alpha$ Dispersion Data')
+    vmax = min(np.max(sig_r), 200)
+    plt.imshow(sig_r, cmap='jet', origin='lower', vmax=vmax, vmin=0)
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
+    cb = plt.colorbar(cax=cax)
+    cb.set_label('km/s', labelpad=0)
 
     #disp model from dynesty fit
-    plt.subplot(338)
-    plt.title('Velocity Dispersion Model')
-    plt.imshow(sigmodel,'jet',origin='lower',vmin=sig_r.min(),vmax=sig_r.max()) 
-    plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
-    plt.colorbar(label='km/s')
+    plt.subplot(3,4,10)
+    plt.title('Dispersion Model')
+    plt.imshow(sigmodel, 'jet', origin='lower', vmin=0, vmax=vmax) 
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
+    cb = plt.colorbar(cax=cax)
+    cb.set_label('km/s', labelpad=0)
 
     #Residuals from disp fit
-    plt.subplot(339)
+    plt.subplot(3,4,11)
     plt.title('Dispersion Residuals')
-    resid = sig_r-sigmodel
-    vmax = min(np.abs(sig_r-sigmodel).max(),50)
-    plt.imshow(sig_r-sigmodel,'jet',origin='lower',vmin=-vmax,vmax=vmax)
-    plt.tick_params(left=False,bottom=False,labelleft=False,labelbottom=False)
-    plt.colorbar(label='km/s')
+    resid = sig_r - sigmodel
+    vmax = min(np.abs(sig_r - sigmodel).max(), 50)
+    plt.imshow(sig_r-sigmodel, 'jet', origin='lower', vmin=-vmax, vmax=vmax)
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
+    cb = plt.colorbar(cax=cax)
+    cb.set_label('km/s', labelpad=-10)
+
+    #Chisq from sig fit
+    plt.subplot(3,4,12)
+    plt.title('Dispersion Chi Squared')
+    sigchisq = (sig_r - sigmodel)**2 * args.remap('sig_ivar')
+    plt.imshow(sigchisq, 'jet', origin='lower', vmin=0, vmax=50)
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
+    plt.colorbar(cax=cax)
 
     plt.tight_layout()
     return profs(chains, args)
+
+def separate_components(f, plate, ifu, maxr=1.5):
+    if type(f) == str: chains = pickle.load(open(f,'rb'))
+    elif type(f) == np.ndarray: chains = f
+    elif type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler: chains = f.results
+    args = MaNGAGasKinematics.from_plateifu(plate,ifu)#, ignore_psf=not smearing)
+    args.setfixcent(True)
+    args.setdisp(True)
+    args.setnglobs(4)
+    vel_r = args.remap('vel')
+    sig_r = args.remap('sig') if args.sig_phys2 is None else np.sqrt(np.abs(args.remap('sig_phys2')))
+
+    #get appropriate number of edges  by looking at length of meds
+    nbins = (len(dynmeds(chains)) - args.nglobs + 3*args.fixcent)/4
+    if not nbins.is_integer(): raise ValueError('Dynesty output array has a bad shape.')
+    else: nbins = int(nbins)
+    args.setedges(nbins, nbin=True, maxr=maxr)
+
+    #recalculate model that was fit
+    resdict = profs(chains, args, stds=True)
+    z = np.zeros(len(resdict['vts']))
+    vtdict, v2tdict, v2rdict = [resdict.copy(), resdict.copy(), resdict.copy()]
+    vtdict['v2ts'] = z
+    vtdict['v2rs'] = z
+    v2tdict['vts'] = z
+    v2tdict['v2rs'] = z
+    v2rdict['vts'] = z
+    v2rdict['v2ts'] = z
+    if maxr is not None:
+        r,th = projected_polar(args.x, args.y, resdict['pa'], resdict['inc'])
+        r /= args.reff
+        rmask = r > maxr
+        args.vel_mask |= rmask
+        args.sig_mask |= rmask
+
+    velmodel, sigmodel = bisym_model(args, resdict, plot=True)
+    vtmodel,  sigmodel = bisym_model(args, vtdict,  plot=True)
+    v2tmodel, sigmodel = bisym_model(args, v2tdict, plot=True)
+    v2rmodel, sigmodel = bisym_model(args, v2rdict, plot=True)
+    vel_r = args.remap('vel')
+
+    plt.figure(figsize = (12,6))
+    vmax = min(max(np.max(np.abs(velmodel)), np.max(np.abs(vtmodel)), np.max(np.abs(v2tmodel)), np.max(np.abs(v2rmodel)), np.max(np.abs(vel_r))), 300)
+
+    plt.subplot(241)
+    ax = plt.gca()
+    plt.axis('off')
+    plt.title(f'{plate}-{ifu}',size=20)
+    plt.text(.1, .8, r'$i$: %0.1f$^\circ$'%resdict['inc'], 
+            transform=ax.transAxes, size=20)
+    plt.text(.1, .6, r'$\phi$: %0.1f$^\circ$'%resdict['pa'], 
+            transform=ax.transAxes, size=20)
+    plt.text(.1, .4, r'$\phi_b$: %0.1f$^\circ$'%resdict['pab'], 
+            transform=ax.transAxes, size=20)
+    plt.text(.1, .2, r'$v_{{sys}}$: %0.1f km/s'%resdict['vsys'], 
+            transform=ax.transAxes, size=20)
+
+    #image
+    plt.subplot(242)
+    plt.imshow(args.image)
+    plt.axis('off')
+
+    ##Radial velocity profiles
+    #plt.subplot(243)
+    #profs(chains, args, plt.gca(), stds=True)
+    #plt.ylim(bottom=0)
+    #plt.title('Velocity Profiles')
+
+    #MaNGA Ha velocity field
+    plt.subplot(243)
+    plt.title(r'H$\alpha$ Velocity Data')
+    vmax = min(np.max(np.abs(vel_r)), 300)
+    plt.imshow(vel_r, cmap='RdBu', origin='lower', vmin=-vmax, vmax=vmax)
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
+    cb = plt.colorbar(cax=cax)
+    cb.set_label('km/s', labelpad=-10)
+
+    plt.subplot(245)
+    plt.imshow(vtmodel, cmap = 'RdBu', origin='lower', vmin=-vmax, vmax=vmax)
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    plt.text(1.15,.5,'+', transform=plt.gca().transAxes, size=30)
+    plt.xlabel(r'$V_t$', fontsize=16)
+
+    plt.subplot(246)
+    plt.imshow(v2tmodel, cmap = 'RdBu', origin='lower', vmin=-vmax, vmax=vmax)
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    plt.text(1.15,.5,'+', transform=plt.gca().transAxes, size=30)
+    plt.xlabel(r'$V_{2t}$', fontsize=16)
+
+    plt.subplot(247)
+    plt.imshow(v2rmodel, cmap = 'RdBu', origin='lower', vmin=-vmax, vmax=vmax)
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    plt.text(1.15,.5,'=', transform=plt.gca().transAxes, size=30)
+    plt.xlabel(r'$V_{2r}$', fontsize=16)
+
+    plt.subplot(248)
+    plt.imshow(velmodel, cmap = 'RdBu', origin='lower', vmin=-vmax, vmax=vmax)
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    plt.xlabel(r'$V$', fontsize=16)
+
+    #plt.subplot(111)
+    #ax = plt.gca()
+    #plt.text(.25,.5,'+', transform=ax.transAxes, size=30)
+    #plt.text(.5,.5, '+', transform=ax.transAxes, size=30)
+    #plt.text(.75,.5,'=', transform=ax.transAxes, size=30)
+    #plt.axis('off')
+    #ax.patch.set_facecolor('none')
+    plt.tight_layout(h_pad=2)

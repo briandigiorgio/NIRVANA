@@ -80,6 +80,7 @@ class FitArgs:
 
             #calculate maximum radius of image if none is given
             maxr = np.max(np.sqrt(x**2 + y**2))/self.reff
+        self.maxr = maxr
         maxr *= self.reff #change to arcsec
 
         #specify number of bins manually if desired
@@ -111,6 +112,9 @@ class FitArgs:
         '''
 
         self.disp = disp
+
+    def setmix(self, mix):
+        self.mix = mix
 
     def getguess(self, fill=10, clip=True):
         '''

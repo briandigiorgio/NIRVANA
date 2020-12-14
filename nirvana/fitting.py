@@ -60,6 +60,10 @@ def bisym_model(args, paramdict, plot=False):
     r, th = projected_polar(args.grid_x-paramdict['xc'], args.grid_y-paramdict['yc'], pa, inc)
     r /= args.reff
 
+    #if hasattr(args, 'maxr') and args.maxr != None:
+    #    r = np.ma.array(r, mask = r > args.maxr)
+    #    th = np.ma.array(th, mask = r > args.maxr)
+
     #insert a fixed central bin if it is being ignored by fit
     if args.fixcent and paramdict['vts'][0] != 0:
         vts  = np.insert(paramdict['vts'],  0, 0)
@@ -166,7 +170,14 @@ def unpack(params, args, jump=None):
     if args.disp: 
         if args.fixcent: sigjump = jump+1
         else: sigjump = jump
-        paramdict['sig'] = params[start + 3*jump:start + 3*jump + sigjump]
+        end = start + 3*jump + sigjump
+        paramdict['sig'] = params[start + 3*jump:end]
+    else: end = start + 3*jump
+
+    if hasattr(args, 'mix') and args.mix:
+        paramdict['Q'] = params[end]
+        paramdict['M'] = params[end+1]
+        paramdict['lnV'] = params[end+2]
 
     return paramdict
 
@@ -257,16 +268,20 @@ def dynprior(params, args, gaussprior=False):
 
     else:
         #uniform transformations to cover full angular range
-        incp = 90 * paramdict['inc']
+        incp = 85 * paramdict['inc']
         pap = 360 * paramdict['pa']
         pabp = 180 * paramdict['pab']
 
         #uniform guesses for reasonable values for velocities
-        vsysp = (2*paramdict['vsys']- 1) * 100
+        vsysp = (2*paramdict['vsys'] - 1) * 100
         vtsp = 400 * paramdict['vts']
-        v2tsp = 400 * paramdict['v2ts']
-        v2rsp = 400 * paramdict['v2rs']
+        v2tsp = 200 * paramdict['v2ts']
+        v2rsp = 200 * paramdict['v2rs']
         if args.disp: sigp = 300 * paramdict['sig']
+        if args.mix:
+            Qp = paramdict['Q']
+            Mp = (2*paramdict['M'] - 1) * 1000
+            lnVp = (2*paramdict['lnV'] - 1) * 20
 
     #reassemble params array
     repack = [incp,pap,pabp,vsysp]
@@ -282,8 +297,9 @@ def dynprior(params, args, gaussprior=False):
         repack += [xcp,ycp]
 
     #repack all the velocities
-    repack += [*vtsp,*v2tsp,*v2rsp]
+    repack += [*vtsp, *v2tsp, *v2rsp]
     if args.disp: repack += [*sigp]
+    if args.mix:  repack += [Qp, Mp, lnVp]
     return repack
 
 def loglike(params, args, squared=False):
@@ -307,8 +323,9 @@ def loglike(params, args, squared=False):
     Returns:
         :obj:`float`: Log likelihood value associated with parameters.
     '''
+    if args.mix: return mixlike(params, args)
 
-    paramdict = unpack(params,args)
+    paramdict = unpack(params, args)
 
     #make velocity and dispersion models
     velmodel, sigmodel = bisym_model(args, paramdict)
@@ -347,9 +364,53 @@ def loglike(params, args, squared=False):
 
     return llike
 
+def mixlike(params, args):
+    paramdict = unpack(params, args)
+
+    #make velocity and dispersion models
+    velmodel, sigmodel = bisym_model(args, paramdict)
+
+    #mask border if necessary
+    if args.bordermask is not None:
+        velmodel = np.ma.array(velmodel, mask=args.bordermask)
+        if sigmodel is not None:
+            sigmodel = np.ma.array(sigmodel, mask=args.bordermask)
+
+    #compute chi squared value with error if possible
+    goodvar = 1/args.vel_ivar if args.vel_ivar is not None else np.ones_like(args.vel)
+    badvar = np.exp(paramdict['lnV']) + 1/goodvar
+    goodlike = -.5 * ((velmodel - args.vel)**2 / goodvar + np.log(goodvar)) 
+    badlike = -.5 * ((velmodel - args.vel)**2 / badvar + np.log(badvar)) 
+    goodlike += np.log(paramdict['Q'])
+    badlike  += np.log(1 - paramdict['Q'])
+    llike = np.logaddexp(goodlike, badlike)
+
+    #add in sigma model if applicable
+    if sigmodel is not None:
+        #compute chisq with squared sigma or not
+        sigdata = np.sqrt(args.sig_phys2)
+        goodsigvar = np.sqrt(args.sig_phys2_ivar) if args.sig_phys2_ivar is not None else np.ones_like(sigdata)
+        badsigvar = np.exp(paramdict['lnV']) + 1/goodsigvar
+        goodsiglike = -.5 * ((sigmodel - sigdata)**2 / goodsigvar + np.log(goodsigvar))
+        badsiglike = -.5 * ((sigmodel - sigdata)**2 / badsigvar + np.log(badvar))
+        goodsiglike += np.log(paramdict['Q'])
+        badsiglike  += np.log(1 - paramdict['Q'])
+        siglike = np.logaddexp(goodsiglike, badsiglike)
+        llike = np.logaddexp(llike, siglike)
+
+    llike = np.sum(llike)
+    #add in penalty for non smooth rotation curves
+    llike = llike - smoothing(paramdict['vts'],  args.weight) \
+                  - smoothing(paramdict['v2ts'], args.weight) \
+                  - smoothing(paramdict['v2rs'], args.weight)
+    if sigmodel is not None: 
+        llike = llike - smoothing(paramdict['sig'], args.weight)
+
+    return llike
+
 def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
         cores=10, maxr=None, cen=False, weight=10, smearing=True, points=500,
-        stellar=False, root=None, verbose=False, fixcent=True, disp=True):
+        stellar=False, root=None, verbose=False, fixcent=True, disp=True, mix=True):
     '''
     Main function for fitting a MaNGA galaxy with a nonaxisymmetric model.
 
@@ -430,6 +491,7 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
     args.setfixcent(fixcent)
     args.setweight(weight)
     args.setdisp(disp)
+    args.setmix(mix)
 
     #do a quick fit to get inclination to set bin edges
     if nbins is not None: args.setedges(nbins, nbin=True, maxr=maxr)
@@ -450,6 +512,7 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
     #adjust dimensions accordingly
     if fixcent: ndim -= 3
     if disp: ndim += len(args.edges)-1
+    if mix: ndim += 3
     print(f'{len(args.edges)-1} radial bins')
     
     #open up multiprocessing pool if needed

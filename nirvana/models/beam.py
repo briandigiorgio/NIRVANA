@@ -79,6 +79,8 @@ def convolve_fft(data, kernel, kernel_fft=False, return_fft=False):
     if data.shape != kernel.shape:
         raise ValueError('Data and kernel must have the same shape.')
     if not np.all(np.isfinite(data)) or not np.all(np.isfinite(kernel)):
+        print('**********************************')
+        print((~np.isfinite(data)).sum(),(~np.isfinite(kernel)).sum())
         raise ValueError('Data and kernel must both have valid values.')
 
     datafft = np.fft.fftn(data)

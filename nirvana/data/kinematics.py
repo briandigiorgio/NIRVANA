@@ -14,7 +14,7 @@ from astropy.stats import sigma_clip
 
 from .fitargs import FitArgs
 
-from ..models.beam import construct_beam
+from ..models.beam import construct_beam, ConvolveFFTW, smear
 from ..models.geometry import projected_polar
 from ..models import oned, axisym
 
@@ -147,8 +147,8 @@ class Kinematics(FitArgs):
             ``grid_y`` is None.
     """
     def __init__(self, vel, vel_ivar=None, vel_mask=None, x=None, y=None, sb=None, sb_ivar=None,
-                 sb_mask=None, sig=None, sig_ivar=None, sig_mask=None, sig_corr=None, psf=None,
-                 aperture=None, binid=None, grid_x=None, grid_y=None, reff=None, fwhm=None, 
+                 sb_mask=None, sb_anr=None, sig=None, sig_ivar=None, sig_mask=None, sig_corr=None, 
+                 psf=None, aperture=None, binid=None, grid_x=None, grid_y=None, reff=None, fwhm=None, 
                  bordermask=None, image=None):
 
         # Check shape of input arrays
@@ -173,6 +173,7 @@ class Kinematics(FitArgs):
         self.reff = reff
         self.fwhm = fwhm
         self.image = image
+        self.sb_anr = sb_anr
 
         # TODO: This has more to do with the model than the data, so we
         # should put in the relevant model class/method
@@ -255,7 +256,7 @@ class Kinematics(FitArgs):
 
         # Unravel and select the valid values for all arrays
         for attr in ['x', 'y', 'sb', 'sb_ivar', 'sb_mask', 'vel', 'vel_ivar', 'vel_mask', 'sig', 
-                     'sig_ivar', 'sig_mask', 'sig_corr', 'bordermask']:
+                     'sig_ivar', 'sig_mask', 'sig_corr', 'bordermask','sb_anr']:
             if getattr(self, attr) is not None:
                 setattr(self, attr, getattr(self, attr).ravel()[indx])
 
@@ -584,7 +585,7 @@ class Kinematics(FitArgs):
         binid = np.arange(np.product(_vel.shape)).reshape(_vel.shape)
         return cls(_vel, x=_x, y=_y, grid_x=_x, grid_y=_y, reff=reff, binid=binid, sig=_sig, psf=_psf, sb=_sb, bordermask=bordermask)
 
-    def clip(self, sigma=7, sb=.1):
+    def clip(self, sigma=7, sb=.1, anr=5, maxiter=10, smear_dv=50, smear_dsig=50, verbose=False):
         '''
         Filter out bad data in kinematic data.
         
@@ -602,20 +603,44 @@ class Kinematics(FitArgs):
                 Flux threshold below which spaxels are masked.
         '''
 
-        #quick axisymmetric least squares fit
-        fit = axisym.AxisymmetricDisk()
-        fit.lsq_fit(self)
+        cnvfftw = ConvolveFFTW(self.spatial_shape)
+        vel = self.remap('vel')
+        smeared = smear(vel, self.beam_fft, beam_fft=True, sig=self.remap('sig'), sb=self.remap('sb'), cnvfftw=cnvfftw)
+        dvmask = np.abs(vel - smeared[1]) > smear_dv
+        dsigmask = np.abs(self.remap('sig') - smeared[2]) > smear_dsig
 
-        #clean up the data by sigma clipping residuals and chisq if desired
-        model = fit.model()
-        resid = self.remap('vel') - model
-        chisq = resid**2 * self.remap('vel_ivar') if self.vel_ivar is not None else resid**2
-        mask = sigma_clip(chisq, sigma=sigma, masked=True).mask \
-             + sigma_clip(resid, sigma=sigma, masked=True).mask \
-             + self.remap('sb') < sb
+        nmaskedold = -1
+        nmasked = 0
+        niter = 0
+        while nmaskedold != nmasked:
+            #quick axisymmetric least squares fit
+            fit = axisym.AxisymmetricDisk()
+            fit.lsq_fit(self)
 
-        #apply mask to data
-        self.remask(mask)
+            #clean up the data by sigma clipping residuals and chisq if desired
+            vel = self.remap('vel')
+            model = fit.model()
+            resid = vel - model
+            chisq = resid**2 * self.remap('vel_ivar') if self.vel_ivar is not None else resid**2
+            clipmask = sigma_clip(chisq, sigma=sigma, masked=True).mask \
+                 + sigma_clip(resid, sigma=sigma, masked=True).mask 
+            if self.sb is not None: sbmask = self.remap('sb') < sb
+            if self.sb_anr is not None: anrmask = self.remap('sb_anr') < anr
+
+            mask = clipmask + sbmask + anrmask + dvmask + dsigmask
+
+            #iterate
+            nmaskedold = nmasked
+            nmasked = np.sum(mask)
+            niter += 1
+            if verbose: print(f'Performed {niter} clipping iterations...', end='\r')
+
+            #apply mask to data
+            self.remask(mask)
+            if niter > maxiter: 
+                if verbose: print(f'Reached maximum clipping iterations: {niter}')
+                break
+        if verbose: print(f'Clipping converged after {niter} iterations')
 
     def remask(self, mask):
         '''
@@ -633,7 +658,7 @@ class Kinematics(FitArgs):
 
         if mask.ndim > 1 and mask.shape != self.spatial_shape:
             raise ValueError('Mask is not the same shape as data.')
-        if mask.ndim == 1 and len(mask) != len(args.vel):
+        if mask.ndim == 1 and len(mask) != len(self.vel):
             raise ValueError('Mask is not the same length as data')
 
         for m in ['sb_mask', 'vel_mask', 'sig_mask']:

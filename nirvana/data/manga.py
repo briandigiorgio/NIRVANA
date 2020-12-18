@@ -320,6 +320,7 @@ class MaNGAGasKinematics(MaNGAKinematics):
             sb = hdu['EMLINE_GFLUX'].data[eml[line]]
             sb_ivar = hdu['EMLINE_GFLUX_IVAR'].data[eml[line]]
             sb_mask = hdu['EMLINE_GFLUX_MASK'].data[eml[line]] > 0
+            sb_anr = hdu['EMLINE_GANR'].data[eml[line]]
             vel = hdu['EMLINE_GVEL'].data[eml[line]]
             vel_ivar = hdu['EMLINE_GVEL_IVAR'].data[eml[line]]
             vel_mask = hdu['EMLINE_GVEL_MASK'].data[eml[line]] > 0
@@ -332,8 +333,8 @@ class MaNGAGasKinematics(MaNGAKinematics):
             print('Done')
 
         super().__init__(vel, vel_ivar=vel_ivar, vel_mask=vel_mask, x=x, y=y, 
-                         sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sig=sig, 
-                         sig_ivar=sig_ivar, sig_mask=sig_mask, 
+                         sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sb_anr=sb_anr,
+                         sig=sig, sig_ivar=sig_ivar, sig_mask=sig_mask, 
                          sig_corr=sig_corr, psf=psf, binid=binid, grid_x=grid_x, 
                          grid_y=grid_y, reff=reff , fwhm=fwhm, image=image)
 

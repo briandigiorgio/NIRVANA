@@ -178,15 +178,13 @@ class FitArgs:
         #iterate through bins and get vt value for each bin, 
         #dummy value for v2t and v2r since there isn't a good guess
         nbin = len(self.edges)
-        if hasattr(self, 'fixcent'):
-            if self.fixcent: nbin -= 1
-        vts = np.zeros(nbin)
-        v2ts = np.array([fill] * nbin)
-        v2rs = np.array([fill] * nbin)
+        vt = np.zeros(nbin)
+        v2t = np.array([fill] * nbin)
+        v2r = np.array([fill] * nbin)
         for i in range(1,nbin):
             cut = (r > self.edges[i-1]) * (r < self.edges[i])
-            vts[i] = np.max(model[cut])
-            guess += [vts[i], v2ts[i], v2rs[i]]
+            vt[i] = np.max(model[cut])
+            guess += [vt[i], v2t[i], v2r[i]]
         
         #clean and return
         guess = np.array(guess)

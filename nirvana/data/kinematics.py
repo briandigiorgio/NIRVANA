@@ -617,17 +617,18 @@ class Kinematics(FitArgs):
             fit = axisym.AxisymmetricDisk()
             fit.lsq_fit(self)
 
+            mask = dvmask + dsigmask
             #clean up the data by sigma clipping residuals and chisq if desired
             vel = self.remap('vel')
             model = fit.model()
             resid = vel - model
             chisq = resid**2 * self.remap('vel_ivar') if self.vel_ivar is not None else resid**2
-            clipmask = sigma_clip(chisq, sigma=sigma, masked=True).mask \
+            mask += sigma_clip(chisq, sigma=sigma, masked=True).mask \
                  + sigma_clip(resid, sigma=sigma, masked=True).mask 
-            if self.sb is not None: sbmask = self.remap('sb') < sb
-            if self.sb_anr is not None: anrmask = self.remap('sb_anr') < anr
+            if self.sb is not None: mask += self.remap('sb') < sb
+            if self.sb_anr is not None: mask += self.remap('sb_anr') < anr
 
-            mask = clipmask + sbmask + anrmask + dvmask + dsigmask
+            mask += dvmask + dsigmask
 
             #iterate
             nmaskedold = nmasked

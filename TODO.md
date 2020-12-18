@@ -2,16 +2,16 @@
 
 ## Main tasks
 
-- squaring sigma:
+- ~~squaring sigma:~~ caused weird behavior
     - new variable sigma2 = sigma^2 - sigmacorr^2
     - new error by propagating errors through
     - in likelihood, compute chisq of square of sigma instead
-- maximum radius to avoid edge effects
-- pick out bad points
+- ~~maximum radius to avoid edge effects~~ still needs refining
+- ~~pick out bad points~~ not good enough yet
     - sigma clip outliers
 - projected velocities
     - just take out sini
-- add error term
+- ~~add error term~~ not working yet
     -hogg 2010
 - stellar fits
 - allow Kinematics to include (inverse) covariance

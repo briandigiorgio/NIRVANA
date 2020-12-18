@@ -587,11 +587,13 @@ class Kinematics(FitArgs):
 
     def clip(self, sigma=7, sb=.1, anr=5, maxiter=10, smear_dv=50, smear_dsig=50, verbose=False):
         '''
-        Filter out bad data in kinematic data.
+        Filter out bad spaxels in kinematic data.
         
-        Performs a quick axisymmetric least squares fit and sigma clipping the
-        residuals and chisq. Also cuts based on a surface brightness
-        threshold. Remasks the data to get rid of bad stuff.
+        Looks for features smaller than PSF by reconvolving PSF and looking for
+        outlier points. Iteratively fits axisymmetric velocity field models and
+        sigma clips residuals and chisq to get rid of outliers. Also clips
+        based on surface brightness flux and ANR ratios. Applies new mask to
+        galaxy.
 
         Args: 
             sigma (:obj:`float`, optional): 
@@ -601,14 +603,32 @@ class Kinematics(FitArgs):
                 nonaxisymmetric features. 
             sb (:obj:`float`, optional): 
                 Flux threshold below which spaxels are masked.
+            sb (:obj:`float`, optional): 
+                Surface brightness amplitude/noise ratio threshold below which
+                spaxels are masked.
+            maxiter (:obj:`int`, optional):
+                Maximum number of iterations to allow clipping process to go
+                through.
+            smear_dv (:obj:`float`, optional):
+                Threshold for clipping residuals of resmeared velocity data
+            smear_dsig (:obj:`float`, optional):
+                Threshold for clipping residuals of resmeared velocity
+                dispersion data.
+            verbose (:obj:`bool`, optional):
+                Flag for printing out information on iterations.
         '''
 
+        #reconvolve psf on top of velocity and dispersion
         cnvfftw = ConvolveFFTW(self.spatial_shape)
         vel = self.remap('vel')
-        smeared = smear(vel, self.beam_fft, beam_fft=True, sig=self.remap('sig'), sb=self.remap('sb'), cnvfftw=cnvfftw)
+        smeared = smear(vel, self.beam_fft, beam_fft=True, 
+                sig=self.remap('sig'), sb=self.remap('sb'), cnvfftw=cnvfftw)
+
+        #cut out spaxels with too high residual because they're probably bad
         dvmask = np.abs(vel - smeared[1]) > smear_dv
         dsigmask = np.abs(self.remap('sig') - smeared[2]) > smear_dsig
 
+        #iterate through rest of clips until mask converges
         nmaskedold = -1
         nmasked = 0
         niter = 0
@@ -617,18 +637,20 @@ class Kinematics(FitArgs):
             fit = axisym.AxisymmetricDisk()
             fit.lsq_fit(self)
 
-            mask = dvmask + dsigmask
-            #clean up the data by sigma clipping residuals and chisq if desired
+            #quick axisymmetric fit
             vel = self.remap('vel')
             model = fit.model()
             resid = vel - model
+
+            #clean up the data by sigma clipping residuals and chisq
             chisq = resid**2 * self.remap('vel_ivar') if self.vel_ivar is not None else resid**2
+            mask = dvmask + dsigmask
             mask += sigma_clip(chisq, sigma=sigma, masked=True).mask \
                  + sigma_clip(resid, sigma=sigma, masked=True).mask 
+
+            #clip on surface brightness and ANR
             if self.sb is not None: mask += self.remap('sb') < sb
             if self.sb_anr is not None: mask += self.remap('sb_anr') < anr
-
-            mask += dvmask + dsigmask
 
             #iterate
             nmaskedold = nmasked

@@ -91,17 +91,6 @@ class FitArgs:
             binwidth = min(self.fwhm/2/np.cos(np.radians(inc)), self.fwhm)
             self.edges = np.arange(0, maxr, binwidth)/self.reff
 
-    def setfixcent(self, fixcent):
-        '''
-        Whether or not to fix the central velocity bin at 0.
-
-        Args:
-            fixcent (:obj:`bool`):
-                Flag for to hold central velocity bin at 0.
-        '''
-
-        self.fixcent = fixcent
-
     def setdisp(self, disp):
         '''
         Whether or not to fit dispersion.

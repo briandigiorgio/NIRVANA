@@ -64,25 +64,13 @@ def bisym_model(args, paramdict, plot=False):
     #    r = np.ma.array(r, mask = r > args.maxr)
     #    th = np.ma.array(th, mask = r > args.maxr)
 
-    #insert a fixed central bin if it is being ignored by fit
-    if args.fixcent and paramdict['vts'][0] != 0:
-        vts  = np.insert(paramdict['vts'],  0, 0)
-        v2ts = np.insert(paramdict['v2ts'], 0, 0)
-        v2rs = np.insert(paramdict['v2rs'], 0, 0)
-    else:
-        vts  = paramdict['vts']
-        v2ts = paramdict['v2ts']
-        v2rs = paramdict['v2rs']
-
-    #interpolate velocity values for all r 
-    bincents = (args.edges[:-1] + args.edges[1:])/2
-    vtvals  = np.interp(r, bincents, vts)
-    v2tvals = np.interp(r, bincents, v2ts)
-    v2rvals = np.interp(r, bincents, v2rs)
+    vtvals = np.interp(r, args.edges, paramdict['vt'])
+    v2tvals = np.interp(r, args.edges, paramdict['v2t'])
+    v2rvals = np.interp(r, args.edges, paramdict['v2r'])
 
     #define dispersion and surface brightness if desired
     if args.disp: 
-        sigmodel = np.interp(r, bincents, paramdict['sig'])
+        sigmodel = np.interp(r, args.edges, paramdict['sig'])
         sb = args.remap('sb')
     else: 
         sigmodel = None
@@ -139,8 +127,8 @@ def unpack(params, args, jump=None):
         :obj:`dict`: Dictionary with keys for inclination `inc`, first order
         position angle `pa`, second order position angle `pab`, systemic
         velocity `vsys`, x and y center coordinates `xc` and `yc`, `np.ndarray`_
-        of first order tangential velocities `vts`, `np.ndarray`_ objects of
-        second order tangential and radial velocities `v2ts` and `v2rs`, and
+        of first order tangential velocities `vt`, `np.ndarray`_ objects of
+        second order tangential and radial velocities `v2t` and `v2r`, and
         `np.ndarray`_ of velocity dispersions `sig`. Arrays have lengths that
         are the same as the number of bins (determined automatically or from
         `jump`). All angles are in degrees and all velocities must be in
@@ -157,19 +145,16 @@ def unpack(params, args, jump=None):
 
     #figure out what indices to get velocities from
     start = args.nglobs
-    if jump is None: 
-        jump = len(args.edges)-1
-        if args.fixcent: jump -= 1
+    if jump is None: jump = len(args.edges)
 
     #velocities
-    paramdict['vts']  = params[start:start + jump]
-    paramdict['v2ts'] = params[start + jump:start + 2*jump]
-    paramdict['v2rs'] = params[start + 2*jump:start + 3*jump]
+    paramdict['vt']  = params[start:start + jump]
+    paramdict['v2t'] = params[start + jump:start + 2*jump]
+    paramdict['v2r'] = params[start + 2*jump:start + 3*jump]
 
     #get sigma values and fill in center bin if necessary
     if args.disp: 
-        if args.fixcent: sigjump = jump+1
-        else: sigjump = jump
+        sigjump = jump + 1
         end = start + 3*jump + sigjump
         paramdict['sig'] = params[start + 3*jump:end]
     else: end = start + 3*jump
@@ -262,9 +247,9 @@ def dynprior(params, args, gaussprior=False):
         pap   = trunc(paramdict['pa'],guessdict['pag'],10,0,360)
         pabp  = 180 * paramdict['pab']
         vsysp = trunc(paramdict['vsys'],guessdict['vsysg'],1,guessdict['vsysg']-5,guessdict['vsysg']+5)
-        vtsp  = trunc(paramdict['vts'],guessdict['vtsg'],50,0,400)
-        v2tsp = trunc(paramdict['v2ts'],guessdict['v2tsg'],50,0,200)
-        v2rsp = trunc(paramdict['v2rs'],guessdict['v2rsg'],50,0,200)
+        vtp  = trunc(paramdict['vt'],guessdict['vtg'],50,0,400)
+        v2tp = trunc(paramdict['v2t'],guessdict['v2tg'],50,0,200)
+        v2rp = trunc(paramdict['v2r'],guessdict['v2rg'],50,0,200)
 
     else:
         #uniform transformations to cover full angular range
@@ -274,9 +259,9 @@ def dynprior(params, args, gaussprior=False):
 
         #uniform guesses for reasonable values for velocities
         vsysp = (2*paramdict['vsys'] - 1) * 100
-        vtsp = 400 * paramdict['vts']
-        v2tsp = 200 * paramdict['v2ts']
-        v2rsp = 200 * paramdict['v2rs']
+        vtp = 400 * paramdict['vt']
+        v2tp = 200 * paramdict['v2t']
+        v2rp = 200 * paramdict['v2r']
         if args.disp: sigp = 300 * paramdict['sig']
         if args.mix:
             Qp = paramdict['Q']
@@ -297,7 +282,7 @@ def dynprior(params, args, gaussprior=False):
         repack += [xcp,ycp]
 
     #repack all the velocities
-    repack += [*vtsp, *v2tsp, *v2rsp]
+    repack += [*vtp, *v2tp, *v2rp]
     if args.disp: repack += [*sigp]
     if args.mix:  repack += [Qp, Mp, lnVp]
     return repack
@@ -338,29 +323,31 @@ def loglike(params, args, squared=False):
 
     #compute chi squared value with error if possible
     llike = (velmodel - args.vel)**2
-    if args.vel_ivar is not None: llike *= args.vel_ivar
-    llike = -.5*np.ma.sum(llike)
+    if args.vel_ivar is not None: 
+        llike = llike * args.vel_ivar - .5 * np.log(2*np.pi * args.vel_ivar)
+    llike = -.5 * np.ma.sum(llike)
 
     #add in penalty for non smooth rotation curves
-    llike = llike - smoothing(paramdict['vts'],  args.weight) \
-                  - smoothing(paramdict['v2ts'], args.weight) \
-                  - smoothing(paramdict['v2rs'], args.weight)
+    llike = llike - smoothing(paramdict['vt'],  args.weight) \
+                  - smoothing(paramdict['v2t'], args.weight) \
+                  - smoothing(paramdict['v2r'], args.weight)
 
     #add in sigma model if applicable
     if sigmodel is not None:
         #compute chisq with squared sigma or not
         if squared:
             sigdata = args.sig_phys2
-            sigdataivar = args.sig_phys2_ivar
+            sigdataivar = args.sig_phys2_ivar if args.sig_phys2_ivar is not None else np.ones_like(sigdata)
             siglike = (sigmodel**2 - sigdata)**2
         else:
             sigdata = np.sqrt(args.sig_phys2)
-            sigdataivar = np.sqrt(args.sig_phys2_ivar)
+            sigdataivar = np.sqrt(args.sig_phys2_ivar) if args.sig_phys2_ivar is not None else np.ones_like(sigdata)
             siglike = (sigmodel - sigdata)**2
 
-        if sigdataivar is not None: siglike *= sigdataivar
-        llike = llike - .5*np.ma.sum(siglike)
-        llike = llike - smoothing(paramdict['sig'], args.weight)
+        if sigdataivar is not None: 
+            siglike = siglike * sigdataivar - .5 * np.log(2*np.pi * sigdataivar)
+        llike -= .5*np.ma.sum(siglike)
+        llike -= smoothing(paramdict['sig'], args.weight)
 
     return llike
 
@@ -389,7 +376,7 @@ def mixlike(params, args):
     if sigmodel is not None:
         #compute chisq with squared sigma or not
         sigdata = np.sqrt(args.sig_phys2)
-        goodsigvar = np.sqrt(args.sig_phys2_ivar) if args.sig_phys2_ivar is not None else np.ones_like(sigdata)
+        goodsigvar = args.sig_phys2_ivar if args.sig_phys2_ivar is not None else np.ones_like(sigdata)
         badsigvar = np.exp(paramdict['lnV']) + 1/goodsigvar
         goodsiglike = -.5 * ((sigmodel - sigdata)**2 / goodsigvar + np.log(goodsigvar))
         badsiglike = -.5 * ((sigmodel - sigdata)**2 / badsigvar + np.log(badvar))
@@ -400,9 +387,9 @@ def mixlike(params, args):
 
     llike = np.sum(llike)
     #add in penalty for non smooth rotation curves
-    llike = llike - smoothing(paramdict['vts'],  args.weight) \
-                  - smoothing(paramdict['v2ts'], args.weight) \
-                  - smoothing(paramdict['v2rs'], args.weight)
+    llike = llike - smoothing(paramdict['vt'],  args.weight) \
+                  - smoothing(paramdict['v2t'], args.weight) \
+                  - smoothing(paramdict['v2r'], args.weight)
     if sigmodel is not None: 
         llike = llike - smoothing(paramdict['sig'], args.weight)
 
@@ -410,7 +397,7 @@ def mixlike(params, args):
 
 def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
         cores=10, maxr=None, cen=False, weight=10, smearing=True, points=500,
-        stellar=False, root=None, verbose=False, fixcent=True, disp=True, mix=False):
+        stellar=False, root=None, verbose=False, disp=True, mix=False):
     '''
     Main function for fitting a MaNGA galaxy with a nonaxisymmetric model.
 
@@ -452,10 +439,11 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
             Direct path to maps and cube files, circumventing `dr`.
         verbose (:obj:`bool`, optional):
             Flag to give verbose output from :class:`dynesty.NestedSampler`.
-        fixcent (:obj:`bool:, optional):
-            Flag to require the center bin of the velocity field to be 0.
         disp (:obj:`bool`, optional):
             Flag for whether to fit the velocity dispersion profile as well.
+        mix (:obj:`bool`, optional):
+            Flat for whether or not to fit a Bayesian mixture model a la Hogg
+            2010. Not currently functional
 
     Returns:
         :class:`dynesty.NestedSampler`: Sampler from `dynesty` containing
@@ -488,7 +476,6 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
 
     #set basic parameters for galaxy
     args.setnglobs(6) if cen else args.setnglobs(4)
-    args.setfixcent(fixcent)
     args.setweight(weight)
     args.setdisp(disp)
     args.setmix(mix)
@@ -510,10 +497,10 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
     ndim = len(theta0)
 
     #adjust dimensions accordingly
-    if fixcent: ndim -= 3
-    if disp: ndim += len(args.edges)-1
+    nbin = len(args.edges)
+    if disp: ndim += nbin
     if mix: ndim += 3
-    print(f'{len(args.edges)-1} radial bins')
+    print(f'{nbin} radial bins, {ndim} parameters')
     
     #open up multiprocessing pool if needed
     if cores > 1:

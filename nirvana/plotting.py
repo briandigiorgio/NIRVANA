@@ -115,8 +115,8 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
         in the sampler. Has keys for inclination `inc`, first order position
         angle `pa`, second order position angle `pab`, systemic velocity `vsys`,
         x and y center coordinates `xc` and `yc`, `np.ndarray`_ of first order
-        tangential velocities `vts`, `np.ndarray`_ objects of second order
-        tangential and radial velocities `v2ts` and `v2rs`, and `np.ndarray`_ of
+        tangential velocities `vt`, `np.ndarray`_ objects of second order
+        tangential and radial velocities `v2t` and `v2r`, and `np.ndarray`_ of
         velocity dispersions `sig`. If `stds == True` it will also contain keys
         for the 1 sigma lower bounds of the velocity parameters `vtl`, `v2tl`,
         `v2rl`, and `sigl` as well as their 1 sigma upper bounds `vtu`, `v2tu`,
@@ -132,61 +132,42 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
     if stds: meds, lstd, ustd = meds
     paramdict = unpack(meds, args, jump=jump)
 
-    #insert 0 for fixed center bin if necessary
-    if args.fixcent:
-        paramdict['vts']  = np.insert(paramdict['vts'],  0, 0)
-        paramdict['v2ts'] = np.insert(paramdict['v2ts'], 0, 0)
-        paramdict['v2rs'] = np.insert(paramdict['v2rs'], 0, 0)
-
     #get standard deviations and put them into the dictionary
     if stds:
         start = args.nglobs
-        jump = len(args.edges)-1
-        if args.fixcent: jump -= 1 #doesn't store inner bin if fixcent
-        paramdict['vtl']  = lstd[start:start + jump]
-        paramdict['v2tl'] = lstd[start + jump:start + 2*jump]
-        paramdict['v2rl'] = lstd[start + 2*jump:start + 3*jump]
-        paramdict['vtu']  = ustd[start:start + jump]
-        paramdict['v2tu'] = ustd[start + jump:start + 2*jump]
-        paramdict['v2ru'] = ustd[start + 2*jump:start + 3*jump]
+        jump = len(args.edges)
+        vs = ['vt', 'v2t', 'v2r']
+        for i,v in enumerate(vs):
+            for b in ['l','u']:
+                exec(f'paramdict["{v}{b}"] = {b}std[start + {i}*jump : start + {i+1}*jump]')
 
         #dispersion stds
         if args.disp: 
-            if args.fixcent: sigjump = jump+1 #no fixed center for disp
-            else: sigjump = jump
+            sigjump = jump + 1
             paramdict['sigl'] = lstd[start + 3*jump:start + 3*jump + sigjump]
             paramdict['sigu'] = ustd[start + 3*jump:start + 3*jump + sigjump]
-
-        #add in central bin if necessary
-        if args.fixcent:
-            paramdict['vtl']  = np.insert(paramdict['vtl'],  0, 0)
-            paramdict['v2tl'] = np.insert(paramdict['v2tl'], 0, 0)
-            paramdict['v2rl'] = np.insert(paramdict['v2rl'], 0, 0)
-            paramdict['vtu']  = np.insert(paramdict['vtu'],  0, 0)
-            paramdict['v2tu'] = np.insert(paramdict['v2tu'], 0, 0)
-            paramdict['v2ru'] = np.insert(paramdict['v2ru'], 0, 0)
 
     #plot profiles if desired
     if plot is not None: 
         if not isinstance(plot, matplotlib.axes._subplots.Axes): f,plot = plt.subplots()
         ls = [r'$V_t$',r'$V_{2t}$',r'$V_{2r}$']
-        [plot.plot(args.edges[:-1], p, label=ls[i], **kwargs) 
-                for i,p in enumerate([paramdict['vts'], paramdict['v2ts'], paramdict['v2rs']])]
+        [plot.plot(args.edges, p, label=ls[i], **kwargs) 
+                for i,p in enumerate([paramdict['vt'], paramdict['v2t'], paramdict['v2r']])]
 
         #add in lower and upper bounds
         if stds: 
-            [plot.fill_between(args.edges[:-1], p[0], p[1], alpha=.5) 
+            [plot.fill_between(args.edges, p[0], p[1], alpha=.5) 
                 for i,p in enumerate([[paramdict['vtl'], paramdict['vtu']],
                                       [paramdict['v2tl'], paramdict['v2tu']],
                                       [paramdict['v2rl'], paramdict['v2ru']]])]
 
         plt.xlabel(r'$R_e$')
         plt.ylabel(r'$v$ (km/s)')
-        plt.legend()
+        plt.legend(loc=2)
 
     return paramdict
 
-def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True, maxr=None, mix=False):
+def summaryplot(f, plate, ifu, smearing=True, stellar=False, maxr=None, mix=False):
     '''
     Make a summary plot for a `nirvana` output file with MaNGA velocity field.
 
@@ -207,17 +188,16 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True, maxr=
             Flag for whether or not to apply beam smearing to models.
         stellar (:obj:`bool`, optional):
             Flag for whether or not to use stellar velocity data instead of gas.
-        fixcent (:obj:`bool`, optional):
-            Flag for whether or not the fit assumed the center velocity bin had
-            to be 0.
+        mix (:obj:`bool`, optional):
+            Flag for whether or not the fit is a Bayesian mixture. [NOT WORKING]
         
     Returns:
         :obj:`dict`: Dictionary with all of the median values of the posteriors
         in the sampler. Has keys for inclination `inc`, first order position
         angle `pa`, second order position angle `pab`, systemic velocity `vsys`,
         x and y center coordinates `xc` and `yc`, `np.ndarray`_ of first order
-        tangential velocities `vts`, `np.ndarray`_ objects of second order
-        tangential and radial velocities `v2ts` and `v2rs`, and `np.ndarray`_ of
+        tangential velocities `vt`, `np.ndarray`_ objects of second order
+        tangential and radial velocities `v2t` and `v2r`, and `np.ndarray`_ of
         velocity dispersions `sig`. If `stds == True` it will also contain keys
         for the 1 sigma lower bounds of the velocity parameters `vtl`, `v2tl`,
         `v2rl`, and `sigl` as well as their 1 sigma upper bounds `vtu`, `v2tu`,
@@ -257,21 +237,21 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True, maxr=
             args = MaNGAGasKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing)
 
     #set relevant parameters for galaxy
-    args.setfixcent(fixcent)
     args.setdisp(True)
     args.setnglobs(4)
     args.setmix(mix)
+    args.clip()
 
     vel_r = args.remap('vel')
     sig_r = args.remap('sig') if args.sig_phys2 is None else np.sqrt(np.abs(args.remap('sig_phys2')))
 
     #get appropriate number of edges  by looking at length of meds
     meds = dynmeds(chains)
-    nbins = (len(meds) - args.nglobs + 3*args.fixcent - 3*args.mix)/4
+    nbins = (len(meds) - args.nglobs - 3*args.mix)/4
     if not nbins.is_integer(): 
         raise ValueError('Dynesty output array has a bad shape.')
     else: nbins = int(nbins)
-    args.setedges(nbins, nbin=True, maxr=maxr)
+    args.setedges(nbins-1, nbin=True, maxr=maxr)
     args.clip()
 
     #recalculate model that was fit
@@ -326,8 +306,8 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True, maxr=
 
     #dispersion profile
     plt.subplot(3,4,4)
-    plt.plot(args.edges[:-1], resdict['sig'])
-    plt.fill_between(args.edges[:-1], resdict['sigl'], resdict['sigu'], alpha=.5)
+    plt.plot(args.edges, resdict['sig'])
+    #plt.fill_between(args.edges, resdict['sigl'], resdict['sigu'], alpha=.5)
     plt.ylim(bottom=0)
     plt.title('Velocity Dispersion Profile')
     plt.xlabel(r'$R_e$')
@@ -369,7 +349,7 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, fixcent=True, maxr=
     plt.subplot(3,4,8)
     plt.title('Velocity Chi Squared')
     velchisq = (vel_r - velmodel)**2 * args.remap('vel_ivar')
-    plt.imshow(velchisq, 'jet', origin='lower', vmin=0)#, vmax=50)
+    plt.imshow(velchisq, 'jet', origin='lower', vmin=0, vmax=50)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
     plt.colorbar(cax=cax)
@@ -425,28 +405,26 @@ def separate_components(f, plate, ifu, maxr=1.5):
     elif type(f) == np.ndarray: chains = f
     elif type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler: chains = f.results
     args = MaNGAGasKinematics.from_plateifu(plate,ifu)#, ignore_psf=not smearing)
-    args.setfixcent(True)
-    args.setdisp(True)
     args.setnglobs(4)
     vel_r = args.remap('vel')
     sig_r = args.remap('sig') if args.sig_phys2 is None else np.sqrt(np.abs(args.remap('sig_phys2')))
 
     #get appropriate number of edges  by looking at length of meds
-    nbins = (len(dynmeds(chains)) - args.nglobs + 3*args.fixcent)/4
+    nbins = (len(dynmeds(chains)) - args.nglobs)/4
     if not nbins.is_integer(): raise ValueError('Dynesty output array has a bad shape.')
     else: nbins = int(nbins)
     args.setedges(nbins, nbin=True, maxr=maxr)
 
     #recalculate model that was fit
     resdict = profs(chains, args, stds=True)
-    z = np.zeros(len(resdict['vts']))
+    z = np.zeros(len(resdict['vt']))
     vtdict, v2tdict, v2rdict = [resdict.copy(), resdict.copy(), resdict.copy()]
-    vtdict['v2ts'] = z
-    vtdict['v2rs'] = z
-    v2tdict['vts'] = z
-    v2tdict['v2rs'] = z
-    v2rdict['vts'] = z
-    v2rdict['v2ts'] = z
+    vtdict['v2t'] = z
+    vtdict['v2r'] = z
+    v2tdict['vt'] = z
+    v2tdict['v2r'] = z
+    v2rdict['vt'] = z
+    v2rdict['v2t'] = z
     if maxr is not None:
         r,th = projected_polar(args.x, args.y, resdict['pa'], resdict['inc'])
         r /= args.reff

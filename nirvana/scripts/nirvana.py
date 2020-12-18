@@ -42,8 +42,6 @@ def parse_args(options=None):
                         help='Don\'t use beam smearing to speed up fit')
     parser.add_argument('--verbose', default=False, action='store_true',
                         help='Run dynesty sampling with verbose output.')
-    parser.add_argument('--freecent', dest='fixcent', default=True, action='store_false',
-                        help='Allow center bin to have nonzero velocity.')
     parser.add_argument('--dir', type=str, default = '',
                         help='Directory to save the outfile in')
     parser.add_argument('--nodisp', dest='disp', default=True, action='store_false',
@@ -63,7 +61,7 @@ def main(args):
     plate, ifu = args.plateifu
     samp = fit(plate, ifu, daptype=args.daptype, dr=args.dr, cores=args.cores, nbins=args.nbins,
                   weight=args.weight, maxr=args.maxr, smearing=args.smearing, root=args.root,
-                  verbose=args.verbose, fixcent=args.fixcent, disp=args.disp)
+                  verbose=args.verbose, disp=args.disp, points=args.points)
 
     #make descriptive outfile name
     if args.outfile is None:

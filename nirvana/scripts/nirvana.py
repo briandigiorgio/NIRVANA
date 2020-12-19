@@ -69,7 +69,6 @@ def main(args):
         if args.nbins is not None: args.outfile += f'_{args.nbins}bin'
         if args.maxr  is not None: args.outfile += f'_{args.maxr}r'
         if not args.smearing: args.outfile += '_nosmear'
-        if not args.fixcent: args.outfile += '_unfixed'
         if not args.disp: args.outfile += '_nodisp'
     args.outfile += '.nirv'
 

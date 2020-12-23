@@ -273,6 +273,9 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, maxr=None, mix=Fals
             sigmodel = np.ma.array(sigmodel, mask=args.bordermask)
             sig_r = np.ma.array(sig_r, mask=args.bordermask)
 
+    if args.vel_ivar is None: args.vel_ivar = np.ones_like(args.vel)
+    if args.sig_ivar is None: args.sig_ivar = np.ones_like(args.sig)
+
     nvar = len(args.vel) + len(args.sig) - len(meds)
     rchisq = np.sum((vel_r - velmodel)**2 * args.remap('vel_ivar')) / nvar
 
@@ -294,9 +297,10 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, maxr=None, mix=Fals
             transform=ax.transAxes, size=20)
 
     #image
-    plt.subplot(3,4,2)
-    plt.imshow(args.image)
-    plt.axis('off')
+    if args.image is not None:
+        plt.subplot(3,4,2)
+        plt.imshow(args.image)
+        plt.axis('off')
 
     #Radial velocity profiles
     plt.subplot(3,4,3)

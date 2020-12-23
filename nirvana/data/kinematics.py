@@ -626,7 +626,7 @@ class Kinematics(FitArgs):
 
         #cut out spaxels with too high residual because they're probably bad
         dvmask = np.abs(vel - smeared[1]) > smear_dv
-        dsigmask = np.abs(self.remap('sig') - smeared[2]) > smear_dsig
+        if self.sig is not None: dsigmask = np.abs(self.remap('sig') - smeared[2]) > smear_dsig
 
         #iterate through rest of clips until mask converges
         nmaskedold = -1
@@ -644,13 +644,17 @@ class Kinematics(FitArgs):
 
             #clean up the data by sigma clipping residuals and chisq
             chisq = resid**2 * self.remap('vel_ivar') if self.vel_ivar is not None else resid**2
-            mask = dvmask + dsigmask
-            mask += sigma_clip(chisq, sigma=sigma, masked=True).mask \
-                 + sigma_clip(resid, sigma=sigma, masked=True).mask 
+            masks  = [dvmask, dsigmask] if self.sig is not None else [dvmask]
+            masks += [sigma_clip(chisq, sigma=sigma, masked=True).mask]
+            masks += [sigma_clip(resid, sigma=sigma, masked=True).mask]
 
             #clip on surface brightness and ANR
-            if self.sb is not None: mask += self.remap('sb') < sb
-            if self.sb_anr is not None: mask += self.remap('sb_anr') < anr
+            if self.sb is not None: masks += [self.remap('sb') < sb]
+            if self.sb_anr is not None: masks += [self.remap('sb_anr') < anr]
+
+            #combine all masks
+            mask = np.zeros_like(dvmask)
+            for m in masks: mask |= m
 
             #iterate
             nmaskedold = nmasked
@@ -663,7 +667,17 @@ class Kinematics(FitArgs):
             if niter > maxiter: 
                 if verbose: print(f'Reached maximum clipping iterations: {niter}')
                 break
-        if verbose: print(f'Clipping converged after {niter} iterations')
+        if verbose: 
+            import matplotlib.pyplot as plt
+            print(f'Clipping converged after {niter} iterations')
+            plt.figure(figsize = (12,8))
+            labels = ['dv','dsig','chisq','resid','sb','anr']
+            for i in range(len(masks)):
+                plt.subplot(231+i)
+                plt.axis('off')
+                plt.imshow(masks[i], origin='lower')
+                plt.title(labels[i])
+            plt.tight_layout()
 
     def remask(self, mask):
         '''

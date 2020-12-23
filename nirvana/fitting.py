@@ -64,29 +64,33 @@ def bisym_model(args, paramdict, plot=False):
     #    r = np.ma.array(r, mask = r > args.maxr)
     #    th = np.ma.array(th, mask = r > args.maxr)
 
-    vtvals = np.interp(r, args.edges, paramdict['vt'])
+    vtvals  = np.interp(r, args.edges, paramdict['vt'])
     v2tvals = np.interp(r, args.edges, paramdict['v2t'])
     v2rvals = np.interp(r, args.edges, paramdict['v2r'])
-
-    #define dispersion and surface brightness if desired
-    if args.disp: 
-        sigmodel = np.interp(r, args.edges, paramdict['sig'])
-        sb = args.remap('sb')
-    else: 
-        sigmodel = None
-        sb = None
-
-    try: conv
-    except: conv = None
 
     #spekkens and sellwood 2nd order vf model (from andrew's thesis)
     velmodel = paramdict['vsys'] + np.sin(inc) * (vtvals * np.cos(th) \
              - v2tvals * np.cos(2 * (th - pab)) * np.cos(th) \
              - v2rvals * np.sin(2 * (th - pab)) * np.sin(th))
 
+    #define dispersion and surface brightness if desired
+    if args.disp: 
+        sigmodel = np.interp(r, args.edges, paramdict['sig'])
+        sb = args.remap('sb', masked=False)
+    else: 
+        sigmodel = None
+        sb = None
+
     #apply beam smearing if beam is given
+    try: conv
+    except: conv = None
     if args.beam_fft is not None:
-        sbmodel, velmodel, sigmodel = smear(velmodel, args.beam_fft, sb=sb, sig=sigmodel, beam_fft=True, cnvfftw=conv)
+        sbmodel, velmodel, sigmodel = smear(velmodel, args.beam_fft, sb=sb, 
+                sig=sigmodel, beam_fft=True, cnvfftw=conv)
+
+    #remasking after convolution
+    if args.vel_mask is not None: velmodel = np.ma.array(velmodel, mask=args.remap('vel_mask'))
+    if args.sig_mask is not None: sigmodel = np.ma.array(sigmodel, mask=args.remap('sig_mask'))
 
     #rebin data
     binvel = np.ma.MaskedArray(args.bin(velmodel), mask=args.vel_mask)

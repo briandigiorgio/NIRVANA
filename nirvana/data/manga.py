@@ -405,7 +405,7 @@ class MaNGAStellarKinematics(MaNGAKinematics):
                          sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sig=sig, 
                          sig_ivar=sig_ivar, sig_mask=sig_mask, 
                          sig_corr=sig_corr, psf=psf, binid=binid, grid_x=grid_x, 
-                         grid_y=grid_y, reff=reff, image=image)
+                         grid_y=grid_y, reff=reff, fwhm=fwhm, image=image)
 
 
 

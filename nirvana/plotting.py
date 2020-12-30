@@ -311,7 +311,7 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, maxr=None, mix=Fals
     #dispersion profile
     plt.subplot(3,4,4)
     plt.plot(args.edges, resdict['sig'])
-    #plt.fill_between(args.edges, resdict['sigl'], resdict['sigu'], alpha=.5)
+    plt.fill_between(args.edges, resdict['sigl'], resdict['sigu'], alpha=.5)
     plt.ylim(bottom=0)
     plt.title('Velocity Dispersion Profile')
     plt.xlabel(r'$R_e$')
@@ -319,7 +319,8 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, maxr=None, mix=Fals
 
     #MaNGA Ha velocity field
     plt.subplot(3,4,5)
-    plt.title(r'H$\alpha$ Velocity Data')
+    if not stellar: plt.title(r'H$\alpha$ Velocity Data')
+    else: plt.title(r'Stellar Velocity Data')
     vmax = min(np.max(np.abs(vel_r)), 300)
     plt.imshow(vel_r, cmap='jet', origin='lower', vmin=-vmax, vmax=vmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
@@ -360,7 +361,8 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, maxr=None, mix=Fals
 
     #MaNGA Ha velocity disp
     plt.subplot(3,4,9)
-    plt.title(r'H$\alpha$ Dispersion Data')
+    if not stellar: plt.title(r'H$\alpha$ Dispersion Data')
+    else: plt.title(r'Stellar Dispersion Data')
     vmax = min(np.max(sig_r), 200)
     plt.imshow(sig_r, cmap='jet', origin='lower', vmax=vmax, vmin=0)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)

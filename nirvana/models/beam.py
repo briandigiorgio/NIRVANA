@@ -345,3 +345,4 @@ def smear(v, beam, beam_fft=False, sb=None, sig=None, cnvfftw=None):
     mom2[mom2 < 0] = 0.0
     return mom0, mom1, np.sqrt(mom2)
 
+

@@ -80,6 +80,7 @@ class FitArgs:
 
             #calculate maximum radius of image if none is given
             maxr = np.max(np.sqrt(x**2 + y**2))/self.reff
+        self.maxr = maxr
         maxr *= self.reff #change to arcsec
 
         #specify number of bins manually if desired
@@ -89,17 +90,6 @@ class FitArgs:
         else:
             binwidth = min(self.fwhm/2/np.cos(np.radians(inc)), self.fwhm)
             self.edges = np.arange(0, maxr, binwidth)/self.reff
-
-    def setfixcent(self, fixcent):
-        '''
-        Whether or not to fix the central velocity bin at 0.
-
-        Args:
-            fixcent (:obj:`bool`):
-                Flag for to hold central velocity bin at 0.
-        '''
-
-        self.fixcent = fixcent
 
     def setdisp(self, disp):
         '''
@@ -111,6 +101,9 @@ class FitArgs:
         '''
 
         self.disp = disp
+
+    def setmix(self, mix):
+        self.mix = mix
 
     def getguess(self, fill=10, clip=True):
         '''
@@ -173,13 +166,14 @@ class FitArgs:
 
         #iterate through bins and get vt value for each bin, 
         #dummy value for v2t and v2r since there isn't a good guess
-        vts = np.zeros(len(self.edges)-1)
-        v2ts = np.array([fill] * len(self.edges-1))
-        v2rs = np.array([fill] * len(self.edges-1))
-        for i in range(1,len(self.edges)-1):
-            cut = (r > self.edges[i]) * (r < self.edges[i+1])
-            vts[i] = np.max(model[cut])
-            guess += [vts[i], v2ts[i], v2rs[i]]
+        nbin = len(self.edges)
+        vt = np.zeros(nbin)
+        v2t = np.array([fill] * nbin)
+        v2r = np.array([fill] * nbin)
+        for i in range(1,nbin):
+            cut = (r > self.edges[i-1]) * (r < self.edges[i])
+            vt[i] = np.max(model[cut])
+            guess += [vt[i], v2t[i], v2r[i]]
         
         #clean and return
         guess = np.array(guess)

@@ -207,7 +207,9 @@ class AxisymmetricDisk:
                                         diff_step=diff_step[self.free], verbose=verbose)
         self._set_par(result.x)
 
-        cov = cov_err(result.jac)
-        self.par_err = np.zeros(self.np, dtype=float)
-        self.par_err[self.free] = np.sqrt(np.diag(cov))
-
+        try:
+            cov = cov_err(result.jac)
+            self.par_err = np.zeros(self.np, dtype=float)
+            self.par_err[self.free] = np.sqrt(np.diag(cov))
+        except: 
+            self.par_err = None

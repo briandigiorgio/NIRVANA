@@ -1,5 +1,8 @@
 """
 Module with the derived instances for MaNGA kinematics.
+
+.. |ee|   unicode:: U+00E9
+
 """
 import os
 import warnings
@@ -199,7 +202,7 @@ def read_drpall(plate, ifu, redux_path, dr, ext='elpetro', quiet=False):
             Suppress printed output.
 
     Returns:
-        :obj:`tuple`: tuple of inclination, position angle, and S\`ersic n
+        :obj:`tuple`: tuple of inclination, position angle, and S|ee|rsic n
         values. Angles are in degrees.
 
     Raises:

@@ -1,4 +1,7 @@
-#!/usr/bin/env python
+"""
+
+.. include:: ../include/links.rst
+"""
 
 import sys
 import argparse
@@ -108,7 +111,7 @@ def bisym_model(args, paramdict, plot=False):
     return binvel, binsig
 
 def unpack(params, args, jump=None):
-    '''
+    """
     Utility function to carry around a bunch of values in the Bayesian fit.
 
     Takes all of the parameters that are being fit and turns them from a long
@@ -130,15 +133,14 @@ def unpack(params, args, jump=None):
     Returns:
         :obj:`dict`: Dictionary with keys for inclination `inc`, first order
         position angle `pa`, second order position angle `pab`, systemic
-        velocity `vsys`, x and y center coordinates `xc` and `yc`, `np.ndarray`_
-        of first order tangential velocities `vt`, `np.ndarray`_ objects of
-        second order tangential and radial velocities `v2t` and `v2r`, and
-        `np.ndarray`_ of velocity dispersions `sig`. Arrays have lengths that
-        are the same as the number of bins (determined automatically or from
-        `jump`). All angles are in degrees and all velocities must be in
-        consistent units. 
-    '''
-
+        velocity `vsys`, x and y center coordinates `xc` and `yc`,
+        `numpy.ndarray`_ of first order tangential velocities `vt`,
+        `numpy.ndarray`_ objects of second order tangential and radial
+        velocities `v2t` and `v2r`, and `numpy.ndarray`_ of velocity
+        dispersions `sig`. Arrays have lengths that are the same as the
+        number of bins (determined automatically or from `jump`). All angles
+        are in degrees and all velocities must be in consistent units.
+    """
     paramdict = {}
     #global parameters with and without center
     paramdict['xc'], paramdict['yc'] = [0,0]
@@ -171,7 +173,7 @@ def unpack(params, args, jump=None):
     return paramdict
 
 def smoothing(array, weight=1):
-    '''
+    """
     A penalty function for encouraging smooth arrays. 
     
     For each bin, it computes the average of the bins to the left and right and
@@ -179,7 +181,7 @@ def smoothing(array, weight=1):
     left edge and repeats the final value at the right edge. 
 
     Args:
-        array (`np.ndarray`_):
+        array (`numpy.ndarray`_):
             Array to be analyzed for smoothness.
         weight (:obj:`float`, optional):
             Normalization factor for resulting chi squared value
@@ -187,8 +189,7 @@ def smoothing(array, weight=1):
     Returns:
         :obj:`float`: Chi squared value that serves as a measurement for how
         smooth the array is, normalized by the weight.
-    '''
-
+    """
     edgearray = np.array([0, *array,array[-1]]) #bin edges
     avgs = (edgearray[:-2] + edgearray[2:])/2 #average of each bin
     chisq = (avgs - array)**2 / np.abs(array) #chi sq of each bin to averages
@@ -196,9 +197,9 @@ def smoothing(array, weight=1):
     return chisq.sum() * weight
 
 def trunc(q, mean, std, left, right):
-    '''
-    Wrapper function for the :func:`scipy.stats.truncnorm.ppf: function to make
-    defining edges easier. 
+    """
+    Wrapper function for the ``ppf`` method of the `scipy.stats.truncnorm`_
+    function. This makes defining edges easier.
     
     Args:
         q (:obj:`float`):
@@ -214,8 +215,7 @@ def trunc(q, mean, std, left, right):
 
     Returns:
         :obj:`float`: Value of the distribution at the desired quantile
-    '''
-
+    """
     a,b = (left-mean)/std, (right-mean)/std #transform to z values
     return stats.truncnorm.ppf(q,a,b,mean,std)
 

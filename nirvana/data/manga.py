@@ -3,6 +3,8 @@ Module with the derived instances for MaNGA kinematics.
 
 .. |ee|   unicode:: U+00E9
 
+.. include common links, assuming primary doc root is up one directory
+.. include:: ../include/links.rst
 """
 import os
 import warnings

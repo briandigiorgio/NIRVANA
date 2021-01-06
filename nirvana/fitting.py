@@ -278,11 +278,11 @@ def dynprior(params, args, gaussprior=False):
     #do centers if desired
     if args.nglobs == 6: 
         if gaussprior:
-            xcp = stats.norm.ppf(xc,xcg,5)
-            ycp = stats.norm.ppf(yc,ycg,5)
+            xcp = stats.norm.ppf(paramdict['xc'], guessdict['xc'], 5)
+            ycp = stats.norm.ppf(paramdict['yc'], guessdict['yc'], 5)
         else:
-            xc = (2*xc - 1) * 20
-            yc = (2*yc - 1) * 20
+            xcp = (2*paramdict['xc'] - 1) * 20
+            ycp = (2*paramdict['yc'] - 1) * 20
         repack += [xcp,ycp]
 
     #repack all the velocities

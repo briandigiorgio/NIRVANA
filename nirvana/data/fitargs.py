@@ -156,6 +156,7 @@ class FitArgs:
         #model = rotcurveeval(self.grid_x,self.grid_y,vmax,inc,pa,h,vsys,reff=self.reff)
         model = fit.model()
         guess = [inc,pa,pa,vsys,0,0,0]
+        if self.nglobs == 6: guess += [0,0]
 
         #if edges have not been defined, just return global parameters
         if not hasattr(self, 'edges'): return [vmax,inc,pa,h,vsys]

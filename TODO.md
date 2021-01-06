@@ -2,18 +2,9 @@
 
 ## Main tasks
 
-- ~~squaring sigma:~~ caused weird behavior
-    - new variable sigma2 = sigma^2 - sigmacorr^2
-    - new error by propagating errors through
-    - in likelihood, compute chisq of square of sigma instead
-- ~~maximum radius to avoid edge effects~~ still needs refining
-- ~~pick out bad points~~ not good enough yet
-    - sigma clip outliers
 - projected velocities
     - just take out sini
-- ~~add error term~~ not working yet
-    -hogg 2010
-- stellar fits
+- ~~stellar fits~~ works
 - allow Kinematics to include (inverse) covariance
     - Include nominal MaNGA covariance for MaNGAKinematics
 - Treatment of the velocity dispersion and correction

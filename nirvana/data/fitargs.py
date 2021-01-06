@@ -3,11 +3,12 @@
 from IPython import embed
 
 import numpy as np
-from scipy.optimize import leastsq
+from scipy.optimize import leastsq, least_squares
 import matplotlib.pyplot as plt
+from astropy.stats import sigma_clip
 
 from ..models.geometry import projected_polar
-from ..models.axisym import rotcurveeval
+from ..models.axisym import rotcurveeval, AxisymmetricDisk
 from ..models.beam import ConvolveFFTW
 
 class FitArgs:
@@ -63,8 +64,9 @@ class FitArgs:
                 True`, this is instead the number of bins to make (must be an
                 :obj:`int`)
             maxr (:obj:`float`, optional):
-                Maximum radius for the bins. If not specified, it will default
-                to the maximum unmasked radius of the galaxy.
+                Maximum radius for the bins in effective radii. If not
+                specified, it will default to the maximum unmasked radius of
+                the galaxy.
             nbin (:obj:`bool`):
                 Flag for whether or not to set the number of bins manually.
         '''
@@ -78,6 +80,7 @@ class FitArgs:
 
             #calculate maximum radius of image if none is given
             maxr = np.max(np.sqrt(x**2 + y**2))/self.reff
+        self.maxr = maxr
         maxr *= self.reff #change to arcsec
 
         #specify number of bins manually if desired
@@ -86,18 +89,7 @@ class FitArgs:
         #calculate nyquist bin width based off fwhm and inc
         else:
             binwidth = min(self.fwhm/2/np.cos(np.radians(inc)), self.fwhm)
-            self.edges = np.arange(0,maxr,binwidth)/self.reff
-
-    def setfixcent(self, fixcent):
-        '''
-        Whether or not to fix the central velocity bin at 0.
-
-        Args:
-            fixcent (:obj:`bool`):
-                Flag for to hold central velocity bin at 0.
-        '''
-
-        self.fixcent = fixcent
+            self.edges = np.arange(0, maxr, binwidth)/self.reff
 
     def setdisp(self, disp):
         '''
@@ -110,7 +102,10 @@ class FitArgs:
 
         self.disp = disp
 
-    def getguess(self, fill=10):
+    def setmix(self, mix):
+        self.mix = mix
+
+    def getguess(self, fill=10, clip=True):
         '''
         Generate a set of guess parameters for the galaxy using a simple least
         squares fit.
@@ -129,6 +124,12 @@ class FitArgs:
         Args:
             fill (:obj:`float`, optional):
                 Fill value for second order velocities.
+            clip (:obj:`bool`, optional):
+                Whether to clean up the data. if `True`, it will do a 7 sigma
+                clip on the residuals from the initial round of the fit and
+                the chi squared of that fit. This is arbitrary but seems to
+                remove regions of bad data without removing regions of
+                legitimate but weird data.
 
         Returns:
             :obj:`tuple`: Tuple of guesses for the parameters. Will be in the
@@ -142,21 +143,18 @@ class FitArgs:
         if self.vel_ivar is None: ivar = np.ones_like(self.vel)
         else: ivar = self.vel_ivar
 
-        #define a minimization function and feed it to simple leastsquares
-        minfunc = lambda params,vf,x,y,e,reff: np.array((vf - \
-                rotcurveeval(x,y,*params,reff=reff))/e).flatten()
-        vmax,inc,pa,h,vsys = leastsq(minfunc, (200,45,180,3,0), 
-                args = (self.vel,self.x,self.y,ivar**-.5,self.reff))[0]
+        #quick fit of data
+        if clip: self.clip()
+        fit = AxisymmetricDisk()
+        fit.lsq_fit(self)
 
-        #check and fix signs if galaxy was fit upside down
-        if np.product(np.sign([vmax,h])) < 0: pa += 180
-        pa %= 360
-        if inc%180 != inc%90: pa += 180
-        inc %= 90
-        vmax,inc,h = np.abs([vmax,inc,h])
+        #get fit params
+        xc, yc, pa, inc, vsys, vsini, h = fit.par
+        vmax = vsini/np.sin(np.radians(inc))
 
         #generate model velocity field, start assembling array of guess values
-        model = rotcurveeval(self.grid_x,self.grid_y,vmax,inc,pa,h,vsys,reff=self.reff)
+        #model = rotcurveeval(self.grid_x,self.grid_y,vmax,inc,pa,h,vsys,reff=self.reff)
+        model = fit.model()
         guess = [inc,pa,pa,vsys,0,0,0]
 
         #if edges have not been defined, just return global parameters
@@ -168,13 +166,14 @@ class FitArgs:
 
         #iterate through bins and get vt value for each bin, 
         #dummy value for v2t and v2r since there isn't a good guess
-        vts = np.zeros(len(self.edges)-1)
-        v2ts = np.array([fill] * len(self.edges-1))
-        v2rs = np.array([fill] * len(self.edges-1))
-        for i in range(1,len(self.edges)-1):
-            cut = (r > self.edges[i]) * (r < self.edges[i+1])
-            vts[i] = np.max(model[cut])
-            guess += [vts[i], v2ts[i], v2rs[i]]
+        nbin = len(self.edges)
+        vt = np.zeros(nbin)
+        v2t = np.array([fill] * nbin)
+        v2r = np.array([fill] * nbin)
+        for i in range(1,nbin):
+            cut = (r > self.edges[i-1]) * (r < self.edges[i])
+            vt[i] = np.max(model[cut])
+            guess += [vt[i], v2t[i], v2r[i]]
         
         #clean and return
         guess = np.array(guess)

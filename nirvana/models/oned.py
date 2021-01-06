@@ -1,5 +1,7 @@
 """
 Implements one-dimensional functions for modeling.
+
+.. include:: ../include/links.rst
 """
 import warnings
 

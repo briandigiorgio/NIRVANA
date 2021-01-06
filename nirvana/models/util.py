@@ -1,6 +1,7 @@
-
 """
 Utility function for modeling.
+
+.. include:: ../include/links.rst
 """
 
 import numpy as np

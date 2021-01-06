@@ -23,7 +23,7 @@ def parse_args(options=None):
                         help='The MaNGA data release.  This is only used to automatically '
                              'construct the directory to the MaNGA galaxy data, and it will be '
                              'ignored if the root directory is set directly (using --root).')
-    parser.add_argument('-c', '--cores', default=20, type=int,
+    parser.add_argument('-c', '--cores', default=10, type=int,
                         help='Number of threads to utilize.')
     parser.add_argument('-f', '--outfile', default=None, type=str,
                         help='Outfile to dump results in.')
@@ -42,38 +42,39 @@ def parse_args(options=None):
                         help='Don\'t use beam smearing to speed up fit')
     parser.add_argument('--verbose', default=False, action='store_true',
                         help='Run dynesty sampling with verbose output.')
-    parser.add_argument('--freecent', dest='fixcent', default=True, action='store_false',
-                        help='Allow center bin to have nonzero velocity.')
     parser.add_argument('--dir', type=str, default = '',
                         help='Directory to save the outfile in')
     parser.add_argument('--nodisp', dest='disp', default=True, action='store_false',
                         help='Turn off dispersion fitting')
+    parser.add_argument('-s', '--stellar', default=False, action='store_true',
+                        help='Fit stellar velocity field rather than gas')
 
     return parser.parse_args() if options is None else parser.parse_args(options)
 
 def main(args):
-
+    #set save directory
     if args.dir == '':
         args.dir = '/data/manga/digiorgio/nirvana/'
     if not os.path.isdir(args.dir):
         raise NotADirectoryError(f'Outfile directory does not exist: {args.dir}')
     if args.nbins == 0: args.nbins = None
 
+    #run fit with supplied args
     plate, ifu = args.plateifu
     samp = fit(plate, ifu, daptype=args.daptype, dr=args.dr, cores=args.cores, nbins=args.nbins,
                   weight=args.weight, maxr=args.maxr, smearing=args.smearing, root=args.root,
-                  verbose=args.verbose, fixcent=args.fixcent, disp=args.disp)
+                  verbose=args.verbose, disp=args.disp, points=args.points, stellar=args.stellar)
+
+    #make descriptive outfile name
     if args.outfile is None:
-        args.outfile = f'{plate}-{ifu}_{args.nbins}bin_{args.weight}w_{args.points}p'
-        if args.smearing: args.outfile += '_s'
-        else: args.outfile += '_ns'
-
-        if args.fixcent: args.outfile += '_f'
-        else: args.outfile += '_uf'
-
-        if args.disp: args.outfile += '_d'
-        else: args.outfile += '_nd'
-    args.outfile += '.out'
+        args.outfile = f'{plate}-{ifu}_{args.weight}w_{args.points}p'
+        if args.nbins is not None: args.outfile += f'_{args.nbins}bin'
+        if args.maxr  is not None: args.outfile += f'_{args.maxr}r'
+        if not args.smearing: args.outfile += '_nosmear'
+        if not args.disp: args.outfile += '_nodisp'
+        if args.stellar: args.outfile += '_stel'
+        else: args.outfile += '_gas'
+    args.outfile += '.nirv'
 
     # TODO: Do we need to use pickle?
     pickle.dump(samp.results, open(args.dir+args.outfile, 'wb'))

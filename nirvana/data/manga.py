@@ -1,13 +1,20 @@
 """
 Module with the derived instances for MaNGA kinematics.
+
+.. |ee|   unicode:: U+00E9
+
+.. include common links, assuming primary doc root is up one directory
+.. include:: ../include/links.rst
 """
 import os
+import warnings
 
 from IPython import embed
 
 import numpy as np
 from astropy.io import fits
 from glob import glob
+import matplotlib.image as img
 
 from .kinematics import Kinematics
 from .fitargs import FitArgs
@@ -102,8 +109,11 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
                               redux_path=None, cube_path=None, analysis_path=None, maps_path=None,
                               check=True):
     """
-    Get the DAP maps and DRP datacube files for a given plate and
-    IFU.
+    Get MaNGA files used by NIRVANA.
+
+    .. warning::
+
+        The method does not check that these files exist.
 
     Args:
         plate (:obj:`int`):
@@ -134,8 +144,8 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
             Check that the directories with the expected files exist.
 
     Returns:
-        :obj:`tuple`: The full path to the maps file followed by the
-        full path to the data cube file.
+        :obj:`tuple`: Full path to three files: (1) the DAP MAPS file, (2)
+        the DRP LOGCUBE file, and (3) the SDSS 3-color PNG image.
 
     Raises:
         ValueError:
@@ -152,8 +162,8 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
     if check and not os.path.isdir(cube_path):
         raise NotADirectoryError('No such directory: {0}'.format(cube_path))
 
-    cube_file = os.path.abspath(os.path.join(cube_path,
-                                             'manga-{0}-{1}-LOGCUBE.fits.gz'.format(plate, ifu)))
+    cube_file = os.path.abspath(os.path.join(cube_path, f'manga-{plate}-{ifu}-LOGCUBE.fits.gz'))
+    image_file = os.path.abspath(os.path.join(cube_path, 'images', f'{ifu}.png'))
 
     if maps_path is None:
         _analysis_path = os.getenv('MANGA_SPECTRO_ANALYSIS') \
@@ -165,10 +175,10 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
     if check and not os.path.isdir(maps_path):
         raise NotADirectoryError('No such directory: {0}'.format(maps_path))
 
-    maps_file = os.path.abspath(os.path.join(maps_path, 'manga-{0}-{1}-MAPS-{2}.fits.gz'.format(
-                                             plate, ifu, daptype)))
+    maps_file = os.path.abspath(os.path.join(maps_path,
+                                             f'manga-{plate}-{ifu}-MAPS-{daptype}.fits.gz'))
 
-    return maps_file, cube_file
+    return maps_file, cube_file, image_file
 
 
 def read_drpall(plate, ifu, redux_path, dr, ext='elpetro', quiet=False):
@@ -194,7 +204,7 @@ def read_drpall(plate, ifu, redux_path, dr, ext='elpetro', quiet=False):
             Suppress printed output.
 
     Returns:
-        :obj:`tuple`: tuple of inclination, position angle, and S\`ersic n
+        :obj:`tuple`: tuple of inclination, position angle, and S|ee|rsic n
         values. Angles are in degrees.
 
     Raises:
@@ -249,14 +259,21 @@ class MaNGAKinematics(Kinematics):
                 Additional arguments that are passed directly to the
                 nominal instantiation method.
         """
-        maps_file, cube_file = manga_files_from_plateifu(plate, ifu, daptype=daptype, dr=dr,
-                                                         redux_path=redux_path,
-                                                         cube_path=cube_path,
-                                                         analysis_path=analysis_path,
-                                                         maps_path=maps_path)
+        maps_file, cube_file, image_file \
+                = manga_files_from_plateifu(plate, ifu, daptype=daptype, dr=dr,
+                                            redux_path=redux_path, cube_path=cube_path,
+                                            analysis_path=analysis_path, maps_path=maps_path)
         if ignore_psf:
             cube_file = None
-        return cls(maps_file, cube_file=cube_file, **kwargs)
+        elif not os.path.isfile(cube_file):
+            warnings.warn(f'Datacube file {cube_file} does not exist!')
+            cube_file = None
+
+        if not os.path.isfile(image_file):
+            warnings.warn(f'Image file {image_file} does not exist!')
+            image_file = None
+
+        return cls(maps_file, cube_file=cube_file, image_file=image_file, **kwargs)
 
 
 # TODO:
@@ -275,6 +292,8 @@ class MaNGAGasKinematics(MaNGAKinematics):
             reconstructed PSF. If None, the PSF image will not be
             used in constructing the base
             :class:`~nirvana.data.kinematics.Kinematics` object.
+        image_file (:obj:`str`, optional):
+            Name of the PNG file containing the image of the galaxy.
         psf_ext (:obj:`str`, optional):
             The name of the extension with the reconstructed PSF.
         line (:obj:`str`, optional):
@@ -282,13 +301,15 @@ class MaNGAGasKinematics(MaNGAKinematics):
         quiet (:obj:`bool`, optional):
             Suppress printed output.
     """
-    def __init__(self, maps_file, cube_file=None, psf_ext='RPSF', line='Ha-6564', quiet=False):
+    def __init__(self, maps_file, cube_file=None, image_file=None, psf_ext='RPSF', line='Ha-6564',
+                 quiet=False):
 
         if not os.path.isfile(maps_file):
             raise FileNotFoundError('File does not exist: {0}'.format(maps_file))
 
         # Get the PSF, if possible
-        psf,fwhm = (None,None) if cube_file is None else read_manga_psf(cube_file, psf_ext, fwhm=True)
+        psf, fwhm = (None,None) if cube_file is None else read_manga_psf(cube_file, psf_ext, fwhm=True)
+        image = None if image_file is None else img.imread(image_file)
 
         # Establish whether or not the gas kinematics were determined
         # on a spaxel-by-spaxel basis, which determines which extension
@@ -315,6 +336,7 @@ class MaNGAGasKinematics(MaNGAKinematics):
             sb = hdu['EMLINE_GFLUX'].data[eml[line]]
             sb_ivar = hdu['EMLINE_GFLUX_IVAR'].data[eml[line]]
             sb_mask = hdu['EMLINE_GFLUX_MASK'].data[eml[line]] > 0
+            sb_anr = hdu['EMLINE_GANR'].data[eml[line]]
             vel = hdu['EMLINE_GVEL'].data[eml[line]]
             vel_ivar = hdu['EMLINE_GVEL_IVAR'].data[eml[line]]
             vel_mask = hdu['EMLINE_GVEL_MASK'].data[eml[line]] > 0
@@ -327,10 +349,10 @@ class MaNGAGasKinematics(MaNGAKinematics):
             print('Done')
 
         super().__init__(vel, vel_ivar=vel_ivar, vel_mask=vel_mask, x=x, y=y, 
-                         sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sig=sig, 
-                         sig_ivar=sig_ivar, sig_mask=sig_mask, 
+                         sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sb_anr=sb_anr,
+                         sig=sig, sig_ivar=sig_ivar, sig_mask=sig_mask, 
                          sig_corr=sig_corr, psf=psf, binid=binid, grid_x=grid_x, 
-                         grid_y=grid_y, reff=reff ,fwhm=fwhm)
+                         grid_y=grid_y, reff=reff , fwhm=fwhm, image=image)
 
 
 class MaNGAStellarKinematics(MaNGAKinematics):
@@ -345,18 +367,21 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             reconstructed PSF. If None, the PSF image will not be
             used in constructing the base
             :class:`~nirvana.data.kinematics.Kinematics` object.
+        image_file (:obj:`str`, optional):
+            Name of the PNG file containing the image of the galaxy.
         psf_ext (:obj:`str`, optional):
             The name of the extension with the reconstructed PSF.
         quiet (:obj:`bool`, optional):
             Suppress printed output.
     """
-    def __init__(self, maps_file, cube_file=None, psf_ext='GPSF', quiet=False):
+    def __init__(self, maps_file, cube_file=None, image_file=None, psf_ext='GPSF', quiet=False):
 
         if not os.path.isfile(maps_file):
             raise FileNotFoundError('File does not exist: {0}'.format(maps_file))
 
         # Get the PSF, if possible
-        psf,fwhm = (None,None) if cube_file is None else read_manga_psf(cube_file, psf_ext, fwhm=True)
+        psf, fwhm = (None,None) if cube_file is None else read_manga_psf(cube_file, psf_ext, fwhm=True)
+        image = img.imread(image_file) if image_file else None
 
         # Establish whether or not the stellar kinematics were
         # determined on a spaxel-by-spaxel basis, which determines
@@ -396,7 +421,7 @@ class MaNGAStellarKinematics(MaNGAKinematics):
                          sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sig=sig, 
                          sig_ivar=sig_ivar, sig_mask=sig_mask, 
                          sig_corr=sig_corr, psf=psf, binid=binid, grid_x=grid_x, 
-                         grid_y=grid_y, reff=reff)
+                         grid_y=grid_y, reff=reff, fwhm=fwhm, image=image)
 
 
 

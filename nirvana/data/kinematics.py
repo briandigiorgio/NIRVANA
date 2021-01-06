@@ -11,6 +11,7 @@ from IPython import embed
 import numpy as np
 from scipy import sparse
 from astropy.stats import sigma_clip
+import matplotlib.pyplot as plt
 
 from .fitargs import FitArgs
 
@@ -585,7 +586,7 @@ class Kinematics(FitArgs):
         binid = np.arange(np.product(_vel.shape)).reshape(_vel.shape)
         return cls(_vel, x=_x, y=_y, grid_x=_x, grid_y=_y, reff=reff, binid=binid, sig=_sig, psf=_psf, sb=_sb, bordermask=bordermask)
 
-    def clip(self, sigma=7, sb=.1, anr=5, maxiter=10, smear_dv=50, smear_dsig=50, verbose=False):
+    def clip(self, sigma=10, sb=.03, anr=5, maxiter=10, smear_dv=50, smear_dsig=50, verbose=False):
         '''
         Filter out bad spaxels in kinematic data.
         
@@ -625,12 +626,34 @@ class Kinematics(FitArgs):
                 sig=self.remap('sig'), sb=self.remap('sb'), cnvfftw=cnvfftw)
 
         #cut out spaxels with too high residual because they're probably bad
-        dvmask = np.abs(vel - smeared[1]) > smear_dv
-        if self.sig is not None: dsigmask = np.abs(self.remap('sig') - smeared[2]) > smear_dsig
+        dvmask = self.bin(np.abs(vel - smeared[1]) > smear_dv)
+        masks = [dvmask]
+        labels = ['dv']
+        if self.sig is not None: 
+            dsigmask = self.bin(np.abs(self.remap('sig') - smeared[2]) > smear_dsig)
+            masks += [dsigmask]
+            labels += ['dsig']
+
+        #clip on surface brightness and ANR
+        if self.sb is not None: 
+            sbmask = self.sb < sb
+            masks += [sbmask]
+            labels += ['sb']
+
+        if self.sb_anr is not None:
+            anrmask = self.sb_anr < anr
+            masks += [anrmask]
+            labels += ['anr']
+
+        #combine all masks and apply to data
+        mask = np.zeros(dvmask.shape)
+        for m in masks: mask += m
+        mask = mask.astype(bool)
+        self.remask(mask)
 
         #iterate through rest of clips until mask converges
         nmaskedold = -1
-        nmasked = 0
+        nmasked = np.sum(mask)
         niter = 0
         while nmaskedold != nmasked:
             #quick axisymmetric least squares fit
@@ -638,44 +661,37 @@ class Kinematics(FitArgs):
             fit.lsq_fit(self)
 
             #quick axisymmetric fit
-            vel = self.remap('vel')
-            model = fit.model()
-            resid = vel - model
+            model = self.bin(fit.model())
+            resid = self.vel - model
 
             #clean up the data by sigma clipping residuals and chisq
-            chisq = resid**2 * self.remap('vel_ivar') if self.vel_ivar is not None else resid**2
-            masks  = [dvmask, dsigmask] if self.sig is not None else [dvmask]
-            masks += [sigma_clip(chisq, sigma=sigma, masked=True).mask]
-            masks += [sigma_clip(resid, sigma=sigma, masked=True).mask]
-
-            #clip on surface brightness and ANR
-            if self.sb is not None: masks += [self.remap('sb') < sb]
-            if self.sb_anr is not None: masks += [self.remap('sb_anr') < anr]
-
-            #combine all masks
-            mask = np.zeros_like(dvmask)
-            for m in masks: mask |= m
+            chisq = resid**2 * self.vel_ivar if self.vel_ivar is not None else resid**2
+            residmask = sigma_clip(resid, sigma=sigma, masked=True).mask
+            chisqmask = sigma_clip(chisq, sigma=sigma, masked=True).mask
+            clipmask = (mask + residmask + chisqmask).astype(bool)
 
             #iterate
             nmaskedold = nmasked
-            nmasked = np.sum(mask)
+            nmasked = np.sum(clipmask)
             niter += 1
             if verbose: print(f'Performed {niter} clipping iterations...', end='\r')
 
             #apply mask to data
-            self.remask(mask)
+            self.remask(clipmask)
             if niter > maxiter: 
                 if verbose: print(f'Reached maximum clipping iterations: {niter}')
                 break
+
+        #make a plot of all of the masks if desired
         if verbose: 
-            import matplotlib.pyplot as plt
+            masks += [residmask, chisqmask]
+            labels += ['resid', 'chisq']
             print(f'Clipping converged after {niter} iterations')
             plt.figure(figsize = (12,8))
-            labels = ['dv','dsig','chisq','resid','sb','anr']
             for i in range(len(masks)):
                 plt.subplot(231+i)
                 plt.axis('off')
-                plt.imshow(masks[i], origin='lower')
+                plt.imshow(self.remap(masks[i]), origin='lower')
                 plt.title(labels[i])
             plt.tight_layout()
 

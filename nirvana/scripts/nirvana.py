@@ -48,6 +48,8 @@ def parse_args(options=None):
                         help='Turn off dispersion fitting')
     parser.add_argument('-s', '--stellar', default=False, action='store_true',
                         help='Fit stellar velocity field rather than gas')
+    parser.add_argument('--cen', default=False, action='store_true',
+                        help='Fit the position of the center')
 
     return parser.parse_args() if options is None else parser.parse_args(options)
 
@@ -63,7 +65,8 @@ def main(args):
     plate, ifu = args.plateifu
     samp = fit(plate, ifu, daptype=args.daptype, dr=args.dr, cores=args.cores, nbins=args.nbins,
                   weight=args.weight, maxr=args.maxr, smearing=args.smearing, root=args.root,
-                  verbose=args.verbose, disp=args.disp, points=args.points, stellar=args.stellar)
+                  verbose=args.verbose, disp=args.disp, points=args.points, 
+                  stellar=args.stellar, cen=args.cen)
 
     #make descriptive outfile name
     if args.outfile is None:
@@ -74,6 +77,7 @@ def main(args):
         if not args.disp: args.outfile += '_nodisp'
         if args.stellar: args.outfile += '_stel'
         else: args.outfile += '_gas'
+        if args.cen: args.outfile += '_cen'
     args.outfile += '.nirv'
 
     # TODO: Do we need to use pickle?

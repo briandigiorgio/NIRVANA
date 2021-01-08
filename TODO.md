@@ -9,6 +9,8 @@
     - Include nominal MaNGA covariance for MaNGAKinematics
 - Treatment of the velocity dispersion and correction
 - smarter surface brightness with all gas channels
+- put prior, clipping, etc parameters into one config file
+- errors on parameters in summaryplot
 
 ## Side tasks
 

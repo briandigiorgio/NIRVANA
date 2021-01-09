@@ -48,7 +48,7 @@ def parse_args(options=None):
                         help='Turn off dispersion fitting')
     parser.add_argument('-s', '--stellar', default=False, action='store_true',
                         help='Fit stellar velocity field rather than gas')
-    parser.add_argument('--cen', default=False, action='store_true',
+    parser.add_argument('--nocen', dest='cen', default=True, action='store_false',
                         help='Fit the position of the center')
 
     return parser.parse_args() if options is None else parser.parse_args(options)
@@ -77,7 +77,7 @@ def main(args):
         if not args.disp: args.outfile += '_nodisp'
         if args.stellar: args.outfile += '_stel'
         else: args.outfile += '_gas'
-        if args.cen: args.outfile += '_cen'
+        if not args.cen: args.outfile += '_nocen'
     args.outfile += '.nirv'
 
     # TODO: Do we need to use pickle?

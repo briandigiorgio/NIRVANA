@@ -400,7 +400,7 @@ def mixlike(params, args):
     return llike
 
 def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
-        cores=10, maxr=None, cen=False, weight=10, smearing=True, points=500,
+        cores=10, maxr=None, cen=True, weight=10, smearing=True, points=500,
         stellar=False, root=None, verbose=False, disp=True, mix=False):
     '''
     Main function for fitting a MaNGA galaxy with a nonaxisymmetric model.

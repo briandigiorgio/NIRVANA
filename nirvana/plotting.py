@@ -167,7 +167,7 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
 
     return paramdict
 
-def summaryplot(f, plate, ifu, smearing=True, stellar=False, maxr=None, mix=False):
+def summaryplot(f, plate, ifu, smearing=True, stellar=False, maxr=None, mix=False, cen=True):
     '''
     Make a summary plot for a `nirvana` output file with MaNGA velocity field.
 
@@ -190,6 +190,8 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, maxr=None, mix=Fals
             Flag for whether or not to use stellar velocity data instead of gas.
         mix (:obj:`bool`, optional):
             Flag for whether or not the fit is a Bayesian mixture. [NOT WORKING]
+        cen (:obj:`bool`, optional):
+            Flag for whether the position of the center was fit.
         
     Returns:
         :obj:`dict`: Dictionary with all of the median values of the posteriors
@@ -238,7 +240,7 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, maxr=None, mix=Fals
 
     #set relevant parameters for galaxy
     args.setdisp(True)
-    args.setnglobs(4)
+    args.setnglobs(4) if not cen else args.setnglobs(6)
     args.setmix(mix)
     args.clip()
 
@@ -285,16 +287,18 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, maxr=None, mix=Fals
     ax = plt.gca()
     plt.axis('off')
     plt.title(f'{plate}-{ifu}',size=20)
-    plt.text(.1, .8, r'$i$: %0.1f$^\circ$'%resdict['inc'], 
+    plt.text(.1, .82, r'$i$: %0.1f$^\circ$'%resdict['inc'], 
             transform=ax.transAxes, size=20)
-    plt.text(.1, .6, r'$\phi$: %0.1f$^\circ$'%resdict['pa'], 
+    plt.text(.1, .64, r'$\phi$: %0.1f$^\circ$'%resdict['pa'], 
             transform=ax.transAxes, size=20)
-    plt.text(.1, .4, r'$\phi_b$: %0.1f$^\circ$'%resdict['pab'], 
+    plt.text(.1, .46, r'$\phi_b$: %0.1f$^\circ$'%resdict['pab'], 
             transform=ax.transAxes, size=20)
-    plt.text(.1, .2, r'$v_{{sys}}$: %0.1f km/s'%resdict['vsys'], 
+    plt.text(.1, .28, r'$v_{{sys}}$: %0.1f km/s'%resdict['vsys'], 
             transform=ax.transAxes, size=20)
-    plt.text(.1, 0, r'$\chi_r^2$: %0.1f'%rchisq, 
+    plt.text(.1, .1, r'$\chi_r^2$: %0.1f'%rchisq, 
             transform=ax.transAxes, size=20)
+    if cen: plt.text(.1, -.08, r'$(x_c, y_c)$: (%0.1f, %0.1f)' %  
+            (resdict['xc'], resdict['yc']), transform=ax.transAxes, size=20)
 
     #image
     if args.image is not None:

@@ -1,5 +1,7 @@
 """
 Plotting for nirvana outputs.
+
+.. include:: ../include/links.rst
 """
 
 import numpy as np
@@ -19,27 +21,24 @@ from .models.beam import smear, ConvolveFFTW
 from .models.geometry import projected_polar
 
 def dynmeds(samp, stds=False):
-    '''
+    """
     Get median values for each variable's posterior in a
-    :class:`dynesty.NestedSampler` sampler. 
+    `dynesty.NestedSampler`_ sampler.
 
     Args:
-        samp (:class:`dynesty.NestedSampler` or :obj:`str` or
-        :class:`dynesty.results.Results`):
-            Sampler, results, or file of dumped results from `dynesty` fit.
+        samp (:obj:`str`, `dynesty.NestedSampler`_, `dynesty.results.Results`_):
+            Sampler, results, or file of dumped results from `dynesty`_ fit.
         stds (:obj:`bool`, optional):
             Flag for whether or not to return standard deviations of the
             posteriors as well.
 
     Returns:
-        `np.ndarray`_: Median values of all of the parameters in the `dynesty`
-        sampler.
-
-        if `stds == True`, it will instead return a tuple of three `np.ndarray`_
-        objects. The first is the median values, the second is the lower 1 sigma
-        bound for all of the posteriors, and the third is the upper 1 sigma
-        bound.
-    '''
+        `numpy.ndarray`_: Median values of all of the parameters in the
+        `dynesty`_ sampler. If ``stds == True``, it will instead return a
+        :obj:`tuple` of three `numpy.ndarray`_ objects. The first is the
+        median values, the second is the lower 1 sigma bound for all of the
+        posteriors, and the third is the upper 1 sigma bound.
+    """
 
     #get samples and weights
     if type(samp) == str: res = pickle.load(open(samp,'rb'))
@@ -93,8 +92,7 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
     Turn a sampler output by `nirvana` into a set of rotation curves.
     
     Args:
-        samp (:class:`dynesty.NestedSampler` or :obj:`str` or
-        :class:`dynesty.results.Results`):
+        samp (:obj:`str`, `dynesty.NestedSampler`_, `dynesty.results.Results`_):
             Sampler, results, or file of dumped results from `dynesty` fit.
         args (:class:`nirvana.data.fitargs`):
             Object containing all of the data and settings needed for the
@@ -111,20 +109,21 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
             args for :func:`plt.plot`.
 
     Returns:
-        :obj:`dict`: Dictionary with all of the median values of the posteriors
-        in the sampler. Has keys for inclination `inc`, first order position
-        angle `pa`, second order position angle `pab`, systemic velocity `vsys`,
-        x and y center coordinates `xc` and `yc`, `np.ndarray`_ of first order
-        tangential velocities `vt`, `np.ndarray`_ objects of second order
-        tangential and radial velocities `v2t` and `v2r`, and `np.ndarray`_ of
-        velocity dispersions `sig`. If `stds == True` it will also contain keys
-        for the 1 sigma lower bounds of the velocity parameters `vtl`, `v2tl`,
-        `v2rl`, and `sigl` as well as their 1 sigma upper bounds `vtu`, `v2tu`,
-        `v2ru`, and `sigu`. Arrays have lengths that are the same as the number
-        of bins (determined automatically or from `jump`). All angles are in
-        degrees and all velocities must be in consistent units. 
+        :obj:`dict`: Dictionary with all of the median values of the
+        posteriors in the sampler. Has keys for inclination `inc`, first
+        order position angle `pa`, second order position angle `pab`,
+        systemic velocity `vsys`, x and y center coordinates `xc` and `yc`,
+        `numpy.ndarray`_ of first order tangential velocities `vt`,
+        `numpy.ndarray`_ objects of second order tangential and radial
+        velocities `v2t` and `v2r`, and `numpy.ndarray`_ of velocity
+        dispersions `sig`. If `stds == True` it will also contain keys for
+        the 1 sigma lower bounds of the velocity parameters `vtl`, `v2tl`,
+        `v2rl`, and `sigl` as well as their 1 sigma upper bounds `vtu`,
+        `v2tu`, `v2ru`, and `sigu`. Arrays have lengths that are the same as
+        the number of bins (determined automatically or from `jump`). All
+        angles are in degrees and all velocities must be in consistent units.
 
-        if `plot == True`, it will also display a plot of the profiles.
+        If `plot == True`, it will also display a plot of the profiles.
     '''
 
     #get and unpack median values for params
@@ -194,18 +193,19 @@ def summaryplot(f, plate, ifu, smearing=True, stellar=False, maxr=None, mix=Fals
             Flag for whether the position of the center was fit.
         
     Returns:
-        :obj:`dict`: Dictionary with all of the median values of the posteriors
-        in the sampler. Has keys for inclination `inc`, first order position
-        angle `pa`, second order position angle `pab`, systemic velocity `vsys`,
-        x and y center coordinates `xc` and `yc`, `np.ndarray`_ of first order
-        tangential velocities `vt`, `np.ndarray`_ objects of second order
-        tangential and radial velocities `v2t` and `v2r`, and `np.ndarray`_ of
-        velocity dispersions `sig`. If `stds == True` it will also contain keys
-        for the 1 sigma lower bounds of the velocity parameters `vtl`, `v2tl`,
-        `v2rl`, and `sigl` as well as their 1 sigma upper bounds `vtu`, `v2tu`,
-        `v2ru`, and `sigu`. Arrays have lengths that are the same as the number
-        of bins (determined automatically or from `jump`). All angles are in
-        degrees and all velocities must be in consistent units. 
+        :obj:`dict`: Dictionary with all of the median values of the
+        posteriors in the sampler. Has keys for inclination `inc`, first
+        order position angle `pa`, second order position angle `pab`,
+        systemic velocity `vsys`, x and y center coordinates `xc` and `yc`,
+        `numpy.ndarray`_ of first order tangential velocities `vt`,
+        `numpy.ndarray`_ objects of second order tangential and radial
+        velocities `v2t` and `v2r`, and `numpy.ndarray`_ of velocity
+        dispersions `sig`. If `stds == True` it will also contain keys for
+        the 1 sigma lower bounds of the velocity parameters `vtl`, `v2tl`,
+        `v2rl`, and `sigl` as well as their 1 sigma upper bounds `vtu`,
+        `v2tu`, `v2ru`, and `sigu`. Arrays have lengths that are the same as
+        the number of bins (determined automatically or from `jump`). All
+        angles are in degrees and all velocities must be in consistent units.
 
         Plot: The values for the global parameters of the galaxy, the rotation
         curves (with 1 sigma lower and upper bounds) for the different velocity

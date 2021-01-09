@@ -55,8 +55,9 @@ def test_from_plateifu():
 
     data_root = remote_data_file()
 
-    _maps_file, _cube_file = manga.manga_files_from_plateifu(8138, 12704, cube_path=data_root,
-                                                             maps_path=data_root, check=False)
+    _maps_file, _cube_file, _image_file \
+            = manga.manga_files_from_plateifu(8138, 12704, cube_path=data_root,
+                                              maps_path=data_root, check=False)
 
     assert maps_file == _maps_file, 'MAPS file name incorrect'
     assert cube_file == _cube_file, 'CUBE file name incorrect'

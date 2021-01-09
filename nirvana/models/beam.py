@@ -213,7 +213,7 @@ class ConvolveFFTW:
                 :attr:`data_fft` *is* the returned array; if True,
                 returned array is a copy.
             shift (:obj:`bool`, optional):
-                Before computing, use ``numpy.fft.iffshift` to shift
+                Before computing, use ``numpy.fft.iffshift`` to shift
                 the spatial coordinates of the image such that the 0
                 frequency component of the FFT is shifted to the
                 center of the image.
@@ -344,4 +344,5 @@ def smear(v, beam, beam_fft=False, sb=None, sig=None, cnvfftw=None):
     mom2 -= mom1**2
     mom2[mom2 < 0] = 0.0
     return mom0, mom1, np.sqrt(mom2)
+
 

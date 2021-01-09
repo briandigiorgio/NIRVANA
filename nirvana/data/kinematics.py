@@ -465,9 +465,10 @@ class Kinematics(FitArgs):
     # TODO: This should be in a different method/class
     @classmethod
     def mock(cls, size, inc, pa, pab, vsys, vt, v2t, v2r, sig, xc=0, yc=0, reff=10, maxr=15, psf=None, border=3, fwhm=2.44):
-        '''
-        Makes a `:class:`nirvana.data.kinematics.Kinematics` object with a mock
-        velocity field with input parameters using similar code to :func:`nirvana.fiting.bisym_model`.
+        """
+        Makes a :class:`nirvana.data.kinematics.Kinematics` object with a
+        mock velocity field with input parameters using similar code to
+        :func:`nirvana.fiting.bisym_model`.
 
         Args:
             size (:obj:`int`):
@@ -476,7 +477,7 @@ class Kinematics(FitArgs):
                 Inclination in degrees.
             pa (:obj:`float`):
                 Position angle in degrees.
-            pab (:obj:`float`:
+            pab (:obj:`float`):
                 Relative position angle of bisymmetric features.
             vsys (:obj:`float`):
                 Systemic velocity.
@@ -517,14 +518,14 @@ class Kinematics(FitArgs):
                 example MaNGA PSF.
 
         Returns:
-            :class:`nirvana.data.kinematics.Kinematics` object with the velocity
-            field and x and y coordinates of the mock galaxy. 
+            :class:`nirvana.data.kinematics.Kinematics`: Object with the
+            velocity field and x and y coordinates of the mock galaxy.
 
         Raises:
             ValueError:
                 Raises if input velocity arrays are not the same length.
                 
-        '''
+        """
 
         #check that velocities are compatible
         if len(vt) != len(v2t) or len(vt) != len(v2r) or len(vt) != len(sig):

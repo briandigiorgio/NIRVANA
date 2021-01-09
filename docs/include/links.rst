@@ -47,6 +47,7 @@
 .. _scipy.linalg.lu_factor: http://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.lu_factor.html
 .. _scipy.linalg.lu_solve: https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.lu_solve.html
 .. _scipy.spatial.KDTree: https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.KDTree.html
+.. _scipy.stats.truncnorm: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.truncnorm.html
 
 .. matplotlib
 
@@ -77,6 +78,12 @@
 .. shapely
 
 .. _shapely: https://pypi.python.org/pypi/Shapely
+
+.. dynesty
+
+.. _dynesty: https://dynesty.readthedocs.io/en/latest/
+.. _dynesty.NestedSampler: https://dynesty.readthedocs.io/en/latest/api.html#dynesty.dynesty.NestedSampler
+.. _dynesty.results.Results: https://dynesty.readthedocs.io/en/latest/api.html#dynesty.results.Results
 
 .. misc
 

@@ -1,5 +1,7 @@
 """
 Methods for geometric projection.
+
+.. include:: ../include/links.rst
 """
 
 import numpy as np

@@ -30,4 +30,6 @@
  - Enable fit to velocity dispersion using `AxisymmetricDisk`.
  - Force calculation of `mom0` in `nirvana.model.beam.smear` even if the
    surface brightness is not provided, using a unity array.
+ - Add continuous integration tests using GitHub Workflow
+ - Add initial docs
 

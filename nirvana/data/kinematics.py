@@ -678,6 +678,8 @@ class Kinematics(FitArgs):
 
             #apply mask to data
             self.remask(clipmask)
+
+            if len(mask) == mask.sum(): verbose = True
             if niter > maxiter: 
                 if verbose: print(f'Reached maximum clipping iterations: {niter}')
                 break
@@ -694,6 +696,9 @@ class Kinematics(FitArgs):
                 plt.imshow(self.remap(masks[i]), origin='lower')
                 plt.title(labels[i])
             plt.tight_layout()
+            plt.show()
+            if len(mask) == mask.sum(): 
+                raise ValueError(f'All data clipped after {niter} iterations. No good data')
 
     def remask(self, mask):
         '''

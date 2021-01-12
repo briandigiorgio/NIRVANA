@@ -161,11 +161,11 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
         _redux_path = os.getenv('MANGA_SPECTRO_REDUX') if redux_path is None else redux_path
         if _redux_path is None:
             raise ValueError('Could not define top-level root for DRP output.')
-        cube_path = os.path.join(os.path.abspath(_redux_path), dr, str(plate), 'stack')
+        cube_path = os.path.join(os.path.abspath(_redux_path), dr, str(plate))
     if check and not os.path.isdir(cube_path):
         raise NotADirectoryError('No such directory: {0}'.format(cube_path))
 
-    cube_file = os.path.abspath(os.path.join(cube_path, f'manga-{plate}-{ifu}-LOGCUBE.fits.gz'))
+    cube_file = os.path.abspath(os.path.join(cube_path, 'stack', f'manga-{plate}-{ifu}-LOGCUBE.fits.gz'))
     image_file = os.path.abspath(os.path.join(cube_path, 'images', f'{ifu}.png'))
 
     if maps_path is None:

@@ -442,8 +442,8 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
     if save:
         path = f[:f.rfind('/')+1]
         fname = f[f.rfind('/')+1:-5]
-        print(f'{path}plots/{fname}.pdf')
         plt.savefig(f'{path}plots/{fname}.pdf', format='pdf')
+        plt.close()
 
     return profs(chains, args)
 

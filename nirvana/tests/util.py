@@ -15,6 +15,10 @@ def data_file(filename=None):
     root = resource_filename('nirvana', 'data')
     return root if filename is None else os.path.join(root, filename)
 
+def test_data_file(filename=None):
+    root = os.path.join(data_file(), 'tests')
+    return root if filename is None else os.path.join(root, filename)
+
 def remote_data_file(filename=None):
     root = os.path.join(data_file(), 'remote')
     return root if filename is None else os.path.join(root, filename)

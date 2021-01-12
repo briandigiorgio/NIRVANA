@@ -49,6 +49,7 @@ def test_manga_stellar_kinematics():
     # leads to differences that are of order the numerical precision.
     assert numpy.allclose(kin.bin(_vel), kin.vel), 'Rebinning is bad'
 
+@requires_remote
 def test_from_plateifu():
     maps_file = remote_data_file('manga-8138-12704-MAPS-{0}.fits.gz'.format(dap_test_daptype))
     cube_file = remote_data_file('manga-8138-12704-LOGCUBE.fits.gz')
@@ -61,5 +62,23 @@ def test_from_plateifu():
 
     assert maps_file == _maps_file, 'MAPS file name incorrect'
     assert cube_file == _cube_file, 'CUBE file name incorrect'
+
+@requires_remote
+def test_targeting_bits():
+    maps_file = remote_data_file('manga-8138-12704-MAPS-{0}.fits.gz'.format(dap_test_daptype))
+    hdu = fits.open(maps_file)
+
+    assert manga.parse_manga_targeting_bits(hdu[0].header['MNGTARG1']) \
+                == (True, False, False, False), 'Incorrect targeting parsing'
+    assert manga.parse_manga_targeting_bits(hdu[0].header['MNGTARG1'],
+                                            mngtarg3=hdu[0].header['MNGTARG1']) \
+                == (True, False, True, False), 'Incorrect targeting parsing'
+
+    mngtarg1 = numpy.array([hdu[0].header['MNGTARG1'], hdu[0].header['MNGTARG1']])
+    mngtarg3 = numpy.array([hdu[0].header['MNGTARG3'], hdu[0].header['MNGTARG3']])
+
+    pp, s, a, o = manga.parse_manga_targeting_bits(mngtarg1, mngtarg3=mngtarg3)
+    assert numpy.array_equal(pp, [True, True]), 'Bad array parsing'
+
 
 

@@ -7,6 +7,5 @@ astropy>=4.0
 matplotlib>=3.2.1
 corner>=2.1
 dynesty>=1.0
-astropy-helpers>=4.0
 pydl>=0.7.0
 

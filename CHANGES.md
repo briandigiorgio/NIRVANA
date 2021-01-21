@@ -32,4 +32,7 @@
    surface brightness is not provided, using a unity array.
  - Add continuous integration tests using GitHub Workflow
  - Add initial docs
+ - Copy over the BitMask class from the sdss-mangadap
+ - Update masking and add method that determines the target sample given
+   the targeting bits
 

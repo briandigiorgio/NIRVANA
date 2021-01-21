@@ -12,6 +12,8 @@ Module with the derived instances for MaNGA kinematics.
 import os
 import warnings
 
+from pkg_resources import resource_filename
+
 from IPython import embed
 
 import numpy as np
@@ -21,6 +23,7 @@ import matplotlib.image as img
 
 from .kinematics import Kinematics
 from .fitargs import FitArgs
+from ..util.bitmask import BitMask
 
 
 def channel_dictionary(hdu, ext, prefix='C'):
@@ -234,6 +237,52 @@ def read_drpall(plate, ifu, redux_path, dr, ext='elpetro', quiet=False):
         print('Done')
     return inc, pa, n
 
+def sdss_bitmask(bitgroup):
+    """
+    Return a :class:`~nirvana.util.bitmask.BitMask` instance for the
+    specified group of SDSS maskbits.
+
+    Args:
+        bitgroup (:obj:`str`):
+            The name designating the group of bitmasks to read.
+
+    Returns:
+        :class:`~nirvana.util.bitmask.BitMask`: Instance used to parse SDSS
+        maskbits.
+    """
+    sdssMaskbits = os.path.join(resource_filename('nirvana', 'config'), 'sdss', 'sdssMaskbits.par')
+    return BitMask.from_par_file(sdssMaskbits, bitgroup)
+
+
+def parse_manga_targeting_bits(mngtarg1, mngtarg3=None):
+    """
+    Return boolean flags identifying the target samples selected by the
+    provided bits.
+
+    Args:
+        mngtarg1 (:obj:`int`, `numpy.ndarray`_):
+            One or more targeting bit values from the MANGA_TARGET1 group.
+        mngtarg3 (:obj:`int`, `numpy.ndarray`_, optional):
+            One or more targeting bit values from the MANGA_TARGET3 group,
+            the ancillary targeting bits. Should have the same shape as
+            ``mngtarg1``.
+
+    Returns:
+        :obj:`tuple`: Four booleans or boolean arrays that identify the
+        target as being (1) part of the Primary+ (Primary and/or
+        Color-enhanced) sample, (2) the Secondary sample, (3) an ancillary
+        target, and/or (4) a filler target.
+    """
+    bitmask = sdss_bitmask('MANGA_TARGET1')
+    primaryplus = bitmask.flagged(mngtarg1, flag=['PRIMARY_v1_2_0', 'COLOR_ENHANCED_v1_2_0'])
+    secondary = bitmask.flagged(mngtarg1, flag='SECONDARY_v1_2_0')
+    ancillary = (np.zeros(mngtarg1.shape, dtype=bool) 
+                    if isinstance(primaryplus, np.ndarray) else False) \
+                    if mngtarg3 is None else mngtarg3 > 0
+    other = np.logical_not(ancillary) & np.logical_not(primaryplus) & np.logical_not(secondary)
+
+    return primaryplus, secondary, ancillary, other
+
 
 class MaNGAKinematics(Kinematics):
     """
@@ -301,14 +350,22 @@ class MaNGAGasKinematics(MaNGAKinematics):
             The name of the extension with the reconstructed PSF.
         line (:obj:`str`, optional):
             The name of the emission-line to use for the kinematics.
+        mask_flags (:obj:`str`, :obj:`list`, optional):
+            One or more named bits used to select the data that should be
+            masked. If 'any', mask any bit value larger than 0. If None, no
+            spaxels are masked (a *bad* idea for MaNGA data). Otherwise, the
+            list of strings are used with the ``sdssMaskbits.par`` file to
+            determine which spaxels should be masked. For MaNGA data, the
+            primary distinction is whether or not you flag everything or if
+            you only flag the spaxels marked as ``DONOTUSE``.
         quiet (:obj:`bool`, optional):
             Suppress printed output.
     """
     def __init__(self, maps_file, cube_file=None, image_file=None, psf_ext='RPSF', line='Ha-6564',
-                 quiet=False):
+                 mask_flags='any', quiet=False):
 
         if not os.path.isfile(maps_file):
-            raise FileNotFoundError('File does not exist: {0}'.format(maps_file))
+            raise FileNotFoundError(f'File does not exist: {maps_file}')
 
         # Get the PSF, if possible
         psf, fwhm = (None,None) if cube_file is None else read_manga_psf(cube_file, psf_ext, fwhm=True)
@@ -331,6 +388,7 @@ class MaNGAGasKinematics(MaNGAKinematics):
             eml = channel_dictionary(hdu, 'EMLINE_GVEL')
             if line not in eml:
                 raise KeyError('{0} does not contain channel {1}.'.format(maps_file, line))
+
             x = hdu[coo_ext].data[0]
             y = hdu[coo_ext].data[1]
             binid = hdu['BINID'].data[3]
@@ -338,16 +396,32 @@ class MaNGAGasKinematics(MaNGAKinematics):
             grid_y = hdu['SPX_SKYCOO'].data[1]
             sb = hdu['EMLINE_GFLUX'].data[eml[line]]
             sb_ivar = hdu['EMLINE_GFLUX_IVAR'].data[eml[line]]
-            sb_mask = hdu['EMLINE_GFLUX_MASK'].data[eml[line]] > 0
             sb_anr = hdu['EMLINE_GANR'].data[eml[line]]
             vel = hdu['EMLINE_GVEL'].data[eml[line]]
             vel_ivar = hdu['EMLINE_GVEL_IVAR'].data[eml[line]]
-            vel_mask = hdu['EMLINE_GVEL_MASK'].data[eml[line]] > 0
             sig = hdu['EMLINE_GSIGMA'].data[eml[line]]
             sig_ivar = hdu['EMLINE_GSIGMA_IVAR'].data[eml[line]]
-            sig_mask = hdu['EMLINE_GSIGMA_MASK'].data[eml[line]] > 0
             sig_corr = hdu['EMLINE_INSTSIGMA'].data[eml[line]]
             reff = hdu[0].header['REFF']
+
+            # Get the masks
+            if mask_flags is None:
+                sb_mask = np.zeros(sb.shape, dtype=bool)
+                vel_mask = np.zeros(vel.shape, dtype=bool)
+                sig_mask = np.zeros(sig.shape, dtype=bool)
+            elif mask_flags == 'any':
+                sb_mask = hdu['EMLINE_GFLUX_MASK'].data[eml[line]] > 0
+                vel_mask = hdu['EMLINE_GVEL_MASK'].data[eml[line]] > 0
+                sig_mask = hdu['EMLINE_GSIGMA_MASK'].data[eml[line]] > 0
+            else:
+                bitmask = sdss_bitmask('MANGA_DAPPIXMASK')
+                sb_mask = bitmask.flagged(hdu['EMLINE_GFLUX_MASK'].data[eml[line]],
+                                          flag=mask_flags)
+                vel_mask = bitmask.flagged(hdu['EMLINE_GVEL_MASK'].data[eml[line]],
+                                           flag=mask_flags)
+                sig_mask = bitmask.flagged(hdu['EMLINE_GSIGMA_MASK'].data[eml[line]],
+                                           flag=mask_flags)
+
         if not quiet:
             print('Done')
 
@@ -374,13 +448,22 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             Name of the PNG file containing the image of the galaxy.
         psf_ext (:obj:`str`, optional):
             The name of the extension with the reconstructed PSF.
+        mask_flags (:obj:`str`, :obj:`list`, optional):
+            One or more named bits used to select the data that should be
+            masked. If 'any', mask any bit value larger than 0. If None, no
+            spaxels are masked (a *bad* idea for MaNGA data). Otherwise, the
+            list of strings are used with the ``sdssMaskbits.par`` file to
+            determine which spaxels should be masked. For MaNGA data, the
+            primary distinction is whether or not you flag everything or if
+            you only flag the spaxels marked as ``DONOTUSE``.
         quiet (:obj:`bool`, optional):
             Suppress printed output.
     """
-    def __init__(self, maps_file, cube_file=None, image_file=None, psf_ext='GPSF', quiet=False):
+    def __init__(self, maps_file, cube_file=None, image_file=None, psf_ext='GPSF',
+                 mask_flags='any', quiet=False):
 
         if not os.path.isfile(maps_file):
-            raise FileNotFoundError('File does not exist: {0}'.format(maps_file))
+            raise FileNotFoundError(f'File does not exist: {maps_file}')
 
         # Get the PSF, if possible
         psf, fwhm = (None,None) if cube_file is None else read_manga_psf(cube_file, psf_ext, fwhm=True)
@@ -411,12 +494,23 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             sb_mask = np.logical_not((sb > 0) & (sb_ivar > 0))
             vel = hdu['STELLAR_VEL'].data
             vel_ivar = hdu['STELLAR_VEL_IVAR'].data
-            vel_mask = hdu['STELLAR_VEL_MASK'].data > 0
             sig = hdu['STELLAR_SIGMA'].data
             sig_ivar = hdu['STELLAR_SIGMA_IVAR'].data
-            sig_mask = hdu['STELLAR_SIGMA_MASK'].data > 0
             sig_corr = hdu['STELLAR_SIGMACORR'].data[0]
             reff = hdu[0].header['REFF']
+
+            # Get the masks
+            if mask_flags is None:
+                vel_mask = np.zeros(vel.shape, dtype=bool)
+                sig_mask = np.zeros(sig.shape, dtype=bool)
+            elif mask_flags == 'any':
+                vel_mask = hdu['STELLAR_VEL_MASK'].data > 0
+                sig_mask = hdu['STELLAR_SIGMA_MASK'].data > 0
+            else:
+                bitmask = sdss_bitmask('MANGA_DAPPIXMASK')
+                vel_mask = bitmask.flagged(hdu['STELLAR_VEL_MASK'].data, flag=mask_flags)
+                sig_mask = bitmask.flagged(hdu['STELLAR_SIGMA_MASK'].data, flag=mask_flags)
+
         if not quiet:
             print('Done')
 

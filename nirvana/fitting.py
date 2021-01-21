@@ -513,8 +513,9 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
     else: pool = None
 
     #dynesty sampler with periodic pa and pab
-    sampler = dynesty.NestedSampler(loglike, dynprior, ndim , pool=pool,
-            periodic=[1,2], nlive=points,
+    sampler = dynesty.NestedSampler(loglike, dynprior, ndim , nlive=points,
+    #sampler = dynesty.DynamicNestedSampler(loglike, dynprior, ndim , nlive=points,
+            periodic=[1,2], pool=pool,
             ptform_args = [args], logl_args = [args], verbose=verbose)
     sampler.run_nested()
 

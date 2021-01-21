@@ -315,7 +315,8 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
     plt.subplot(3,4,1)
     ax = plt.gca()
     plt.axis('off')
-    plt.title(f'{plate}-{ifu}',size=20)
+    if stellar: plt.title(f'{plate}-{ifu} Stel.',size=20)
+    else: plt.title(f'{plate}-{ifu} Gas',size=20)
     plt.text(.1, .82, r'$i$: %0.1f$^\circ$'%resdict['inc'], 
             transform=ax.transAxes, size=20)
     plt.text(.1, .64, r'$\phi$: %0.1f$^\circ$'%resdict['pa'], 

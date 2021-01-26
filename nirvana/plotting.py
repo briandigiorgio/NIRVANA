@@ -283,7 +283,6 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
         raise ValueError('Dynesty output array has a bad shape.')
     else: nbins = int(nbins)
     args.setedges(nbins-1, nbin=True, maxr=maxr)
-    args.clip()
 
     #recalculate model that was fit
     resdict = profs(chains, args, stds=True)

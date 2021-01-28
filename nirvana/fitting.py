@@ -142,8 +142,8 @@ def unpack(params, args, jump=None):
         are in degrees and all velocities must be in consistent units.
     """
     paramdict = {}
-    #global parameters with and without center
     paramdict['xc'], paramdict['yc'] = [0,0]
+    #global parameters with and without center
     if args.nglobs == 4:
         paramdict['inc'],paramdict['pa'],paramdict['pab'],paramdict['vsys'] = params[:args.nglobs]
     elif args.nglobs == 6:
@@ -484,10 +484,10 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
     args.setdisp(disp)
     args.setmix(mix)
 
-    #do a quick fit to get inclination to set bin edges
+    #set bin edges
     if nbins is not None: args.setedges(nbins, nbin=True, maxr=maxr)
     else:
-        vmax, inc, pa, h, vsys = args.getguess()
+        inc = args.getguess()[1] if args.phot_inc is None else args.phot_inc
         args.setedges(inc, maxr=maxr)
 
     #define a variable for speeding up convolutions

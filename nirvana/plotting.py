@@ -129,12 +129,18 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
     '''
 
     #get and unpack median values for params
-    meds = dynmeds(samp, stds)
-    if stds: meds, lstd, ustd = meds
-    paramdict = unpack(meds, args, jump=jump)
+    meds = dynmeds(samp, stds=stds)
 
     #get standard deviations and put them into the dictionary
     if stds:
+        meds, lstd, ustd = meds
+        paramdict = unpack(meds, args, jump=jump)
+        paramdict['incl'], paramdict['pal'], paramdict['pabl'], paramdict['vsysl'] = lstd[:4]
+        paramdict['incu'], paramdict['pau'], paramdict['pabu'], paramdict['vsysu'] = ustd[:4]
+        if args.nglobs == 6:
+            paramdict['xcl'], paramdict['ycl'] = lstd[4:6]
+            paramdict['xcu'], paramdict['ycu'] = ustd[4:6]
+
         start = args.nglobs
         jump = len(args.edges)
         vs = ['vt', 'v2t', 'v2r']
@@ -147,6 +153,8 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
             sigjump = jump + 1
             paramdict['sigl'] = lstd[start + 3*jump:start + 3*jump + sigjump]
             paramdict['sigu'] = ustd[start + 3*jump:start + 3*jump + sigjump]
+
+    else: paramdict = unpack(meds, args, jump=jump)
 
     #plot profiles if desired
     if plot is not None: 
@@ -168,84 +176,25 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
 
     return paramdict
 
-def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, save=False, clobber=False):
-    '''
-    Make a summary plot for a `nirvana` output file with MaNGA velocity field.
-
-    Shows the values for the global parameters of the galaxy, the rotation
-    curves (with 1 sigma lower and upper bounds) for the different velocity
-    components, then comparisons of the MaNGA data, the model, and the residuals
-    for the rotational velocity and the velocity dispersion. 
-
-    Args:
-        f (:class:`dynesty.NestedSampler` or :obj:`str` or
-        :class:`dynesty.results.Results`):
-            Sampler, results, or file of dumped results from `dynesty` fit.
-        plate (:obj:`int`), optional):
-            MaNGA plate number for desired galaxy. Must be specified if
-            `auto=False`.
-        ifu (:obj:`int`), optional):
-            MaNGA IFU design number for desired galaxy. Must be specified if
-            `auto=False`.
-        smearing (:obj:`bool`, optional):
-            Flag for whether or not to apply beam smearing to models.
-        stellar (:obj:`bool`, optional):
-            Flag for whether or not to use stellar velocity data instead of gas.
-        mix (:obj:`bool`, optional):
-            Flag for whether or not the fit is a Bayesian mixture. [NOT WORKING]
-        cen (:obj:`bool`, optional):
-            Flag for whether the position of the center was fit.
-        save (:obj:`bool`, optional):
-            Flag for whether to save the plot. Will save as a pdf in the same
-            directory as `f` is in but inside a folder called `plots`.
-        clobber (:obj:`bool`, optional):
-            Flag to overwrite plot file if it already exists. Only matters if
-            `save=True`
-        
-    Returns:
-        :obj:`dict`: Dictionary with all of the median values of the
-        posteriors in the sampler. Has keys for inclination `inc`, first
-        order position angle `pa`, second order position angle `pab`,
-        systemic velocity `vsys`, x and y center coordinates `xc` and `yc`,
-        `numpy.ndarray`_ of first order tangential velocities `vt`,
-        `numpy.ndarray`_ objects of second order tangential and radial
-        velocities `v2t` and `v2r`, and `numpy.ndarray`_ of velocity
-        dispersions `sig`. If `stds == True` it will also contain keys for
-        the 1 sigma lower bounds of the velocity parameters `vtl`, `v2tl`,
-        `v2rl`, and `sigl` as well as their 1 sigma upper bounds `vtu`,
-        `v2tu`, `v2ru`, and `sigu`. Arrays have lengths that are the same as
-        the number of bins (determined automatically or from `jump`). All
-        angles are in degrees and all velocities must be in consistent units.
-
-        Plot: The values for the global parameters of the galaxy, the rotation
-        curves (with 1 sigma lower and upper bounds) for the different velocity
-        components, then comparisons of the MaNGA data, the model, and the
-        residuals for the rotational velocity and the velocity dispersion. 
-    '''
-
-    if save and not clobber:
-        path = f[:f.rfind('/')+1]
-        fname = f[f.rfind('/')+1:-5]
-        if os.path.isfile(f'{path}/plots/{fname}.pdf'):
-            raise ValueError('Plot file already exists')
+def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True):
 
     #get sampler in right format
     if type(f) == str: chains = pickle.load(open(f,'rb'))
     elif type(f) == np.ndarray: chains = f
     elif type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler: chains = f.results
 
-    #automatically set parameters for files generated by nirvana script
-    if plate is None and ifu is None:
+    if plate is None or ifu is None:
         info = re.split('/|-|_', f[:-5])
-        plate = int(info[5])
-        ifu = int(info[6])
+        plate = int(info[5]) if plate is None else plate
+        ifu = int(info[6]) if ifu is None else ifu
         stellar = True if 'stel' in info else False
         cen = True if 'nocen' not in info else False
         smearing = True if 'nosmear' not in info else False
         maxr = float([i for i in info if '.' in i and 'r' in i][0][:-1])
 
     if plate is None or ifu is None:
-        raise ValueError('Plate and IFU must be specified if auto=Fale')
+        print(plate,ifu)
+        raise ValueError('Plate and IFU must be specified if auto=False')
 
     #mock galaxy using stored values
     if plate == 0:
@@ -284,16 +233,79 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
     else: nbins = int(nbins)
     args.setedges(nbins-1, nbin=True, maxr=maxr)
 
-    #recalculate model that was fit
     resdict = profs(chains, args, stds=True)
-    #if maxr is not None:
-    #    r,th = projected_polar(args.x, args.y, resdict['pa'], resdict['inc'])
-    #    r /= args.reff
-    #    rmask = r > maxr
-    #    args.vel_mask |= rmask
-    #    args.sig_mask |= rmask
-    velmodel, sigmodel = bisym_model(args,resdict,plot=True)
+    resdict['plate'] = plate
+    resdict['ifu'] = ifu
+    resdict['type'] = 'Stars' if stellar else 'Gas'
+    return args, resdict, chains, meds
 
+def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, save=False, clobber=False):
+    '''
+    Make a summary plot for a `nirvana` output file with MaNGA velocity field.
+
+    Shows the values for the global parameters of the galaxy, the rotation
+    curves (with 1 sigma lower and upper bounds) for the different velocity
+    components, then comparisons of the MaNGA data, the model, and the residuals
+    for the rotational velocity and the velocity dispersion. 
+
+    Args:
+        f (:class:`dynesty.NestedSampler` or :obj:`str` or
+        :class:`dynesty.results.Results`):
+            Sampler, results, or file of dumped results from `dynesty` fit.
+        plate (:obj:`int`), optional):
+            MaNGA plate number for desired galaxy. Must be specified if
+            `auto=False`.
+        ifu (:obj:`int`), optional):
+            MaNGA IFU design number for desired galaxy. Must be specified if
+            `auto=False`.
+        smearing (:obj:`bool`, optional):
+            Flag for whether or not to apply beam smearing to models.
+        stellar (:obj:`bool`, optional):
+            Flag for whether or not to use stellar velocity data instead of gas.
+        maxr(:obj:`float`, optional:
+            Maximum radius to make edges go out to in units of effective radii
+        mix (:obj:`bool`, optional):
+            Flag for whether or not the fit is a Bayesian mixture. [NOT WORKING]
+        cen (:obj:`bool`, optional):
+            Flag for whether the position of the center was fit.
+        save (:obj:`bool`, optional):
+            Flag for whether to save the plot. Will save as a pdf in the same
+            directory as `f` is in but inside a folder called `plots`.
+        clobber (:obj:`bool`, optional):
+            Flag to overwrite plot file if it already exists. Only matters if
+            `save=True`
+        
+    Returns:
+        :obj:`dict`: Dictionary with all of the median values of the
+        posteriors in the sampler. Has keys for inclination `inc`, first
+        order position angle `pa`, second order position angle `pab`,
+        systemic velocity `vsys`, x and y center coordinates `xc` and `yc`,
+        `numpy.ndarray`_ of first order tangential velocities `vt`,
+        `numpy.ndarray`_ objects of second order tangential and radial
+        velocities `v2t` and `v2r`, and `numpy.ndarray`_ of velocity
+        dispersions `sig`. If `stds == True` it will also contain keys for
+        the 1 sigma lower bounds of the velocity parameters `vtl`, `v2tl`,
+        `v2rl`, and `sigl` as well as their 1 sigma upper bounds `vtu`,
+        `v2tu`, `v2ru`, and `sigu`. Arrays have lengths that are the same as
+        the number of bins (determined automatically or from `jump`). All
+        angles are in degrees and all velocities must be in consistent units.
+
+        Plot: The values for the global parameters of the galaxy, the rotation
+        curves (with 1 sigma lower and upper bounds) for the different velocity
+        components, then comparisons of the MaNGA data, the model, the
+        residuals, and chisq for the rotational velocity and the velocity dispersion. 
+    '''
+
+    if save and not clobber:
+        path = f[:f.rfind('/')+1]
+        fname = f[f.rfind('/')+1:-5]
+        if os.path.isfile(f'{path}/plots/{fname}.pdf'):
+            raise ValueError('Plot file already exists')
+
+    args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, mix, cen)
+    velmodel, sigmodel = bisym_model(args,resdict,plot=True)
+    vel_r = args.remap('vel')
+    sig_r = args.remap('sig')
 
     #mask border if necessary
     if args.bordermask is not None:
@@ -314,16 +326,19 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
     plt.subplot(3,4,1)
     ax = plt.gca()
     plt.axis('off')
-    if stellar: plt.title(f'{plate}-{ifu} Stel.',size=20)
-    else: plt.title(f'{plate}-{ifu} Gas',size=20)
-    plt.text(.1, .82, r'$i$: %0.1f$^\circ$'%resdict['inc'], 
-            transform=ax.transAxes, size=20)
-    plt.text(.1, .64, r'$\phi$: %0.1f$^\circ$'%resdict['pa'], 
-            transform=ax.transAxes, size=20)
-    plt.text(.1, .46, r'$\phi_b$: %0.1f$^\circ$'%resdict['pab'], 
-            transform=ax.transAxes, size=20)
-    plt.text(.1, .28, r'$v_{{sys}}$: %0.1f km/s'%resdict['vsys'], 
-            transform=ax.transAxes, size=20)
+    plt.title(f"{resdict['plate']}-{resdict['ifu']} {resdict['type']}",size=20)
+    plt.text(.1, .82, r'$i$: %0.1f$^{+%0.1f}_{-%0.1f}$ deg.'
+            %(resdict['inc'], resdict['incu'] - resdict['inc'], 
+            resdict['inc'] - resdict['incl']), transform=ax.transAxes, size=20)
+    plt.text(.1, .64, r'$\phi$: %0.1f$^{+%0.1f}_{-%0.1f}$ deg.'
+            %(resdict['pa'], resdict['pau'] - resdict['pa'], 
+            resdict['pa'] - resdict['pal']), transform=ax.transAxes, size=20)
+    plt.text(.1, .46, r'$\phi_b$: %0.1f$^{+%0.1f}_{-%0.1f}$ deg.'
+            %(resdict['pab'], resdict['pabu'] - resdict['pab'], 
+            resdict['pab'] - resdict['pabl']), transform=ax.transAxes, size=20)
+    plt.text(.1, .28, r'$v_{{sys}}$: %0.1f$^{+%0.1f}_{-%0.1f}$ km/s'
+            %(resdict['vsys'], resdict['vsysu'] - resdict['vsys'], 
+            resdict['vsys'] - resdict['vsysl']),transform=ax.transAxes, size=20)
     plt.text(.1, .1, r'$\chi_r^2$: %0.1f'%rchisq, 
             transform=ax.transAxes, size=20)
     if cen: plt.text(.1, -.08, r'$(x_c, y_c)$: (%0.1f, %0.1f)' %  
@@ -354,8 +369,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
 
     #MaNGA Ha velocity field
     plt.subplot(3,4,5)
-    if not stellar: plt.title(r'H$\alpha$ Velocity Data')
-    else: plt.title(r'Stellar Velocity Data')
+    plt.title(f"{resdict['type']} Velocity Data")
     vmax = min(np.max(np.abs(vel_r)), 300)
     plt.imshow(vel_r, cmap='jet', origin='lower', vmin=-vmax, vmax=vmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
@@ -396,8 +410,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
 
     #MaNGA Ha velocity disp
     plt.subplot(3,4,9)
-    if not stellar: plt.title(r'H$\alpha$ Dispersion Data')
-    else: plt.title(r'Stellar Dispersion Data')
+    plt.title(f"{resdict['type']} Dispersion Data")
     vmax = min(np.max(sig_r), 200)
     plt.imshow(sig_r, cmap='jet', origin='lower', vmax=vmax, vmin=0)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
@@ -445,25 +458,44 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
         plt.savefig(f'{path}plots/{fname}.pdf', format='pdf')
         plt.close()
 
-    return profs(chains, args)
+    return resdict
 
-def separate_components(f, plate, ifu, maxr=1.5):
-    if type(f) == str: chains = pickle.load(open(f,'rb'))
-    elif type(f) == np.ndarray: chains = f
-    elif type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler: chains = f.results
-    args = MaNGAGasKinematics.from_plateifu(plate,ifu)#, ignore_psf=not smearing)
-    args.setnglobs(4)
-    vel_r = args.remap('vel')
-    sig_r = args.remap('sig') if args.sig_phys2 is None else np.sqrt(np.abs(args.remap('sig_phys2')))
+def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True): 
+    '''
+    Make a plot `nirvana` output file with the different velocity components
+    searated.
 
-    #get appropriate number of edges  by looking at length of meds
-    nbins = (len(dynmeds(chains)) - args.nglobs)/4
-    if not nbins.is_integer(): raise ValueError('Dynesty output array has a bad shape.')
-    else: nbins = int(nbins)
-    args.setedges(nbins, nbin=True, maxr=maxr)
+    Plot the first order velocity component and the two second order velocity
+    components next to each other along with the full model, data, image, and
+    global parameters
 
-    #recalculate model that was fit
-    resdict = profs(chains, args, stds=True)
+    Args:
+        f (:class:`dynesty.NestedSampler` or :obj:`str` or
+        :class:`dynesty.results.Results`):
+            Sampler, results, or file of dumped results from `dynesty` fit.
+        plate (:obj:`int`), optional):
+            MaNGA plate number for desired galaxy. Must be specified if
+            `auto=False`.
+        ifu (:obj:`int`), optional):
+            MaNGA IFU design number for desired galaxy. Must be specified if
+            `auto=False`.
+        smearing (:obj:`bool`, optional):
+            Flag for whether or not to apply beam smearing to models.
+        stellar (:obj:`bool`, optional):
+            Flag for whether or not to use stellar velocity data instead of gas.
+        mix (:obj:`bool`, optional):
+            Flag for whether or not the fit is a Bayesian mixture. [NOT WORKING]
+        cen (:obj:`bool`, optional):
+            Flag for whether the position of the center was fit.
+        
+    Returns:
+        Plot: The global parameters of the galaxy, the image of the galaxy,
+        the data of the velocity field on the first row. The second row is the
+        full model follwed by the different components broken out with + and =
+        signs between.
+    '''
+
+    args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, mix, cen)
     z = np.zeros(len(resdict['vt']))
     vtdict, v2tdict, v2rdict = [resdict.copy(), resdict.copy(), resdict.copy()]
     vtdict['v2t'] = z
@@ -491,7 +523,7 @@ def separate_components(f, plate, ifu, maxr=1.5):
     plt.subplot(241)
     ax = plt.gca()
     plt.axis('off')
-    plt.title(f'{plate}-{ifu}',size=20)
+    plt.title(f"{resdict['plate']}-{resdict['ifu']} {resdict['type']}",size=20)
     plt.text(.1, .8, r'$i$: %0.1f$^\circ$'%resdict['inc'], 
             transform=ax.transAxes, size=20)
     plt.text(.1, .6, r'$\phi$: %0.1f$^\circ$'%resdict['pa'], 
@@ -540,3 +572,62 @@ def separate_components(f, plate, ifu, maxr=1.5):
     plt.xlabel(r'$V_{2r}$', fontsize=16)
 
     plt.tight_layout(h_pad=2)
+
+def sinewave(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True): 
+    '''
+    Compare the `nirvana` fit to the data azimuthally in radial bins.
+
+    Breaks down the data into radial bins and plots the velocity data points
+    in each bin azimuthally, overplotting the fit for each bin. These are
+    separated out into a Joy Division style plot.
+
+    Args:
+        f (:class:`dynesty.NestedSampler` or :obj:`str` or
+        :class:`dynesty.results.Results`):
+            Sampler, results, or file of dumped results from `dynesty` fit.
+        plate (:obj:`int`), optional):
+            MaNGA plate number for desired galaxy. Must be specified if
+            `auto=False`.
+        ifu (:obj:`int`), optional):
+            MaNGA IFU design number for desired galaxy. Must be specified if
+            `auto=False`.
+        smearing (:obj:`bool`, optional):
+            Flag for whether or not to apply beam smearing to models.
+        stellar (:obj:`bool`, optional):
+            Flag for whether or not to use stellar velocity data instead of gas.
+        mix (:obj:`bool`, optional):
+            Flag for whether or not the fit is a Bayesian mixture. [NOT WORKING]
+        cen (:obj:`bool`, optional):
+            Flag for whether the position of the center was fit.
+        
+    Returns:
+        Plot: the data points in each radial bin plotted azimuthally, color
+        coded and separated on an arbitrary y axis. The curve the fit generated
+        is plotted on top. 
+    '''
+
+    #prep the data, parameters, and coordinates
+    args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, mix, cen)
+    inc, pa, pab = np.radians([resdict['inc'], resdict['pa'], resdict['pab']])
+    r,th = projected_polar(args.x, args.y, pa, inc)
+    r /= args.reff
+
+    plt.figure(figsize=(4,len(args.edges)*.75))
+    c = plt.cm.jet(np.linspace(0,1,len(args.edges)-1))
+    plt.title(f"{resdict['plate']}-{resdict['ifu']} {resdict['type']}")
+
+    #for each radial bin, plot data points and model
+    for i in range(len(args.edges)-1):
+        cut = (r > args.edges[i]) * (r < args.edges[i+1])
+        sort = np.argsort(th[cut])
+        thcs = th[cut][sort]
+        plt.plot(np.degrees(thcs), args.vel[cut][sort]+100*i, '.', c=c[i])
+        
+        #generate model from fit parameters
+        velmodel = resdict['vsys'] + np.sin(inc) * (resdict['vt'][i] * np.cos(thcs) \
+                 - resdict['v2t'][i] * np.cos(2 * (thcs - pab)) * np.cos(thcs) \
+                 - resdict['v2r'][i] * np.sin(2 * (thcs - pab)) * np.sin(thcs))
+        plt.plot(np.degrees(thcs), velmodel+100*i, 'k--')
+        plt.tick_params(left=False, labelleft=False)
+        plt.xlabel('Azimuth (deg)')
+        plt.tight_layout()

@@ -140,6 +140,8 @@ class Kinematics(FitArgs):
             the data. Meant to mask bad data from convolution errors.
         phot_inc (:obj:`float`, optional):
             Photometric inclination in degrees.
+        maxr (:obj:`float`, optional):
+            Maximum radius of useful data in effective radii.
 
     Raises:
         ValueError:
@@ -152,7 +154,7 @@ class Kinematics(FitArgs):
     def __init__(self, vel, vel_ivar=None, vel_mask=None, x=None, y=None, sb=None, sb_ivar=None,
                  sb_mask=None, sb_anr=None, sig=None, sig_ivar=None, sig_mask=None, sig_corr=None, 
                  psf=None, aperture=None, binid=None, grid_x=None, grid_y=None, reff=None, fwhm=None, 
-                 bordermask=None, image=None, phot_inc=None):
+                 bordermask=None, image=None, phot_inc=None, maxr=None):
 
         # Check shape of input arrays
         self.nimg = vel.shape[0]
@@ -178,6 +180,7 @@ class Kinematics(FitArgs):
         self.image = image
         self.sb_anr = sb_anr
         self.phot_inc = phot_inc
+        self.maxr = maxr
 
         # TODO: This has more to do with the model than the data, so we
         # should put in the relevant model class/method

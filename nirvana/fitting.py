@@ -219,7 +219,7 @@ def trunc(q, mean, std, left, right):
     a,b = (left-mean)/std, (right-mean)/std #transform to z values
     return stats.truncnorm.ppf(q,a,b,mean,std)
 
-def dynprior(params, args, gaussprior=False):
+def ptform(params, args, gaussprior=False):
     '''
     Prior transform for :class:`dynesty.NestedSampler` fit. 
     
@@ -260,17 +260,35 @@ def dynprior(params, args, gaussprior=False):
         incp = 85 * paramdict['inc']
         pap = 360 * paramdict['pa']
         pabp = 180 * paramdict['pab']
-
-        #uniform guesses for reasonable values for velocities
         vsysp = (2*paramdict['vsys'] - 1) * 100
-        vtp = 400 * paramdict['vt']
-        v2tp = 200 * paramdict['v2t']
-        v2rp = 200 * paramdict['v2r']
-        if args.disp: sigp = 300 * paramdict['sig']
-        if args.mix:
-            Qp = paramdict['Q']
-            Mp = (2*paramdict['M'] - 1) * 1000
-            lnVp = (2*paramdict['lnV'] - 1) * 20
+
+        if args.weight == -1:
+            vtp  = np.array(paramdict['vt'])
+            v2tp = np.array(paramdict['v2t'])
+            v2rp = np.array(paramdict['v2r'])
+            vs = [vtp, v2tp, v2rp]
+            if args.disp:
+                sigp = np.array(paramdict['sig'])
+                vs += [sigp]
+
+            for vi in vs:
+                mid = len(vi)//2
+                vi[mid] = 400 * vi[mid]
+                for i in range(mid-1,-1,-1):
+                    vi[i] = stats.norm.ppf(vi[i], vi[i+1], 50)
+                for i in range(mid+1,len(vi)):
+                    vi[i] = stats.norm.ppf(vi[i], vi[i-1], 50)
+
+        else:
+            #uniform guesses for reasonable values for velocities
+            vtp = 400 * paramdict['vt']
+            v2tp = 200 * paramdict['v2t']
+            v2rp = 200 * paramdict['v2r']
+            if args.disp: sigp = 300 * paramdict['sig']
+            if args.mix:
+                Qp = paramdict['Q']
+                Mp = (2*paramdict['M'] - 1) * 1000
+                lnVp = (2*paramdict['lnV'] - 1) * 20
 
     #reassemble params array
     repack = [incp,pap,pabp,vsysp]
@@ -332,9 +350,10 @@ def loglike(params, args, squared=False):
     llike = -.5 * np.ma.sum(llike)
 
     #add in penalty for non smooth rotation curves
-    llike = llike - smoothing(paramdict['vt'],  args.weight) \
-                  - smoothing(paramdict['v2t'], args.weight) \
-                  - smoothing(paramdict['v2r'], args.weight)
+    if args.weight != -1:
+        llike = llike - smoothing(paramdict['vt'],  args.weight) \
+                      - smoothing(paramdict['v2t'], args.weight) \
+                      - smoothing(paramdict['v2r'], args.weight)
 
     #add in sigma model if applicable
     if sigmodel is not None:
@@ -351,7 +370,8 @@ def loglike(params, args, squared=False):
         if sigdataivar is not None: 
             siglike = siglike * sigdataivar - .5 * np.log(2*np.pi * sigdataivar)
         llike -= .5*np.ma.sum(siglike)
-        llike -= smoothing(paramdict['sig'], args.weight)
+        if args.weight != -1:
+            llike -= smoothing(paramdict['sig'], args.weight)
 
     return llike
 
@@ -513,8 +533,8 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
     else: pool = None
 
     #dynesty sampler with periodic pa and pab
-    sampler = dynesty.NestedSampler(loglike, dynprior, ndim , nlive=points,
-    #sampler = dynesty.DynamicNestedSampler(loglike, dynprior, ndim , nlive=points,
+    sampler = dynesty.NestedSampler(loglike, ptform, ndim , nlive=points,
+    #sampler = dynesty.DynamicNestedSampler(loglike, ptform, ndim, nlive=points,
             periodic=[1,2], pool=pool,
             ptform_args = [args], logl_args = [args], verbose=verbose)
     sampler.run_nested()

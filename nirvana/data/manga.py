@@ -405,6 +405,8 @@ class MaNGAGasKinematics(MaNGAKinematics):
             reff = hdu[0].header['REFF']
             phot_ell = hdu[0].header['ECOOELL']
             phot_inc = np.degrees(np.arccos(1 - phot_ell))
+            pri, sec, anc, oth = parse_manga_targeting_bits(hdu[0].header['MNGTARG1'], hdu[0].header['MNGTARG3'])
+            maxr = 2.5 if sec else 1.5
 
             # Get the masks
             if mask_flags is None:
@@ -432,7 +434,7 @@ class MaNGAGasKinematics(MaNGAKinematics):
                          sig=sig, sig_ivar=sig_ivar, sig_mask=sig_mask, 
                          sig_corr=sig_corr, psf=psf, binid=binid, grid_x=grid_x, 
                          grid_y=grid_y, reff=reff , fwhm=fwhm, image=image, 
-                         phot_inc=phot_inc)
+                         phot_inc=phot_inc, maxr=maxr)
 
 
 class MaNGAStellarKinematics(MaNGAKinematics):
@@ -503,6 +505,8 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             reff = hdu[0].header['REFF']
             phot_ell = hdu[0].header['ECOOELL']
             phot_inc = np.degrees(np.arccos(1 - phot_ell))
+            pri, sec, anc, oth = parse_manga_targeting_bits(hdu[0].header['MNGTARG1'], hdu[0].header['MNGTARG3'])
+            maxr = 2.5 if sec else 1.5
 
             # Get the masks
             if mask_flags is None:
@@ -524,7 +528,7 @@ class MaNGAStellarKinematics(MaNGAKinematics):
                          sig_ivar=sig_ivar, sig_mask=sig_mask, 
                          sig_corr=sig_corr, psf=psf, binid=binid, grid_x=grid_x, 
                          grid_y=grid_y, reff=reff, fwhm=fwhm, image=image,
-                         phot_inc=phot_inc)
+                         phot_inc=phot_inc, maxr=maxr)
 
 
 

@@ -114,8 +114,8 @@ def read_manga_psf(cube_file, psf_ext, fwhm=False, quiet=False):
 
 
 def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10',
-                              redux_path=None, cube_path=None, analysis_path=None, maps_path=None,
-                              check=True):
+                              redux_path=None, cube_path=None, image_path=None, analysis_path=None,
+                              maps_path=None, check=True):
     """
     Get MaNGA files used by NIRVANA.
 
@@ -141,6 +141,9 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
         cube_path (:obj:`str`, optional):
             This provides the *direct* path to the datacube file,
             circumventing the use of ``dr`` and ``redux_path``.
+        image_path (:obj:`str`, optional):
+            This provides the *direct* path to the image file,
+            circumventing the use of ``dr`` and ``redux_path``.
         analysis_path (:obj:`str`, optional):
             The top-level directory with all DAP output. If None,
             this will be set to the ``MANGA_SPECTRO_ANALYSIS``
@@ -153,25 +156,38 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
 
     Returns:
         :obj:`tuple`: Full path to three files: (1) the DAP MAPS file, (2)
-        the DRP LOGCUBE file, and (3) the SDSS 3-color PNG image.
+        the DRP LOGCUBE file, and (3) the SDSS 3-color PNG image. If the
+        image path cannot be defined or does not exist, the image file name
+        is returned as ``None``.
 
     Raises:
         ValueError:
             Raised if the directories to either the maps or cube file
             could not be determined from the input.
         NotADirectoryError:
-            Raised if the directory can be defined but does not exist.
+            Raised if the directory where the datacube should exist can be
+            defined but does not exist.
     """
-    if cube_path is None:
+    if cube_path is None or image_path is None:
         _redux_path = os.getenv('MANGA_SPECTRO_REDUX') if redux_path is None else redux_path
-        if _redux_path is None:
+        if _redux_path is None and cube_path is None:
             raise ValueError('Could not define top-level root for DRP output.')
-        cube_path = os.path.join(os.path.abspath(_redux_path), dr, str(plate))
+    if cube_path is None:
+        cube_path = os.path.join(os.path.abspath(_redux_path), dr, str(plate), 'stack')
+    if image_path is None:
+        image_path = None if _redux_path is None \
+                        else os.path.join(os.path.abspath(_redux_path), dr, str(plate), 'images')
+        if image_path is None:
+            warnings.warn('Could not define directory to image PNGs')
+        elif not os.path.isdir(image_path):
+            warnings.warn('No such directory: {0}'.format(image_path))
+            image_path = None
     if check and not os.path.isdir(cube_path):
         raise NotADirectoryError('No such directory: {0}'.format(cube_path))
 
-    cube_file = os.path.abspath(os.path.join(cube_path, 'stack', f'manga-{plate}-{ifu}-LOGCUBE.fits.gz'))
-    image_file = os.path.abspath(os.path.join(cube_path, 'images', f'{ifu}.png'))
+    cube_file = os.path.abspath(os.path.join(cube_path, f'manga-{plate}-{ifu}-LOGCUBE.fits.gz'))
+    image_file = None if image_path is None \
+                    else os.path.abspath(os.path.join(image_path, f'{ifu}.png'))
 
     if maps_path is None:
         _analysis_path = os.getenv('MANGA_SPECTRO_ANALYSIS') \
@@ -480,8 +496,8 @@ class MaNGAKinematics(Kinematics):
 
     @classmethod
     def from_plateifu(cls, plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10',
-                      redux_path=None, cube_path=None, analysis_path=None, maps_path=None,
-                      ignore_psf=False, **kwargs):
+                      redux_path=None, cube_path=None, image_path=None, analysis_path=None,
+                      maps_path=None, ignore_psf=False, **kwargs):
         """
         Instantiate the object using the plate and IFU number.
 
@@ -501,14 +517,15 @@ class MaNGAKinematics(Kinematics):
         maps_file, cube_file, image_file \
                 = manga_files_from_plateifu(plate, ifu, daptype=daptype, dr=dr,
                                             redux_path=redux_path, cube_path=cube_path,
-                                            analysis_path=analysis_path, maps_path=maps_path)
+                                            image_path=image_path, analysis_path=analysis_path,
+                                            maps_path=maps_path)
         if ignore_psf:
             cube_file = None
         elif not os.path.isfile(cube_file):
             warnings.warn(f'Datacube file {cube_file} does not exist!')
             cube_file = None
 
-        if not os.path.isfile(image_file):
+        if image_file is not None and not os.path.isfile(image_file):
             warnings.warn(f'Image file {image_file} does not exist!')
             image_file = None
 

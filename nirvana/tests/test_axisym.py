@@ -89,3 +89,4 @@ def test_lsq_with_sig():
     assert 250. < disk.par[5] < 253., 'Projected rotation changed'
     assert 28. < disk.par[7] < 30., 'Central velocity dispersion changed'
 
+

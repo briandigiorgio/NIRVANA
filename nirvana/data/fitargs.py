@@ -72,15 +72,16 @@ class FitArgs:
         '''
 
         if maxr is None: 
-            #mask outside pixels if necessary
-            if self.bordermask is not None:
-                x = self.x * (1-self.bordermask)
-                y = self.y * (1-self.bordermask)
-            else: x,y = (self.x, self.y)
+            if self.maxr is not None: maxr = self.maxr
+            else:
+                #mask outside pixels if necessary
+                if self.bordermask is not None:
+                    x = self.x * (1-self.bordermask)
+                    y = self.y * (1-self.bordermask)
+                else: x,y = (self.x, self.y)
 
-            #calculate maximum radius of image if none is given
-            maxr = np.max(np.sqrt(x**2 + y**2))/self.reff
-        self.maxr = maxr
+                #calculate maximum radius of image if none is given
+                maxr = np.max(np.sqrt(x**2 + y**2))/self.reff
         maxr *= self.reff #change to arcsec
 
         #specify number of bins manually if desired
@@ -156,7 +157,7 @@ class FitArgs:
         #model = rotcurveeval(self.grid_x,self.grid_y,vmax,inc,pa,h,vsys,reff=self.reff)
         model = fit.model()
         guess = [inc,pa,pa,vsys,0,0,0]
-        if self.nglobs == 6: guess += [0,0]
+        if hasattr(self, 'nglobs') and self.nglobs == 6: guess += [0,0]
 
         #if edges have not been defined, just return global parameters
         if not hasattr(self, 'edges'): return [vmax,inc,pa,h,vsys]

@@ -140,6 +140,10 @@ class Kinematics(FitArgs):
         bordermask (`numpy.ndarray`_):
             Boolean array containing the mask for a ring around the outside of
             the data. Meant to mask bad data from convolution errors.
+        phot_inc (:obj:`float`, optional):
+            Photometric inclination in degrees.
+        maxr (:obj:`float`, optional):
+            Maximum radius of useful data in effective radii.
 
     Raises:
         ValueError:
@@ -153,7 +157,7 @@ class Kinematics(FitArgs):
                  sb_ivar=None, sb_mask=None, sb_covar=None, sb_anr=None, sig=None, sig_ivar=None,
                  sig_mask=None, sig_covar=None, sig_corr=None, psf=None, aperture=None, binid=None,
                  grid_x=None, grid_y=None, reff=None, fwhm=None, bordermask=None, image=None,
-                 positive_definite=False, quiet=False):
+                 phot_inc=None, maxr=None, positive_definite=False, quiet=False):
 
         # Check shape of input arrays
         self.nimg = vel.shape[0]
@@ -182,6 +186,8 @@ class Kinematics(FitArgs):
         self.fwhm = fwhm
         self.image = image
         self.sb_anr = sb_anr
+        self.phot_inc = phot_inc
+        self.maxr = maxr
 
         # TODO: This has more to do with the model than the data, so we
         # should put in the relevant model class/method
@@ -605,7 +611,7 @@ class Kinematics(FitArgs):
         binid = np.arange(np.product(_vel.shape)).reshape(_vel.shape)
         return cls(_vel, x=_x, y=_y, grid_x=_x, grid_y=_y, reff=reff, binid=binid, sig=_sig, psf=_psf, sb=_sb, bordermask=bordermask)
 
-    def clip(self, sigma=10, sb=.03, anr=5, maxiter=10, smear_dv=50, smear_dsig=50, verbose=False):
+    def clip(self, sigma=10, sbf=.03, anr=5, maxiter=10, smear_dv=50, smear_dsig=50, verbose=False):
         '''
         Filter out bad spaxels in kinematic data.
         
@@ -621,9 +627,9 @@ class Kinematics(FitArgs):
                 `astropy.stats.sigma_clip` for sigma clipping the residuals
                 and chi squared. Can't be too low or it will cut out
                 nonaxisymmetric features. 
-            sb (:obj:`float`, optional): 
+            sbf (:obj:`float`, optional): 
                 Flux threshold below which spaxels are masked.
-            sb (:obj:`float`, optional): 
+            anr (:obj:`float`, optional): 
                 Surface brightness amplitude/noise ratio threshold below which
                 spaxels are masked.
             maxiter (:obj:`int`, optional):
@@ -638,24 +644,29 @@ class Kinematics(FitArgs):
                 Flag for printing out information on iterations.
         '''
 
+        #count spaxels in each bin and make 2d maps excluding large bins
+        nspax = np.array([(self.remap('binid') == self.binid[i]).sum() for i in range(len(self.binid))])
+        binmask = self.remap(nspax) > 10
+        sb  = np.ma.array(self.remap('sb'), mask=binmask) if self.sb is not None else None
+        vel = np.ma.array(self.remap('vel'), mask=binmask)
+        sig = np.ma.array(self.remap('sig'), mask=binmask) if self.sig is not None  else None
+
         #reconvolve psf on top of velocity and dispersion
         cnvfftw = ConvolveFFTW(self.spatial_shape)
-        vel = self.remap('vel')
-        smeared = smear(vel, self.beam_fft, beam_fft=True, 
-                sig=self.remap('sig'), sb=self.remap('sb'), cnvfftw=cnvfftw)
+        smeared = smear(vel, self.beam_fft, beam_fft=True, sig=sig, sb=sb, cnvfftw=cnvfftw)
 
         #cut out spaxels with too high residual because they're probably bad
-        dvmask = self.bin(np.abs(vel - smeared[1]) > smear_dv)
+        dvmask = self.bin(np.abs(vel - smeared[1]) > smear_dv) 
         masks = [dvmask]
         labels = ['dv']
         if self.sig is not None: 
-            dsigmask = self.bin(np.abs(self.remap('sig') - smeared[2]) > smear_dsig)
+            dsigmask = self.bin(np.abs(sig - smeared[2]) > smear_dsig)
             masks += [dsigmask]
             labels += ['dsig']
 
         #clip on surface brightness and ANR
         if self.sb is not None: 
-            sbmask = self.sb < sb
+            sbmask = self.sb < sbf
             masks += [sbmask]
             labels += ['sb']
 
@@ -674,7 +685,7 @@ class Kinematics(FitArgs):
         nmaskedold = -1
         nmasked = np.sum(mask)
         niter = 0
-        while nmaskedold != nmasked:
+        while nmaskedold != nmasked and sigma:
             #quick axisymmetric least squares fit
             fit = axisym.AxisymmetricDisk()
             fit.lsq_fit(self)
@@ -705,9 +716,11 @@ class Kinematics(FitArgs):
 
         #make a plot of all of the masks if desired
         if verbose: 
-            masks += [residmask, chisqmask]
-            labels += ['resid', 'chisq']
-            print(f'Clipping converged after {niter} iterations')
+            if sigma:
+                masks += [residmask, chisqmask]
+                labels += ['resid', 'chisq']
+                print(f'Clipping converged after {niter} iterations')
+
             plt.figure(figsize = (12,8))
             for i in range(len(masks)):
                 plt.subplot(231+i)

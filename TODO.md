@@ -2,9 +2,11 @@
 
 ## Main tasks
 
+- improve clipping for edges of stellar data
+- define velocities along bin edges so center can be held at 0
+- computation time
 - projected velocities
     - just take out sini
-- ~~stellar fits~~ works
 - allow Kinematics to include (inverse) covariance
     - Include nominal MaNGA covariance for MaNGAKinematics
 - Treatment of the velocity dispersion and correction

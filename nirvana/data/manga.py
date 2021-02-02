@@ -10,6 +10,7 @@ Module with the derived instances for MaNGA kinematics.
 .. include:: ../include/links.rst
 """
 import os
+import glob
 import warnings
 
 from pkg_resources import resource_filename
@@ -17,12 +18,13 @@ from pkg_resources import resource_filename
 from IPython import embed
 
 import numpy as np
-from astropy.io import fits
-from glob import glob
+from scipy import sparse
 import matplotlib.image as img
 
+from astropy.io import fits
+
+from .util import get_map_bin_transformations, impose_positive_definite
 from .kinematics import Kinematics
-from .fitargs import FitArgs
 from ..util.bitmask import BitMask
 
 
@@ -221,7 +223,7 @@ def read_drpall(plate, ifu, redux_path, dr, ext='elpetro', quiet=False):
     # Read the drpall file
     if not quiet:
         print('Reading {0} ... '.format(cube_file))
-    drpall_file = glob(f'{cubepath}/{dr}/drpall*.fits')[0]
+    drpall_file = glob.glob(f'{cubepath}/{dr}/drpall*.fits')[0]
     plateifu = f'{plate}-{ifu}'
 
     if not drpall_file:
@@ -236,6 +238,7 @@ def read_drpall(plate, ifu, redux_path, dr, ext='elpetro', quiet=False):
     if not quiet:
         print('Done')
     return inc, pa, n
+
 
 def sdss_bitmask(bitgroup):
     """
@@ -284,6 +287,190 @@ def parse_manga_targeting_bits(mngtarg1, mngtarg3=None):
     return primaryplus, secondary, ancillary, other
 
 
+def manga_map_covar(ivar, binid=None, rho_sig=1.92, rlim=3.2, min_ivar=1e-10, rho_tol=1e-5,
+                    positive_definite=True, fill=False):
+    r"""
+    Construct a nominal covariance matrix for a MaNGA wavelength channel or
+    DAP map.
+
+    See https://sdss-mangadap.readthedocs.io/en/latest/aggregation.html
+
+    This method constructs a correlation matrix with correlation coefficients
+    defined as
+
+    .. math::
+
+        \rho_{ij} = \exp(-D_{ij}^2 / 2\sigma_{\rho}^2)
+
+    where :math:`D_{ij}` is the distance between two spaxels in the spatial
+    dimension of the datacube (in the number spaxels, not arcsec). Any pixels
+    with :math:`D_{ij} > R_{\rm lim}` is set to zero, where :math:`R_{\rm
+    lim}` is the limiting radius of the kernel used in the datacube
+    rectification; this is provided here as ``rlim`` in pixels.
+
+    We found in Westfall et al. (2019, AJ, 158, 231) that this is a
+    reasonable approximation for the formal covariance that results from
+    Shepard's rectification method.
+
+    There is an unknown relation between the dispersion of the kernel used by
+    Shepard's method and the value of :math:`\sigma_{\rho}`. Tests show that
+    it is tantalizingly close to :math:`\sigma_{\rho} = \sqrt{2}\sigma`,
+    where :math:`\sigma` is in pixels; however, a formal derivation of this
+    hasn't been done and is complicated by the focal-plane sampling of the
+    row-stacked spectra.
+
+    Within the limits of how the focal-plane sampling changes with
+    wavelength, we found the value of :math:`\sigma_{\rho}` varies little
+    with wavelength in MaNGA. Here, we assume :math:`\sigma_{\rho}` is fully
+    wavelength independent. Preliminary tests also show that the covariance
+    in *derived* properties provides in the DAP MAPS files also exhibit this
+    same level of covariance. Therefore, you can get an approximate
+    covariance matrix for *any* DAP map using this method.
+
+    Args:
+        ivar (`numpy.ndarray`_, `numpy.ma.MaskedArray`_):
+            The inverse variance map. Shape must be 2D and square. Any value
+            below ``min_ivar`` is assumed to be masked. Any mask associated
+            with masked-array input is also incorporated into the output.
+        binid (`numpy.ndarray`_, optional):
+            The bin ID associated with each spaxel. Values of -1 indicate
+            that the value is not associated with any bin; multiple spaxels
+            with the same bin ID are assumed to have the same ``ivar``. If
+            None, all spaxels are assumed to be independent and any masking
+            is dictated by the value and mask for ``ivar``. Shape must match
+            ``ivar``.
+        sigma_rho (:obj:`float`, optional):
+            The :math:`\sigma_{\rho}` of the Gaussian function used to
+            approximate the trend of the correlation coefficient with spaxel
+            separation. Default is as determined by Westfall et al. (2019,
+            AJ, 158, 231).
+        rlim (:obj:`float`, optional):
+            The limiting radius of the image reconstruction (Gaussian) kernel
+            in pixels. The default is the value used by the MaNGA DRP when
+            constructing the MaNGA datacubes.
+        min_ivar (:obj:`float`, optional):
+            Minimum viable inverse variance. Anything below this value is
+            assumed to be masked. If None, anything that is :math:`\leq 0` is
+            masked.
+        rho_tol (:obj:`float`, optional):
+            Any correlation coefficient less than this is assumed
+            to be equivalent to (and set to) 0.
+        positive_definite (:obj:`bool`, optional):
+            Force the covariance matrix to be positive definite. This step is
+            expensive given the need to determine the eigenvalues and
+            eigenvectors of the covariance matrix; see
+            :func:`~nirvana.data.util.impose_positive_definite`. However, this
+            step is important if you intend to invert the covariance matrix
+            for, e.g., chi-squaare/likelihood calculations. Nominal
+            construction of the covariance matrix typically will *not* return
+            a positive matrix. If the covariance matrix will be further
+            manipulated, it's likely worth doing that manipulation first and
+            then ensuring it's positive definite; see
+            :class:`nirvana.data.kinematics.Kinematics`.
+        fill (:obj:`bool`, optional):
+            Largely a convenience that can be used to reshape the returned
+            covariance matrix. If True, the returned covariance matrix is
+            *always* matched to the shape of the input ``ivar`` matrix.
+            Covariance regions associated with masked spaxels, masked either
+            due to an inverse variance that is :math:`\leq 0` or because the
+            spaxel is not associated with a bin, are set to 0. The boolean
+            "good-pixel mask", the first returned object, selects the regions
+            ``ivar`` with the covariance calculation (i.e., this array is the
+            same regardless of the value of ``fill``). The behavior is such
+            that the following should always pass::
+
+                _, covar = manga_map_covar(ivar, fill=True)
+                gpm, subcovar = manga_map_covar(ivar, fill=False)
+                assert np.array_equal(covar[np.ix_(gpm.ravel(),gpm.ravel())].toarray(),
+                                      subcovar.toarray())
+
+    Returns:
+        :obj:`tuple`: Two objects are returned: (1) a boolean array with the
+        same shape as ``ivar`` selecting the spaxels used when calculating
+        the covariance matrix and (2) a `scipy.sparse.csr_matrix`_ with the
+        covariance matrix. See the ``fill`` argument for a description of the
+        shape of the returned covariance matrix.
+    """
+    # Get the good-pixel mask
+    bpm = np.ma.getmaskarray(ivar).copy() if isinstance(ivar, np.ma.MaskedArray) \
+                else np.zeros(ivar.shape, dtype=bool)
+    bpm |= np.logical_not(ivar > 0) if min_ivar is None else ivar < min_ivar
+    if binid is not None:
+        bpm |= binid < 0
+    gpm = np.logical_not(bpm)
+
+    # Compute the variance
+    var = np.zeros(ivar.shape, dtype=float)
+    var[gpm] = 1./ivar[gpm]
+
+    # Get the spaxel coordinates
+    nn = np.prod(var.shape)
+    i, j = map(lambda x : x.reshape(var.shape)[gpm],
+               np.unravel_index(np.arange(nn), shape=var.shape))
+    
+    # Get the correlation between the valid spaxels
+    d = np.square(i[:,None]-i[None,:]) + np.square(j[:,None]-j[None,:])
+    rho = np.exp(-d/np.square(rho_sig)/2)
+    rho[d > np.square(2*rlim)] = 0.
+    if rho_tol is not None:
+        # Impose the correlation tolerance
+        rho[rho < rho_tol] = 0.
+    # Convert to a sparse matrix
+    indx = rho > 0
+    ngood = np.sum(gpm)
+    rho = sparse.csr_matrix((rho[indx], np.where(indx)), shape=(ngood,ngood))
+
+    if binid is not None:
+        # Construct the binning matrices
+        # TODO: I don't think this takes very long, but we may want to skip
+        # this step also if the data isn't binned.
+        bin_transform = get_map_bin_transformations(binid=binid)[-1]
+        # Check if anything is binned
+        is_binned = bin_transform.shape[0] < rho.shape[0]
+        # The remainder of this is only needed if the data has been binned
+        if is_binned:
+            bin_transform = bin_transform[:,gpm.ravel()]
+            # Use the transformation matrix to calculate the correlation
+            # coefficients between the binned data
+            rho = bin_transform.dot(rho.dot(bin_transform.T))
+            # Then use an inverse operation to effectively replicate and
+            # produce the correlation matrix for the binned map
+            inv_transform = bin_transform.T.copy()
+            inv_transform[inv_transform > 0] = 1.
+            rho = inv_transform.dot(rho.dot(inv_transform.T))
+            # Renormalize
+            t = 1./np.sqrt(rho.diagonal())
+            rho = rho.multiply(np.outer(t,t))
+
+    # Calculate the covariance matrix
+    cov = rho.multiply(np.sqrt(np.outer(var[gpm], var[gpm]))).tocsr()
+
+    if positive_definite:
+        # Force the matrix to be positive definite
+        cov = impose_positive_definite(cov)
+
+    if not np.all(np.isfinite(cov.toarray())):
+        raise ValueError('Covariance matrix includes non-finite values.')
+
+    # TODO: Leaving this for the moment to make sure that the construction of
+    # the covariance matrix was successful
+    assert np.allclose(cov.diagonal(), var[gpm]), \
+            'CODING ERROR: Poor construction of the covariance matrix'
+
+    if not fill:
+        return gpm, cov
+
+    # Fill out the full covariance matrix so that its size matches the input
+    # map size
+    _cov = sparse.lil_matrix((ivar.size,ivar.size), dtype=float)
+    # NOTE: scipy issues a SparseEfficiencyWarning suggesting the next
+    # operation is more efficient using an lil_matrix instead of a csr_matrix;
+    # that's the reason for the declaration above and the conversion in the
+    # return type...
+    _cov[np.ix_(gpm.ravel(),gpm.ravel())] = cov
+    return gpm, _cov.tocsr()
+
+
 class MaNGAKinematics(Kinematics):
     """
     Base class for MaNGA derived classes the provides common functionality.
@@ -308,8 +495,8 @@ class MaNGAKinematics(Kinematics):
                 data. I.e., this instantiates the object setting
                 ``cube_file=None``.
             **kwargs:
-                Additional arguments that are passed directly to the
-                nominal instantiation method.
+                Additional arguments passed directly to the nominal
+                instantiation method.
         """
         maps_file, cube_file, image_file \
                 = manga_files_from_plateifu(plate, ifu, daptype=daptype, dr=dr,
@@ -358,17 +545,26 @@ class MaNGAGasKinematics(MaNGAKinematics):
             determine which spaxels should be masked. For MaNGA data, the
             primary distinction is whether or not you flag everything or if
             you only flag the spaxels marked as ``DONOTUSE``.
+        covar (:obj:`bool`, optional):
+            Construct the covariance matrices for the map data.
+        positive_definite (:obj:`bool`, optional):
+            Force the construction of the covariance matrix to be positive
+            definite. Practically speaking, this should generally be False if
+            the covariance matrix is going to be inverted and used in
+            chi-square/Gaussian likelihood calculations.
         quiet (:obj:`bool`, optional):
             Suppress printed output.
     """
     def __init__(self, maps_file, cube_file=None, image_file=None, psf_ext='RPSF', line='Ha-6564',
-                 mask_flags='any', quiet=False):
+                 mask_flags='any', covar=False, positive_definite=False, quiet=False):
 
         if not os.path.isfile(maps_file):
             raise FileNotFoundError(f'File does not exist: {maps_file}')
 
         # Get the PSF, if possible
-        psf, fwhm = (None,None) if cube_file is None else read_manga_psf(cube_file, psf_ext, fwhm=True)
+        psf, fwhm = (None, None) if cube_file is None \
+                        else read_manga_psf(cube_file, psf_ext, fwhm=True)
+        # Get the 3-color galaxy thumbnail image
         image = None if image_file is None else img.imread(image_file)
 
         # Establish whether or not the gas kinematics were determined
@@ -425,11 +621,26 @@ class MaNGAGasKinematics(MaNGAKinematics):
         if not quiet:
             print('Done')
 
-        super().__init__(vel, vel_ivar=vel_ivar, vel_mask=vel_mask, x=x, y=y, 
-                         sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sb_anr=sb_anr,
-                         sig=sig, sig_ivar=sig_ivar, sig_mask=sig_mask, 
+        if covar:
+            if not quiet:
+                print('Building covariance matrices ... ')
+            sb_gpm, sb_covar = manga_map_covar(np.ma.MaskedArray(sb_ivar, mask=sb_mask),
+                                               binid=binid, positive_definite=False, fill=True)
+            vel_gpm, vel_covar = manga_map_covar(np.ma.MaskedArray(vel_ivar, mask=vel_mask),
+                                                 binid=binid, positive_definite=False, fill=True)
+            sig_gpm, sig_covar = manga_map_covar(np.ma.MaskedArray(sig_ivar, mask=sig_mask),
+                                                 binid=binid, positive_definite=False, fill=True)
+            if not quiet:
+                print('Done')
+        else:
+            sb_covar, vel_covar, sig_covar = None, None, None
+
+        super().__init__(vel, vel_ivar=vel_ivar, vel_mask=vel_mask, vel_covar=vel_covar, x=x, y=y, 
+                         sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sb_covar=sb_covar, sb_anr=sb_anr,
+                         sig=sig, sig_ivar=sig_ivar, sig_mask=sig_mask, sig_covar=sig_covar,
                          sig_corr=sig_corr, psf=psf, binid=binid, grid_x=grid_x, 
-                         grid_y=grid_y, reff=reff , fwhm=fwhm, image=image)
+                         grid_y=grid_y, reff=reff , fwhm=fwhm, image=image,
+                         positive_definite=positive_definite)
 
 
 class MaNGAStellarKinematics(MaNGAKinematics):
@@ -460,13 +671,14 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             Suppress printed output.
     """
     def __init__(self, maps_file, cube_file=None, image_file=None, psf_ext='GPSF',
-                 mask_flags='any', quiet=False):
+                 mask_flags='any', covar=False, positive_definite=False, quiet=False):
 
         if not os.path.isfile(maps_file):
             raise FileNotFoundError(f'File does not exist: {maps_file}')
 
         # Get the PSF, if possible
-        psf, fwhm = (None,None) if cube_file is None else read_manga_psf(cube_file, psf_ext, fwhm=True)
+        psf, fwhm = (None,None) if cube_file is None \
+                        else read_manga_psf(cube_file, psf_ext, fwhm=True)
         image = img.imread(image_file) if image_file else None
 
         # Establish whether or not the stellar kinematics were
@@ -514,11 +726,26 @@ class MaNGAStellarKinematics(MaNGAKinematics):
         if not quiet:
             print('Done')
 
-        super().__init__(vel, vel_ivar=vel_ivar, vel_mask=vel_mask, x=x, y=y,
-                         sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sig=sig, 
-                         sig_ivar=sig_ivar, sig_mask=sig_mask, 
+        if covar:
+            if not quiet:
+                print('Building covariance matrices ... ')
+            sb_gpm, sb_covar = manga_map_covar(np.ma.MaskedArray(sb_ivar, mask=sb_mask),
+                                               binid=binid, positive_definite=False, fill=True)
+            vel_gpm, vel_covar = manga_map_covar(np.ma.MaskedArray(vel_ivar, mask=vel_mask),
+                                                 binid=binid, positive_definite=False, fill=True)
+            sig_gpm, sig_covar = manga_map_covar(np.ma.MaskedArray(sig_ivar, mask=sig_mask),
+                                                 binid=binid, positive_definite=False, fill=True)
+            if not quiet:
+                print('Done')
+        else:
+            sb_covar, vel_covar, sig_covar = None, None, None
+
+        super().__init__(vel, vel_ivar=vel_ivar, vel_mask=vel_mask, vel_covar=vel_covar, x=x, y=y,
+                         sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sb_covar=sb_covar, sig=sig, 
+                         sig_ivar=sig_ivar, sig_mask=sig_mask, sig_covar=sig_covar,
                          sig_corr=sig_corr, psf=psf, binid=binid, grid_x=grid_x, 
-                         grid_y=grid_y, reff=reff, fwhm=fwhm, image=image)
+                         grid_y=grid_y, reff=reff, fwhm=fwhm, image=image,
+                         positive_definite=positive_definite)
 
 
 

@@ -10,10 +10,12 @@ from IPython import embed
 
 import numpy as np
 from scipy import sparse
+from scipy import linalg
 from astropy.stats import sigma_clip
 import matplotlib.pyplot as plt
 
 from .fitargs import FitArgs
+from .util import get_map_bin_transformations, impose_positive_definite
 
 from ..models.beam import construct_beam, ConvolveFFTW, smear
 from ..models.geometry import projected_polar
@@ -147,15 +149,20 @@ class Kinematics(FitArgs):
             neither, or if ``binid`` is provided but ``grid_x`` or
             ``grid_y`` is None.
     """
-    def __init__(self, vel, vel_ivar=None, vel_mask=None, x=None, y=None, sb=None, sb_ivar=None,
-                 sb_mask=None, sb_anr=None, sig=None, sig_ivar=None, sig_mask=None, sig_corr=None, 
-                 psf=None, aperture=None, binid=None, grid_x=None, grid_y=None, reff=None, fwhm=None, 
-                 bordermask=None, image=None):
+    def __init__(self, vel, vel_ivar=None, vel_mask=None, vel_covar=None, x=None, y=None, sb=None,
+                 sb_ivar=None, sb_mask=None, sb_covar=None, sb_anr=None, sig=None, sig_ivar=None,
+                 sig_mask=None, sig_covar=None, sig_corr=None, psf=None, aperture=None, binid=None,
+                 grid_x=None, grid_y=None, reff=None, fwhm=None, bordermask=None, image=None,
+                 positive_definite=False, quiet=False):
 
         # Check shape of input arrays
         self.nimg = vel.shape[0]
         if len(vel.shape) != 2:
             raise ValueError('Input arrays to Kinematics must be 2D.')
+        # TODO: I don't remember why we have this restriction (maybe it was
+        # just because I didn't want to have to worry about having to
+        # accommodate anything but MaNGA kinematic fields yet), but we should
+        # look to get rid of this constraint of a square map.
         if vel.shape[1] != self.nimg:
             raise ValueError('Input arrays to Kinematics must be square.')
         for a in [vel_ivar, vel_mask, x, y, sb, sb_ivar, sb_mask, sig, sig_ivar, sig_mask,
@@ -205,61 +212,16 @@ class Kinematics(FitArgs):
         # The following are arrays used to convert between arrays
         # holding the data for the unique bins to arrays with the full
         # data map.
-        #   - The input BIN IDs and grid coordinates
-        self.binid = binid
         self.grid_x = grid_x
         self.grid_y = grid_y
-        #   - grid_indx and bin_inverse serve similar purposes and
-        #     are identical if the data are unbinned. grid_index
-        #     gives the flattened index of each unique measurement in
-        #     the input map. bin_inverse gives the indices that can
-        #     be used to reconstruct the input maps based on the
-        #     values extracted for the unique bin IDs. See
-        #     :func:`remap` for how these arrays are used to
-        #     reconstruct the input maps.
-        self.grid_indx = np.arange(np.prod(self.spatial_shape), dtype=int)
-        self.bin_inverse = self.grid_indx.copy()
-        #   - bin_transform is used to bin data in a map with
-        #     per-spaxel data to match the binning applied to the
-        #     measurements. E.g., this is used to match a per-spaxel model
-        #     to the binned data. By default (binid is None), this assumes each
-        #     pixel is its own bin. See :func:`bin` for how this is used.
-        self.bin_transform = sparse.coo_matrix((np.ones(np.prod(self.spatial_shape), dtype=float),
-                                                (self.grid_indx,self.grid_indx)),
-                                               shape=(np.prod(self.spatial_shape),)*2).tocsr()
-        if self.binid is None:
-            indx = self.grid_indx.copy()
-        else:
-            # Get the indices of measurements with unique bin IDs, ignoring any
-            # IDs set to -1
-            binid_map = self.binid.ravel()
-            self.binid, indx, self.bin_inverse, nbin \
-                = np.unique(binid_map, return_index=True, return_inverse=True, return_counts=True)
-            if np.any(self.binid == -1):
-                self.binid = self.binid[1:]
-                indx = indx[1:]
-                self.grid_indx = self.grid_indx[self.bin_inverse > 0]
-                self.bin_inverse = self.bin_inverse[self.bin_inverse > 0] - 1
-                nbin = nbin[1:]
-
-            # NOTE: In most cases, self.binid[self.bin_inverse] is
-            # identical to self.bin_inverse. The exception is if the
-            # bin numbers are not sequential, i.e., the bin numbers are
-            # not identical to np.arange(nbin).
-
-            # Construct the bin transform using a sparse matrix
-            d,i,j = np.array([[1/nbin[i],i,j] 
-                             for i,b in enumerate(self.binid)
-                             for j in np.where(binid_map == b)[0]]).T
-            self.bin_transform = sparse.coo_matrix((d,(i.astype(int),j.astype(int))),
-                                                   shape=(self.binid.size,
-                                                          np.prod(self.spatial_shape))).tocsr()
+        self.binid, self.bin_indx, self.grid_indx, self.bin_inverse, self.bin_transform \
+                = get_map_bin_transformations(spatial_shape=self.spatial_shape, binid=binid)
 
         # Unravel and select the valid values for all arrays
         for attr in ['x', 'y', 'sb', 'sb_ivar', 'sb_mask', 'vel', 'vel_ivar', 'vel_mask', 'sig', 
                      'sig_ivar', 'sig_mask', 'sig_corr', 'bordermask','sb_anr']:
             if getattr(self, attr) is not None:
-                setattr(self, attr, getattr(self, attr).ravel()[indx])
+                setattr(self, attr, getattr(self, attr).ravel()[self.bin_indx])
 
         # Calculate the square of the astrophysical velocity
         # dispersion. This is just the square of the velocity
@@ -273,6 +235,9 @@ class Kinematics(FitArgs):
         #    self.sb_mask  |= self.bordermask
         #    self.vel_mask |= self.bordermask
         #    self.sig_mask |= self.bordermask
+        self.vel_covar = self._ingest_covar(vel_covar, positive_definite=positive_definite)
+        self.sb_covar = self._ingest_covar(sb_covar, positive_definite=positive_definite)
+        self.sig_covar = self._ingest_covar(sig_covar, positive_definite=positive_definite)
 
     def _set_beam(self, psf, aperture):
         """
@@ -370,6 +335,59 @@ class Kinematics(FitArgs):
             _mask |= np.logical_not(_ivar > 0)
 
         return _data, _ivar, _mask
+
+    def _ingest_covar(self, covar, positive_definite=True, quiet=False):
+        """
+        Ingest an input covariance matrix for use when fitting the data.
+
+        Args:
+            covar (`numpy.ndarray`_, `scipy.sparse.csr_matrix`_):
+                Covariance matrix. It's shape must match the input map shape.
+                If None, the returned value is also None.
+
+        Returns:
+            `scipy.sparse.csr_matrix`_: The covariance matrix of the good bin values.
+        """
+        if covar is None:
+            return None
+
+        if not quiet:
+            print('Ingesting covariance matrix ... ')
+
+        nspax = np.prod(self.spatial_shape)
+        if covar.shape != (nspax,nspax):
+            raise ValueError('Input covariance matrix has incorrect shape: {0}'.format(covar.shape))
+
+        _covar = covar.copy() if isinstance(covar, sparse.csr.csr_matrix) \
+                    else sparse.csr_matrix(covar)
+
+        # It should be the case that, on input, the covariance matrix should
+        # demonstrate that the map values that are part of the same bin by being
+        # perfectly correlated. The matrix operation below constructs the
+        # covariance in the *binned* data, but you should also be able to
+        # obtain this just by selecting the appropriate rows/columns of the
+        # covariance matrix. You should be able to recover the input covariance
+        # matrix (or at least the populated regions of it) like so:
+
+        #   # Covariance matrix of the binned data
+        #   vc = self.bin_transform.dot(vel_covar.dot(self.bin_transform.T))
+        #   # Revert
+        #   gpm = np.logical_not(vel_mask)
+        #   _bt = self.bin_transform[:,gpm.ravel()].T.copy()
+        #   _bt[_bt > 0] = 1.
+        #   ivc = _bt.dot(vc.dot(_bt.T))
+        #   assert np.allclose(ivc.toarray(),
+        #                      vel_covar[np.ix_(gpm.ravel(), gpm.ravel())].toarray())
+
+        _covar = self.bin_transform.dot(_covar.dot(self.bin_transform.T))
+
+        # Deal with possible numerical error
+        # - Force it to be positive
+        _covar[_covar < 0] = 0.
+        # - Force it to be identically symmetric
+        _covar = (_covar + _covar.T)/2
+        # - Force it to be positive definite if requested
+        return impose_positive_definite(_covar) if positive_definite else _covar
 
     def remap(self, data, masked=True):
         """

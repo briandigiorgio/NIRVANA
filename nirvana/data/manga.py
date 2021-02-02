@@ -164,11 +164,11 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
         _redux_path = os.getenv('MANGA_SPECTRO_REDUX') if redux_path is None else redux_path
         if _redux_path is None:
             raise ValueError('Could not define top-level root for DRP output.')
-        cube_path = os.path.join(os.path.abspath(_redux_path), dr, str(plate), 'stack')
+        cube_path = os.path.join(os.path.abspath(_redux_path), dr, str(plate))
     if check and not os.path.isdir(cube_path):
         raise NotADirectoryError('No such directory: {0}'.format(cube_path))
 
-    cube_file = os.path.abspath(os.path.join(cube_path, f'manga-{plate}-{ifu}-LOGCUBE.fits.gz'))
+    cube_file = os.path.abspath(os.path.join(cube_path, 'stack', f'manga-{plate}-{ifu}-LOGCUBE.fits.gz'))
     image_file = os.path.abspath(os.path.join(cube_path, 'images', f'{ifu}.png'))
 
     if maps_path is None:
@@ -403,6 +403,10 @@ class MaNGAGasKinematics(MaNGAKinematics):
             sig_ivar = hdu['EMLINE_GSIGMA_IVAR'].data[eml[line]]
             sig_corr = hdu['EMLINE_INSTSIGMA'].data[eml[line]]
             reff = hdu[0].header['REFF']
+            phot_ell = hdu[0].header['ECOOELL']
+            phot_inc = np.degrees(np.arccos(1 - phot_ell))
+            pri, sec, anc, oth = parse_manga_targeting_bits(hdu[0].header['MNGTARG1'], hdu[0].header['MNGTARG3'])
+            maxr = 2.5 if sec else 1.5
 
             # Get the masks
             if mask_flags is None:
@@ -429,7 +433,8 @@ class MaNGAGasKinematics(MaNGAKinematics):
                          sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sb_anr=sb_anr,
                          sig=sig, sig_ivar=sig_ivar, sig_mask=sig_mask, 
                          sig_corr=sig_corr, psf=psf, binid=binid, grid_x=grid_x, 
-                         grid_y=grid_y, reff=reff , fwhm=fwhm, image=image)
+                         grid_y=grid_y, reff=reff , fwhm=fwhm, image=image, 
+                         phot_inc=phot_inc, maxr=maxr)
 
 
 class MaNGAStellarKinematics(MaNGAKinematics):
@@ -498,6 +503,10 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             sig_ivar = hdu['STELLAR_SIGMA_IVAR'].data
             sig_corr = hdu['STELLAR_SIGMACORR'].data[0]
             reff = hdu[0].header['REFF']
+            phot_ell = hdu[0].header['ECOOELL']
+            phot_inc = np.degrees(np.arccos(1 - phot_ell))
+            pri, sec, anc, oth = parse_manga_targeting_bits(hdu[0].header['MNGTARG1'], hdu[0].header['MNGTARG3'])
+            maxr = 2.5 if sec else 1.5
 
             # Get the masks
             if mask_flags is None:
@@ -518,7 +527,8 @@ class MaNGAStellarKinematics(MaNGAKinematics):
                          sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sig=sig, 
                          sig_ivar=sig_ivar, sig_mask=sig_mask, 
                          sig_corr=sig_corr, psf=psf, binid=binid, grid_x=grid_x, 
-                         grid_y=grid_y, reff=reff, fwhm=fwhm, image=image)
+                         grid_y=grid_y, reff=reff, fwhm=fwhm, image=image,
+                         phot_inc=phot_inc, maxr=maxr)
 
 
 

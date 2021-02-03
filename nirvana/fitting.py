@@ -63,10 +63,6 @@ def bisym_model(args, paramdict, plot=False):
     r, th = projected_polar(args.grid_x-paramdict['xc'], args.grid_y-paramdict['yc'], pa, inc)
     r /= args.reff
 
-    #if hasattr(args, 'maxr') and args.maxr != None:
-    #    r = np.ma.array(r, mask = r > args.maxr)
-    #    th = np.ma.array(th, mask = r > args.maxr)
-
     vtvals  = np.interp(r, args.edges, paramdict['vt'])
     v2tvals = np.interp(r, args.edges, paramdict['v2t'])
     v2rvals = np.interp(r, args.edges, paramdict['v2r'])
@@ -142,8 +138,9 @@ def unpack(params, args, jump=None):
         are in degrees and all velocities must be in consistent units.
     """
     paramdict = {}
-    paramdict['xc'], paramdict['yc'] = [0,0]
+
     #global parameters with and without center
+    paramdict['xc'], paramdict['yc'] = [0,0]
     if args.nglobs == 4:
         paramdict['inc'],paramdict['pa'],paramdict['pab'],paramdict['vsys'] = params[:args.nglobs]
     elif args.nglobs == 6:
@@ -151,16 +148,21 @@ def unpack(params, args, jump=None):
 
     #figure out what indices to get velocities from
     start = args.nglobs
-    if jump is None: jump = len(args.edges)
+    if jump is None: jump = len(args.edges) - args.fixcent
 
     #velocities
     paramdict['vt']  = params[start:start + jump]
     paramdict['v2t'] = params[start + jump:start + 2*jump]
     paramdict['v2r'] = params[start + 2*jump:start + 3*jump]
 
+    if args.fixcent:
+        paramdict['vt']  = np.insert(paramdict['vt'],  0, 0)
+        paramdict['v2t'] = np.insert(paramdict['v2t'], 0, 0)
+        paramdict['v2r'] = np.insert(paramdict['v2r'], 0, 0)
+
     #get sigma values and fill in center bin if necessary
     if args.disp: 
-        sigjump = jump + 1
+        sigjump = jump + args.fixcent
         end = start + 3*jump + sigjump
         paramdict['sig'] = params[start + 3*jump:end]
     else: end = start + 3*jump
@@ -281,9 +283,14 @@ def ptform(params, args, gaussprior=False):
 
         else:
             #uniform guesses for reasonable values for velocities
-            vtp = 400 * paramdict['vt']
-            v2tp = 200 * paramdict['v2t']
-            v2rp = 200 * paramdict['v2r']
+            if args.fixcent:
+                vtp = 400 * paramdict['vt'][1:]
+                v2tp = 200 * paramdict['v2t'][1:]
+                v2rp = 200 * paramdict['v2r'][1:]
+            else:
+                vtp = 400 * paramdict['vt']
+                v2tp = 200 * paramdict['v2t']
+                v2rp = 200 * paramdict['v2r']
             if args.disp: sigp = 300 * paramdict['sig']
             if args.mix:
                 Qp = paramdict['Q']
@@ -421,7 +428,7 @@ def mixlike(params, args):
 
 def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
         cores=10, maxr=None, cen=True, weight=10, smearing=True, points=500,
-        stellar=False, root=None, verbose=False, disp=True, mix=False):
+        stellar=False, root=None, verbose=False, disp=True, mix=False, fixcent=False):
     '''
     Main function for fitting a MaNGA galaxy with a nonaxisymmetric model.
 
@@ -503,6 +510,7 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
     args.setweight(weight)
     args.setdisp(disp)
     args.setmix(mix)
+    args.setfixcent(fixcent)
 
     #set bin edges
     if nbins is not None: args.setedges(nbins, nbin=True, maxr=maxr)
@@ -521,10 +529,10 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
     ndim = len(theta0)
 
     #adjust dimensions accordingly
-    nbin = len(args.edges)
-    if disp: ndim += nbin
+    nbin = len(args.edges) - args.fixcent
+    if disp: ndim += nbin + args.fixcent
     if mix: ndim += 3
-    print(f'{nbin} radial bins, {ndim} parameters')
+    print(f'{nbin + args.fixcent} radial bins, {ndim} parameters')
     
     #open up multiprocessing pool if needed
     if cores > 1:

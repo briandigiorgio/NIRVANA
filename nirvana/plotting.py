@@ -22,7 +22,7 @@ from .data.kinematics import Kinematics
 from .models.beam import smear, ConvolveFFTW
 from .models.geometry import projected_polar
 
-def dynmeds(samp, stds=False):
+def dynmeds(samp, stds=False, fixcent=False):
     """
     Get median values for each variable's posterior in a
     `dynesty.NestedSampler`_ sampler.
@@ -65,30 +65,6 @@ def dynmeds(samp, stds=False):
 
     return meds
 
-def dcorner(f, **args):
-    '''
-    Make a cornerplot of a :class:`dynesty.NestedSampler` sampler.
-
-    Wrapper function for :func:`dynesty.plotting.cornerplot`.
-
-    Args:
-        f (:class:`dynesty.NestedSampler` or :obj:`str` or
-        :class:`dynesty.results.Results`):
-            Sampler, results, or file of dumped results from `dynesty` fit.
-        **args:
-            Arguments for :func:`dynesty.plotting.cornerplot`.
-        
-    Returns:
-        Plot: A cornerplot of the parameters from the sampler.
-    '''
-
-    #load results appropriately
-    if type(f) == str: res = pickle.load(open(f,'rb'))
-    elif type(f) == np.ndarray: res = f
-    elif type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler: res = f.results
-
-    dynesty.plotting.cornerplot(res, **args)
-
 def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
     '''
     Turn a sampler output by `nirvana` into a set of rotation curves.
@@ -129,7 +105,7 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
     '''
 
     #get and unpack median values for params
-    meds = dynmeds(samp, stds=stds)
+    meds = dynmeds(samp, stds=stds, fixcent=args.fixcent)
 
     #get standard deviations and put them into the dictionary
     if stds:
@@ -142,11 +118,13 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
             paramdict['xcu'], paramdict['ycu'] = ustd[4:6]
 
         start = args.nglobs
-        jump = len(args.edges)
+        jump = len(args.edges) - args.fixcent
         vs = ['vt', 'v2t', 'v2r']
         for i,v in enumerate(vs):
             for b in ['l','u']:
                 exec(f'paramdict["{v}{b}"] = {b}std[start + {i}*jump : start + {i+1}*jump]')
+                if args.fixcent:
+                    exec(f'paramdict["{v}{b}"] = np.insert(paramdict["{v}{b}"], 0, 0)')
 
         #dispersion stds
         if args.disp: 
@@ -165,10 +143,9 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
 
         #add in lower and upper bounds
         if stds: 
-            [plot.fill_between(args.edges, p[0], p[1], alpha=.5) 
-                for i,p in enumerate([[paramdict['vtl'], paramdict['vtu']],
-                                      [paramdict['v2tl'], paramdict['v2tu']],
-                                      [paramdict['v2rl'], paramdict['v2ru']]])]
+            errors = [[paramdict['vtl'], paramdict['vtu']], [paramdict['v2tl'], paramdict['v2tu']], [paramdict['v2rl'], paramdict['v2ru']]]
+            for i,p in enumerate(errors):
+                plot.fill_between(args.edges, p[0], p[1], alpha=.5) 
 
         plt.xlabel(r'$R_e$')
         plt.ylabel(r'$v$ (km/s)')
@@ -176,7 +153,7 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
 
     return paramdict
 
-def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True):
+def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, fixcent=False):
 
     #get sampler in right format
     if type(f) == str: chains = pickle.load(open(f,'rb'))
@@ -191,9 +168,9 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
         cen = True if 'nocen' not in info else False
         smearing = True if 'nosmear' not in info else False
         maxr = float([i for i in info if '.' in i and 'r' in i][0][:-1])
+        fixcent = True if 'fixcent' in info else False
 
     if plate is None or ifu is None:
-        print(plate,ifu)
         raise ValueError('Plate and IFU must be specified if auto=False')
 
     #mock galaxy using stored values
@@ -220,6 +197,7 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
     args.setdisp(True)
     args.setnglobs(4) if not cen else args.setnglobs(6)
     args.setmix(mix)
+    args.setfixcent(fixcent)
     args.clip()
 
     vel_r = args.remap('vel')
@@ -227,11 +205,11 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
 
     #get appropriate number of edges  by looking at length of meds
     meds = dynmeds(chains)
-    nbins = (len(meds) - args.nglobs - 3*args.mix)/4
+    nbins = (len(meds) - args.nglobs - 3*args.mix - args.fixcent*args.disp)/4
     if not nbins.is_integer(): 
         raise ValueError('Dynesty output array has a bad shape.')
     else: nbins = int(nbins)
-    args.setedges(nbins-1, nbin=True, maxr=maxr)
+    args.setedges(nbins-1+args.fixcent, nbin=True, maxr=maxr)
 
     resdict = profs(chains, args, stds=True)
     resdict['plate'] = plate
@@ -239,7 +217,7 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
     resdict['type'] = 'Stars' if stellar else 'Gas'
     return args, resdict, chains, meds
 
-def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, save=False, clobber=False):
+def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, save=False, clobber=False, fixcent=False):
     '''
     Make a summary plot for a `nirvana` output file with MaNGA velocity field.
 
@@ -302,7 +280,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
         if os.path.isfile(f'{path}/plots/{fname}.pdf'):
             raise ValueError('Plot file already exists')
 
-    args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, mix, cen)
+    args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, mix, cen, fixcent)
     velmodel, sigmodel = bisym_model(args,resdict,plot=True)
     vel_r = args.remap('vel')
     sig_r = args.remap('sig')
@@ -495,7 +473,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
         signs between.
     '''
 
-    args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, mix, cen)
+    args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, mix, cen, fixcent)
     z = np.zeros(len(resdict['vt']))
     vtdict, v2tdict, v2rdict = [resdict.copy(), resdict.copy(), resdict.copy()]
     vtdict['v2t'] = z
@@ -607,7 +585,7 @@ def sinewave(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
     '''
 
     #prep the data, parameters, and coordinates
-    args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, mix, cen)
+    args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, mix, cen, fixcent)
     inc, pa, pab = np.radians([resdict['inc'], resdict['pa'], resdict['pab']])
     r,th = projected_polar(args.x, args.y, pa, inc)
     r /= args.reff

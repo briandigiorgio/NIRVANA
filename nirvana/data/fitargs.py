@@ -103,6 +103,9 @@ class FitArgs:
 
         self.disp = disp
 
+    def setfixcent(self, fixcent):
+        self.fixcent = fixcent
+
     def setmix(self, mix):
         self.mix = mix
 
@@ -154,9 +157,8 @@ class FitArgs:
         vmax = vsini/np.sin(np.radians(inc))
 
         #generate model velocity field, start assembling array of guess values
-        #model = rotcurveeval(self.grid_x,self.grid_y,vmax,inc,pa,h,vsys,reff=self.reff)
         model = fit.model()
-        guess = [inc,pa,pa,vsys,0,0,0]
+        guess = [inc,pa,pa,vsys]
         if hasattr(self, 'nglobs') and self.nglobs == 6: guess += [0,0]
 
         #if edges have not been defined, just return global parameters
@@ -169,13 +171,16 @@ class FitArgs:
         #iterate through bins and get vt value for each bin, 
         #dummy value for v2t and v2r since there isn't a good guess
         nbin = len(self.edges)
-        vt = np.zeros(nbin)
-        v2t = np.array([fill] * nbin)
-        v2r = np.array([fill] * nbin)
+        vt = [0] if not self.fixcent else []
         for i in range(1,nbin):
             cut = (r > self.edges[i-1]) * (r < self.edges[i])
-            vt[i] = np.max(model[cut])
-            guess += [vt[i], v2t[i], v2r[i]]
+            vt += [np.max(model[cut])]
+        v2t = [0] + [fill] * (nbin - 1) if not self.fixcent else [fill] * (nbin - 1)
+        v2r = [0] + [fill] * (nbin - 1) if not self.fixcent else [fill] * (nbin - 1)
+
+        guess += vt
+        guess += v2t
+        guess += v2r
         
         #clean and return
         guess = np.array(guess)

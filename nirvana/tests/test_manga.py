@@ -20,12 +20,7 @@ def test_manga_gas_kinematics():
     maps_file = remote_data_file('manga-8138-12704-MAPS-{0}.fits.gz'.format(dap_test_daptype))
     cube_file = remote_data_file('manga-8138-12704-LOGCUBE.fits.gz')
 
-    kin = data.manga.MaNGAGasKinematics(maps_file, cube_file=cube_file, covar=True,
-                                        positive_definite=True)
-
-    embed()
-    exit()
-
+    kin = data.manga.MaNGAGasKinematics(maps_file, cube_file=cube_file)
     _vel = kin.remap('vel', masked=False)
 
     with fits.open(maps_file) as hdu:
@@ -44,10 +39,6 @@ def test_manga_stellar_kinematics():
     cube_file = remote_data_file('manga-8138-12704-LOGCUBE.fits.gz')
 
     kin = data.manga.MaNGAStellarKinematics(maps_file, cube_file=cube_file, covar=True)
-
-    embed()
-    exit()
-
     _vel = kin.remap('vel', masked=False)
 
     # Check that the input map is correctly reproduced
@@ -116,25 +107,17 @@ def test_covar_fake():
 
 @requires_remote
 def test_inv_covar():
-
     maps_file = remote_data_file('manga-8138-12704-MAPS-{0}.fits.gz'.format(dap_test_daptype))
-    line = 'Ha-6564'
-    with fits.open(maps_file) as hdu:
-        eml = data.manga.channel_dictionary(hdu, 'EMLINE_GVEL')
-        binid = hdu['BINID'].data[3]
-        vel_ivar = hdu['EMLINE_GVEL_IVAR'].data[eml[line]]
+    kin = data.manga.MaNGAGasKinematics(maps_file, covar=True)
 
-    gpm, covar = data.manga.manga_map_covar(vel_ivar, binid=binid, fill=False)
-
-    icov = data.util.cinv(covar.toarray())
-
-    assert numpy.std(numpy.diag(numpy.dot(icov, covar.toarray())) - 1.) < 1e-4, \
+    # Force the covariance matrix to be positive definite
+    cov = data.util.impose_positive_definite(kin.vel_covar)
+    # Invert it
+    icov = data.util.cinv(cov.toarray())
+    # Check that you get back the identity matrix
+    assert numpy.std(numpy.diag(numpy.dot(icov, cov.toarray())) - 1.) < 1e-4, \
             'Multiplication by inverse matrix does not accurately produce identity matrix'
 
-
-if __name__ == '__main__':
-    test_manga_gas_kinematics()
-    #test_manga_stellar_kinematics()
 
 
 

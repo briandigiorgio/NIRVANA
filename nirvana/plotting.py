@@ -283,7 +283,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
     args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, mix, cen, fixcent)
     velmodel, sigmodel = bisym_model(args,resdict,plot=True)
     vel_r = args.remap('vel')
-    sig_r = args.remap('sig')
+    sig_r = np.sqrt(args.remap('sig_phys2')) if hasattr(args, 'sig_phys2') else args.remap('sig')
 
     #mask border if necessary
     if args.bordermask is not None:
@@ -317,7 +317,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
     plt.text(.1, .28, r'$v_{{sys}}$: %0.1f$^{+%0.1f}_{-%0.1f}$ km/s'
             %(resdict['vsys'], resdict['vsysu'] - resdict['vsys'], 
             resdict['vsys'] - resdict['vsysl']),transform=ax.transAxes, size=20)
-    plt.text(.1, .1, r'$\chi_r^2$: %0.1f'%rchisq, 
+    plt.text(.1, .1, r'$\chi_r^2$: %0.1f' % rchisq, 
             transform=ax.transAxes, size=20)
     if cen: plt.text(.1, -.08, r'$(x_c, y_c)$: (%0.1f, %0.1f)' %  
             (resdict['xc'], resdict['yc']), transform=ax.transAxes, size=20)

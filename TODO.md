@@ -2,11 +2,11 @@
 
 ## Main tasks
 
-- ~~improve clipping for edges of stellar data~~
-- define velocities along bin edges so center can be held at 0
+- ~~define velocities along bin edges so center can be held at 0~~
 - computation time
 - improve clipping auto rejection of bad galaxies
 - compare fits with axisym
+- run all velocity field through to see how many will work
 - projected velocities
     - just take out sini
 - allow Kinematics to include (inverse) covariance
@@ -14,7 +14,6 @@
 - Treatment of the velocity dispersion and correction
 - smarter surface brightness with all gas channels
 - put prior, clipping, etc parameters into one config file
-- errors on parameters in summaryplot
 
 ## Side tasks
 

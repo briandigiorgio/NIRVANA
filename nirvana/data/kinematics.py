@@ -593,7 +593,7 @@ class Kinematics(FitArgs):
         binid = np.arange(np.product(_vel.shape)).reshape(_vel.shape)
         return cls(_vel, x=_x, y=_y, grid_x=_x, grid_y=_y, reff=reff, binid=binid, sig=_sig, psf=_psf, sb=_sb, bordermask=bordermask)
 
-    def clip(self, sigma=10, sbf=.03, anr=5, maxiter=10, smear_dv=50, smear_dsig=50, verbose=False):
+    def clip(self, sigma=10, sbf=.03, anr=5, maxiter=10, smear_dv=50, smear_dsig=50, clip_thresh=.95, verbose=False):
         '''
         Filter out bad spaxels in kinematic data.
         
@@ -622,6 +622,10 @@ class Kinematics(FitArgs):
             smear_dsig (:obj:`float`, optional):
                 Threshold for clipping residuals of resmeared velocity
                 dispersion data.
+            clip_thresh (:obj:`float`, optional):
+                Maximum fraction of the bins that can be clipped in order for
+                the data to still be considered good. Will throw an error if
+                it exceeds this level.
             verbose (:obj:`bool`, optional):
                 Flag for printing out information on iterations.
         '''
@@ -629,6 +633,8 @@ class Kinematics(FitArgs):
         #count spaxels in each bin and make 2d maps excluding large bins
         nspax = np.array([(self.remap('binid') == self.binid[i]).sum() for i in range(len(self.binid))])
         binmask = self.remap(nspax) > 10
+        ngood = (~self.vel_mask).sum()
+
         sb  = np.ma.array(self.remap('sb'), mask=binmask) if self.sb is not None else None
         vel = np.ma.array(self.remap('vel'), mask=binmask)
         sig = np.ma.array(self.remap('sig'), mask=binmask) if self.sig is not None  else None
@@ -696,6 +702,9 @@ class Kinematics(FitArgs):
                 if verbose: print(f'Reached maximum clipping iterations: {niter}')
                 break
 
+            if mask.sum()/ngood > clip_thresh:
+                raise ValueError(f'Bad velocity field: >{clip_thresh*100}% of data clipped after {niter} iterations')
+
         #make a plot of all of the masks if desired
         if verbose: 
             if sigma:
@@ -711,8 +720,7 @@ class Kinematics(FitArgs):
                 plt.title(labels[i])
             plt.tight_layout()
             plt.show()
-            if len(mask) == mask.sum(): 
-                raise ValueError(f'All data clipped after {niter} iterations. No good data')
+
 
     def remask(self, mask):
         '''

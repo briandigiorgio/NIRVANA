@@ -264,6 +264,7 @@ def ptform(params, args, gaussprior=False):
         pabp = 180 * paramdict['pab']
         vsysp = (2*paramdict['vsys'] - 1) * 100
 
+        #coninuous prior
         if args.weight == -1:
             vtp  = np.array(paramdict['vt'])
             v2tp = np.array(paramdict['v2t'])
@@ -273,18 +274,19 @@ def ptform(params, args, gaussprior=False):
                 sigp = np.array(paramdict['sig'])
                 vs += [sigp]
 
+            #step outwards from center bin to make priors correlated
             for vi in vs:
                 mid = len(vi)//2
                 vi[mid] = 400 * vi[mid]
-                for i in range(mid-1,-1,-1):
+                for i in range(mid-1, -1+args.fixcent, -1):
                     vi[i] = stats.norm.ppf(vi[i], vi[i+1], 50)
-                for i in range(mid+1,len(vi)):
+                for i in range(mid+1, len(vi)):
                     vi[i] = stats.norm.ppf(vi[i], vi[i-1], 50)
 
         else:
             #uniform guesses for reasonable values for velocities
             if args.fixcent:
-                vtp = 400 * paramdict['vt'][1:]
+                vtp  = 400 * paramdict['vt'][1:]
                 v2tp = 200 * paramdict['v2t'][1:]
                 v2rp = 200 * paramdict['v2r'][1:]
             else:
@@ -306,8 +308,8 @@ def ptform(params, args, gaussprior=False):
             xcp = stats.norm.ppf(paramdict['xc'], guessdict['xc'], 5)
             ycp = stats.norm.ppf(paramdict['yc'], guessdict['yc'], 5)
         else:
-            xcp = (2*paramdict['xc'] - 1) * 20
-            ycp = (2*paramdict['yc'] - 1) * 20
+            xcp = (2*paramdict['xc'] - 1) * 10
+            ycp = (2*paramdict['yc'] - 1) * 10
         repack += [xcp,ycp]
 
     #repack all the velocities
@@ -524,8 +526,7 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
     conv = ConvolveFFTW(args.spatial_shape)
 
     #starting positions for all parameters based on a quick fit
-    args.clip()
-    theta0 = args.getguess()
+    theta0 = args.getguess(clip=True)
     ndim = len(theta0)
 
     #adjust dimensions accordingly

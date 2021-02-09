@@ -109,7 +109,7 @@ class FitArgs:
     def setmix(self, mix):
         self.mix = mix
 
-    def getguess(self, fill=10, clip=True):
+    def getguess(self, fill=10, clip=False):
         '''
         Generate a set of guess parameters for the galaxy using a simple least
         squares fit.

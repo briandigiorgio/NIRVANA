@@ -697,16 +697,17 @@ class Kinematics(FitArgs):
             #apply mask to data
             self.remask(clipmask)
 
-            if len(mask) == mask.sum(): verbose = True
+            #if len(mask) == mask.sum(): verbose = True
             if niter > maxiter: 
                 if verbose: print(f'Reached maximum clipping iterations: {niter}')
                 break
 
-            if mask.sum()/ngood > clip_thresh:
-                raise ValueError(f'Bad velocity field: >{clip_thresh*100}% of data clipped after {niter} iterations')
+            if nmasked/ngood > clip_thresh:
+                raise ValueError(f'Bad velocity field: {round(nmasked*100/ngood,1)}% of data clipped after {niter} iterations')
 
         #make a plot of all of the masks if desired
         if verbose: 
+            print(f'{nmasked*100/ngood}% of data clipped')
             if sigma:
                 masks += [residmask, chisqmask]
                 labels += ['resid', 'chisq']

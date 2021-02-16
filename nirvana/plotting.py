@@ -15,6 +15,8 @@ import dynesty
 import dynesty.plotting
 import corner
 import pickle
+from glob import glob
+from tqdm import tqdm
 
 from .fitting import bisym_model, unpack
 from .data.manga import MaNGAStellarKinematics, MaNGAGasKinematics
@@ -609,3 +611,29 @@ def sinewave(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
         plt.tick_params(left=False, labelleft=False)
         plt.xlabel('Azimuth (deg)')
         plt.tight_layout()
+
+def plotdir(directory=None, fname=None, **kwargs):
+    '''
+    Make summaryplots of an entire directory of output files.
+
+    Will try to look for automatically named nirvana output files unless told
+    otherwise. 
+    
+    Args:
+        directory (:obj:`str`, optional):
+            Directory to look for files in
+        fname (:obj:`str`, optional):
+            Filename format for files you want plotted with appropriate
+            wildcards. Defaults to standard nirvana output format
+        kwargs (optional):
+            Args for summaryplot
+    '''
+    if directory is None: directory = '/data/manga/digiorgio/nirvana/'
+    if fname is None: fname = '*-*_*.nirv'
+    fs = glob(directory+fname)
+    if len(fs) == 0: raise FileNotFoundError('No files found')
+    for i,f in tqdm(enumerate(fs)):
+        try:
+            summaryplot(f, save=True, **kwargs)
+        except:
+            print(f, 'failed')

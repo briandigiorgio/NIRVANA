@@ -7,8 +7,6 @@ import sys
 import argparse
 import multiprocessing as mp
 
-from IPython import embed
-
 import numpy as np
 from scipy import stats
 
@@ -22,6 +20,7 @@ except:
     tqdm = None
 
 import dynesty
+from ultranest import ReactiveNestedSampler, stepsampler
 
 from .models.beam import smear, ConvolveFFTW
 from .data.manga import MaNGAGasKinematics, MaNGAStellarKinematics
@@ -42,9 +41,9 @@ def bisym_model(args, paramdict, plot=False):
         args (:class:`nirvana.data.fitargs`):
             Object containing all of the data and settings needed for the
             galaxy.  
-        paramdict (:obj:`dict`): Dictionary of galaxy parameters that are
-            being fit. Assumes the format produced 
-            :func:`nirvana.fitting.unpack`.
+        paramdict (:obj:`dict`): 
+            Dictionary of galaxy parameters that are being fit. Assumes the
+            format produced :func:`nirvana.fitting.unpack`.
         plot (:obj:`bool`, optional): 
             Flag to return resulting models as 2D arrays instead of 1D for 
             plotting purposes.
@@ -106,7 +105,7 @@ def bisym_model(args, paramdict, plot=False):
 
     return binvel, binsig
 
-def unpack(params, args, jump=None):
+def unpack(params, args, jump=None, bound=False):
     """
     Utility function to carry around a bunch of values in the Bayesian fit.
 
@@ -155,7 +154,7 @@ def unpack(params, args, jump=None):
     paramdict['v2t'] = params[start + jump:start + 2*jump]
     paramdict['v2r'] = params[start + 2*jump:start + 3*jump]
 
-    if args.fixcent:
+    if args.fixcent and not bound:
         paramdict['vt']  = np.insert(paramdict['vt'],  0, 0)
         paramdict['v2t'] = np.insert(paramdict['v2t'], 0, 0)
         paramdict['v2r'] = np.insert(paramdict['v2r'], 0, 0)
@@ -221,7 +220,32 @@ def trunc(q, mean, std, left, right):
     a,b = (left-mean)/std, (right-mean)/std #transform to z values
     return stats.truncnorm.ppf(q,a,b,mean,std)
 
-def ptform(params, args, gaussprior=False):
+def unifprior(key, params, bounds, indx=0):
+    '''
+    Uniform prior transform for a given key in the params and bounds dictionaries.
+
+    Args:
+        key (:obj:`str`):
+            Key in params and bounds dictionaries.
+        params (:obj:`dict`):
+            Dictionary of untransformed fit parameters. Assumes the format
+            produced :func:`nirvana.fitting.unpack`.
+        params (:obj:`dict`):
+            Dictionary of uniform prior bounds on fit parameters. Assumes the
+            format produced :func:`nirvana.fitting.unpack`.
+        indx (:obj:`int`, optional):
+            If the parameter is an array, what index of the array to start at.
+    
+    Returns:
+        :obj:`float` or `numpy.ndarray`_ of transformed fit parameters.
+
+    '''
+    if bounds[key].ndim > 1:
+        return (bounds[key][:,1] - bounds[key][:,0]) * params[key][indx:] + bounds[key][:,0]
+    else:
+        return (bounds[key][1] - bounds[key][0]) * params[key] + bounds[key][0]
+
+def ptform(params, args, bounds=None, gaussprior=False):
     '''
     Prior transform for :class:`dynesty.NestedSampler` fit. 
     
@@ -243,7 +267,8 @@ def ptform(params, args, gaussprior=False):
         volume.
     '''
 
-    paramdict = unpack(params,args)
+    paramdict = unpack(params, args)
+    bounddict = unpack(bounds, args, bound=True)
 
     #attempt at smarter posteriors, currently super slow though
     #truncated gaussian prior around guess values
@@ -258,11 +283,10 @@ def ptform(params, args, gaussprior=False):
         v2rp = trunc(paramdict['v2r'],guessdict['v2rg'],50,0,200)
 
     else:
-        #uniform transformations to cover full angular range
-        incp = 85 * paramdict['inc']
-        pap = 360 * paramdict['pa']
-        pabp = 180 * paramdict['pab']
-        vsysp = (2*paramdict['vsys'] - 1) * 100
+        incp = unifprior('inc', paramdict, bounddict)
+        pap = unifprior('pa', paramdict, bounddict)
+        pabp = unifprior('pab', paramdict, bounddict)
+        vsysp = unifprior('vsys', paramdict, bounddict)
 
         #coninuous prior
         if args.weight == -1:
@@ -284,23 +308,19 @@ def ptform(params, args, gaussprior=False):
                     vi[i] = stats.norm.ppf(vi[i], vi[i-1], 50)
 
         else:
-            #uniform guesses for reasonable values for velocities
-            if args.fixcent:
-                vtp  = 400 * paramdict['vt'][1:]
-                v2tp = 200 * paramdict['v2t'][1:]
-                v2rp = 200 * paramdict['v2r'][1:]
-            else:
-                vtp = 400 * paramdict['vt']
-                v2tp = 200 * paramdict['v2t']
-                v2rp = 200 * paramdict['v2r']
-            if args.disp: sigp = 300 * paramdict['sig']
+            vtp  = unifprior('vt',  paramdict, bounddict, int(args.fixcent))
+            v2tp = unifprior('v2t', paramdict, bounddict, int(args.fixcent))
+            v2rp = unifprior('v2r', paramdict, bounddict, int(args.fixcent))
+            if args.disp: 
+                sigp = unifprior('sig', paramdict, bounddict)
+
             if args.mix:
                 Qp = paramdict['Q']
                 Mp = (2*paramdict['M'] - 1) * 1000
                 lnVp = (2*paramdict['lnV'] - 1) * 20
 
     #reassemble params array
-    repack = [incp,pap,pabp,vsysp]
+    repack = [incp, pap, pabp, vsysp]
 
     #do centers if desired
     if args.nglobs == 6: 
@@ -430,7 +450,7 @@ def mixlike(params, args):
 
 def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
         cores=10, maxr=None, cen=True, weight=10, smearing=True, points=500,
-        stellar=False, root=None, verbose=False, disp=True, mix=False, fixcent=False):
+        stellar=False, root=None, verbose=False, disp=True, mix=False, fixcent=False, ultra=False):
     '''
     Main function for fitting a MaNGA galaxy with a nonaxisymmetric model.
 
@@ -535,18 +555,59 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
     if mix: ndim += 3
     print(f'{nbin + args.fixcent} radial bins, {ndim} parameters')
     
+    #prior bounds defined based off of guess
+    bounds = np.zeros((ndim, 2))
+    bounds[0] = (max(theta0[0] - 30, 5), min(theta0[0] + 30, 85))
+    bounds[1] = (max(theta0[1] - 30, 0), min(theta0[1] + 30, 360))
+    bounds[2] = (0, 180)
+    bounds[3] = (theta0[3] - 5, theta0[3] + 5)
+    if cen:
+        bounds[4] = (theta0[4] - 5, theta0[4] + 5)
+        bounds[5] = (theta0[5] - 5, theta0[5] + 5)
+
+    #cap velocities at maximum in vf
+    vmax = min(np.max(args.vel), 400)
+    bounds[args.nglobs:args.nglobs + nbin] = (0, vmax)
+    bounds[args.nglobs + nbin:args.nglobs + 3*nbin] = (0, vmax)
+    if args.disp: bounds[args.nglobs + 3*nbin:] = (0, min(np.max(args.sig), 300))
+
     #open up multiprocessing pool if needed
-    if cores > 1:
+    if cores > 1 and not ultra:
         pool = mp.Pool(cores)
         pool.size = cores
     else: pool = None
 
-    #dynesty sampler with periodic pa and pab
-    sampler = dynesty.NestedSampler(loglike, ptform, ndim , nlive=points,
-    #sampler = dynesty.DynamicNestedSampler(loglike, ptform, ndim, nlive=points,
-            periodic=[1,2], pool=pool,
-            ptform_args = [args], logl_args = [args], verbose=verbose)
-    sampler.run_nested()
+    #experimental support for ultranest
+    if ultra:
+        #define names of parameters
+        names = ['inc', 'pa', 'pab', 'vsys', 'xc', 'yc']
+        for i in range(args.fixcent, nbin+1): names += ['vt'  + str(i)]
+        for i in range(args.fixcent, nbin+1): names += ['v2t' + str(i)]
+        for i in range(args.fixcent, nbin+1): names += ['v2r' + str(i)]
+        for i in range(nbin+1): names += ['sig' + str(i)]
 
-    if pool is not None: pool.close()
+        #wraparound parameters for pa and pab
+        wrap = np.zeros(len(names), dtype=bool)
+        wrap[1:3] = True
+
+        #define likelihood and prior with arguments
+        #def plike(params): return loglike(params, args)
+        #def pprior(params): return ptform(params, args, bounds)
+        plike = lambda params: loglike(params, args)
+        pprior = lambda params: ptform(params, args, bounds)
+
+        #ultranest step sampler
+        sampler = ReactiveNestedSampler(names, plike, pprior, wrapped_params=wrap, 
+                log_dir=f'/data/manga/digiorgio/nirvana/ultranest/{plate}/{ifu}')
+        sampler.stepsampler = stepsampler.RegionSliceSampler(nsteps = 2*len(names))
+        sampler.run()
+
+    else:
+        #dynesty sampler with periodic pa and pab
+        sampler = dynesty.NestedSampler(loglike, ptform, ndim, nlive=points,
+                periodic=[1,2], pool=pool,
+                ptform_args = [args, bounds], logl_args = [args], verbose=verbose)
+        sampler.run_nested()
+
+        if pool is not None: pool.close()
     return sampler

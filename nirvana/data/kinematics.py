@@ -633,7 +633,8 @@ class Kinematics(FitArgs):
         #count spaxels in each bin and make 2d maps excluding large bins
         nspax = np.array([(self.remap('binid') == self.binid[i]).sum() for i in range(len(self.binid))])
         binmask = self.remap(nspax) > 10
-        ngood = (~self.vel_mask).sum()
+        ngood = self.vel_mask.sum()
+        nmasked0 = (~self.vel_mask).sum()
 
         sb  = np.ma.array(self.remap('sb'), mask=binmask) if self.sb is not None else None
         vel = np.ma.array(self.remap('vel'), mask=binmask)
@@ -673,6 +674,7 @@ class Kinematics(FitArgs):
         nmaskedold = -1
         nmasked = np.sum(mask)
         niter = 0
+        err = False
         while nmaskedold != nmasked and sigma:
             #quick axisymmetric least squares fit
             fit = axisym.AxisymmetricDisk()
@@ -692,22 +694,25 @@ class Kinematics(FitArgs):
             nmaskedold = nmasked
             nmasked = np.sum(clipmask)
             niter += 1
-            if verbose: print(f'Performed {niter} clipping iterations...', end='\r')
+            if verbose: print(f'Performed {niter} clipping iterations...')
 
-            #apply mask to data
-            self.remask(clipmask)
-
-            #if len(mask) == mask.sum(): verbose = True
+            #break if too many iterations
             if niter > maxiter: 
                 if verbose: print(f'Reached maximum clipping iterations: {niter}')
                 break
 
-            if nmasked/ngood > clip_thresh:
-                raise ValueError(f'Bad velocity field: {round(nmasked*100/ngood,1)}% of data clipped after {niter} iterations')
+            #break if too much data has been clipped
+            maskfrac = (nmasked - nmasked0)/ngood
+            if maskfrac > clip_thresh:
+                err = True
+                break
+
+            #apply mask to data
+            self.remask(clipmask)
 
         #make a plot of all of the masks if desired
         if verbose: 
-            print(f'{nmasked*100/ngood}% of data clipped')
+            print(f'{round(maskfrac * 100, 1)}% of data clipped')
             if sigma:
                 masks += [residmask, chisqmask]
                 labels += ['resid', 'chisq']
@@ -721,6 +726,9 @@ class Kinematics(FitArgs):
                 plt.title(labels[i])
             plt.tight_layout()
             plt.show()
+
+        if err:
+            raise ValueError(f'Bad velocity field: {round(maskfrac * 100, 1)}% of data clipped after {niter} iterations')
 
 
     def remask(self, mask):

@@ -85,7 +85,7 @@ class FitArgs:
         maxr *= self.reff #change to arcsec
 
         #specify number of bins manually if desired
-        if nbin: self.edges = np.linspace(0, maxr, nbin+1)/self.reff
+        if nbin: self.edges = np.linspace(0, maxr, inc+1)/self.reff
 
         #calculate nyquist bin width based off fwhm and inc
         else:

@@ -207,11 +207,11 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
 
     #get appropriate number of edges  by looking at length of meds
     meds = dynmeds(chains)
-    nbins = (len(meds) - args.nglobs - 3*args.mix - args.fixcent*args.disp)/4
+    nbins = (len(meds) - args.nglobs - 3*args.mix - args.fixcent)/4
     if not nbins.is_integer(): 
         raise ValueError('Dynesty output array has a bad shape.')
     else: nbins = int(nbins)
-    args.setedges(nbins-1+args.fixcent, nbin=True, maxr=maxr)
+    args.setedges(nbins - 1 + args.fixcent, nbin=True, maxr=maxr)
 
     resdict = profs(chains, args, stds=True)
     resdict['plate'] = plate
@@ -637,3 +637,6 @@ def plotdir(directory=None, fname=None, **kwargs):
             summaryplot(f, save=True, **kwargs)
         except:
             print(f, 'failed')
+
+def writefits(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True): 
+    args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, mix, cen, fixcent)

@@ -566,7 +566,7 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
         bounds[5] = (theta0[5] - 5, theta0[5] + 5)
 
     #cap velocities at maximum in vf
-    vmax = min(np.max(args.vel), 400)
+    vmax = min(np.max(args.vel)/np.cos(np.radians(inc)), 400)
     bounds[args.nglobs:args.nglobs + nbin] = (0, vmax)
     bounds[args.nglobs + nbin:args.nglobs + 3*nbin] = (0, vmax)
     if args.disp: bounds[args.nglobs + 3*nbin:] = (0, min(np.max(args.sig), 300))
@@ -591,13 +591,11 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
         wrap[1:3] = True
 
         #define likelihood and prior with arguments
-        #def plike(params): return loglike(params, args)
-        #def pprior(params): return ptform(params, args, bounds)
-        plike = lambda params: loglike(params, args)
-        pprior = lambda params: ptform(params, args, bounds)
+        ulike = lambda params: loglike(params, args)
+        uprior = lambda params: ptform(params, args, bounds)
 
         #ultranest step sampler
-        sampler = ReactiveNestedSampler(names, plike, pprior, wrapped_params=wrap, 
+        sampler = ReactiveNestedSampler(names, ulike, uprior, wrapped_params=wrap, 
                 log_dir=f'/data/manga/digiorgio/nirvana/ultranest/{plate}/{ifu}')
         sampler.stepsampler = stepsampler.RegionSliceSampler(nsteps = 2*len(names))
         sampler.run()

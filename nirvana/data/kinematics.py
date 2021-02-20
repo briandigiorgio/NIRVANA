@@ -316,8 +316,9 @@ class Kinematics(FitArgs):
                 for all pixels.
 
         Returns:
-            :obj:`tuple`: Return three `numpy.ndarray`_ objects with
-            the ingested data, inverse variance, and boolean mask.
+            :obj:`tuple`: Return three `numpy.ndarray`_ objects with the
+            ingested data, inverse variance, and boolean mask. The first two
+            arrays are forced to have type ``numpy.float64``.
         """
         if data is None:
             # No data, so do nothing
@@ -329,9 +330,9 @@ class Kinematics(FitArgs):
         # Set the data and incorporate the mask for a masked array
         if isinstance(data, np.ma.MaskedArray):
             _mask |= np.ma.getmaskarray(data)
-            _data = data.data
+            _data = data.data.astype(np.float64)
         else:
-            _data = data
+            _data = data.astype(np.float64)
 
         # Set the error and incorporate the mask for a masked array
         if ivar is None:
@@ -339,9 +340,9 @@ class Kinematics(FitArgs):
             _ivar = None
         elif isinstance(ivar, np.ma.MaskedArray):
             _mask |= np.ma.getmaskarray(ivar)
-            _ivar = ivar.data
+            _ivar = ivar.data.astype(np.float64)
         else:
-            _ivar = ivar
+            _ivar = ivar.astype(np.float64)
         # Make sure to mask any measurement with ivar <= 0
         if _ivar is not None:
             _mask |= np.logical_not(_ivar > 0)
@@ -449,10 +450,12 @@ class Kinematics(FitArgs):
             if not masked or not hasattr(self, m) or getattr(self, m) is None:
                 # If there user doesn't want the mask, there is no mask, or the
                 # mask is None, ignore it
-                m = None
+                m = None if mask is None else mask
             else:
                 # Otherwise, get it
                 m = getattr(self, m)
+                if mask is not None:
+                    m |= mask
         else:
             # User provided arrays directly
             d = data

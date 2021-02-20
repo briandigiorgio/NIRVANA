@@ -20,7 +20,11 @@ except:
     tqdm = None
 
 import dynesty
-from ultranest import ReactiveNestedSampler, stepsampler
+try:
+    from ultranest import ReactiveNestedSampler, stepsampler
+except:
+    ReactiveNestedSampler = None
+    stepsampler = None
 
 from .models.beam import smear, ConvolveFFTW
 from .data.manga import MaNGAGasKinematics, MaNGAStellarKinematics
@@ -501,6 +505,9 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
         :class:`dynesty.NestedSampler`: Sampler from `dynesty` containing
         information from the fit.    
     '''
+    # Check if ultra can be used
+    if ultra and stepsampler is None:
+        raise ImportError('Could not import ultranest.  Cannot use ultranest sampler!')
 
     #mock galaxy using stored values
     if plate == 0:

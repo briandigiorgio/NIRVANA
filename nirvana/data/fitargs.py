@@ -60,9 +60,9 @@ class FitArgs:
 
         Args:
             inc (:obj:`float`):
-                Inclination to construct the elliptical bins at. If `nbin ==
-                True`, this is instead the number of bins to make (must be an
-                :obj:`int`)
+                Inclination in degrees to construct the elliptical bins at. If
+                `nbin == True`, this is instead the number of bins to make
+                (must be an :obj:`int`)
             maxr (:obj:`float`, optional):
                 Maximum radius for the bins in effective radii. If not
                 specified, it will default to the maximum unmasked radius of

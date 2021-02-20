@@ -104,8 +104,6 @@ def test_covar_fake():
     assert numpy.array_equal(covar[numpy.ix_(gpm.ravel(),gpm.ravel())].toarray(),
                              subcovar.toarray()), 'Failed in filling the covariance array'
 
-if __name__ == '__main__':
-    test_covar_fake()
 
 @requires_remote
 def test_inv_covar():

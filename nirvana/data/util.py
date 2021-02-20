@@ -1,10 +1,16 @@
+"""
+Provides a random set of utility methods.
 
+.. include:: ../include/links.rst
+"""
 import warnings
 
 from IPython import embed
 
 import numpy as np
-from scipy import sparse, linalg
+from scipy import sparse, linalg, stats, optimize
+
+from astropy.stats import sigma_clip
 
 # TODO: Add a set of weights?
 def get_map_bin_transformations(spatial_shape=None, binid=None):
@@ -18,7 +24,7 @@ def get_map_bin_transformations(spatial_shape=None, binid=None):
 
     Provided an independent calculation of the value in each map position,
     this method provides the transformation matrix, :math:`\mathbf{T}`, used
-    to calculate the binned values::
+    to calculate the binned values:
     
     .. math::
 
@@ -47,15 +53,16 @@ def get_map_bin_transformations(spatial_shape=None, binid=None):
     -------
 
     ubinid : `numpy.ndarray`_
-        1D vector with the list of unique bin IDs. Shape is :math:`(N_{\rm
-        bin},)`. If ``binid`` is not provided, this is returned as None.
+        1D vector with the sorted list of unique bin IDs. Shape is
+        :math:`(N_{\rm bin},)`. If ``binid`` is not provided, this is
+        returned as None.
 
     ubin_indx : `numpy.ndarray`_
         The index vector used to select the unique bin values from a
-        flattened map of binned data, *excluding* any any element with
-        ``binid == -1``. Shape is :math:`(N_{\rm bin},)`. If ``binid`` is not
-        provided, this is identical to ``grid_indx``. These indices can be
-        used to reconstruct the list of unique bins; i.e.::
+        flattened map of binned data, *excluding* any element with ``binid ==
+        -1``. Shape is :math:`(N_{\rm bin},)`. If ``binid`` is not provided,
+        this is identical to ``grid_indx``. These indices can be used to
+        reconstruct the list of unique bins; i.e.::
 
             assert np.array_equal(ubinid, binid.flat[ubin_indx])
 
@@ -210,6 +217,34 @@ def is_positive_definite(mat, quiet=True):
     return not np.any(notpos)
 
 
+def cinv(mat, check_finite=False, upper=False):
+    r"""
+    Use Cholesky decomposition to invert a matrix.
+
+    Args:
+        mat (`numpy.ndarray`_, `scipy.sparse.csr_matrix`_):
+            The array to invert.
+        check_finite (:obj:`bool`, optional):
+            Check that all the elements of ``mat`` are finite. See
+            `scipy.linalg.cholesky`_ and `scipy.linalg.solve_triangular`.
+        upper (:obj:`bool`, optional):
+            Return only the upper triangle matrix that can be used to
+            construct the inverse matrix. I.e., for input matrix
+            :math:`\mathbf{M}`, this returns matrix :math:`\mathbf{U}` such
+            that :math:`\mathbf{M}^{-1} = \mathbf{U} \mathbf{U}^T`.
+
+    Returns:
+        `numpy.ndarray`_: Inverse of the input matrix.
+    """
+    _mat = mat.toarray() if isinstance(mat, sparse.csr.csr_matrix) else mat
+    # This uses scipy.linalg, not numpy.linalg
+    cho = linalg.cholesky(_mat, check_finite=check_finite)
+    # Returns an upper triangle matrix that can be used to construct the inverse matrix (see below)
+    cho = linalg.solve_triangular(cho, np.identity(cho.shape[0]), check_finite=check_finite)
+    # TODO: Make it a sparse matrix if upper?
+    return cho if upper else np.dot(cho, cho.T)
+
+
 def boxcar_replicate(arr, boxcar):
     """
     Boxcar replicate an array.
@@ -237,33 +272,27 @@ def boxcar_replicate(arr, boxcar):
     # Perform the boxcar average over each axis and return the result
     _arr = arr.copy()
     for axis, box in zip(range(arr.ndim), _boxcar):
-        _arr = numpy.repeat(_arr, box, axis=axis)
+        _arr = np.repeat(_arr, box, axis=axis)
     return _arr
 
 
-def cinv(mat, check_finite=False, upper=False):
-    r"""
-    Use Cholesky decomposition to invert a matrix.
+def inverse(array):
+    """
+    Calculate ``1/array``, enforcing positivity and setting values <= 0 to
+    zero.
+    
+    The input array should be a quantity expected to always be positive, like
+    a variance or an inverse variance. The quantity returned is::
+
+        out = (array > 0.0)/(np.abs(array) + (array == 0.0))
 
     Args:
-        mat (`numpy.ndarray`_):
-            The dense numpy array to invert.
-        check_finite (:obj:`bool`, optional):
-            Check that all the elements of ``mat`` are finite. See
-            `scipy.linalg.cholesky`_ and `scipy.linalg.solve_triangular`.
-        upper (:obj:`bool`, optional):
-            Return only the upper triangle matrix that can be used to
-            construct the inverse matrix. I.e., for input matrix
-            :math:`\mathbf{M}`, this returns matrix :math:`\mathbf{U}` such
-            that :math:`\mathbf{M}^{-1} = \mathbf{U} \mathbf{U}^T`.
+        array (`numpy.ndarray`_):
+            Array to element-wise invert
 
     Returns:
-        `numpy.ndarray`_: Inverse of the input matrix.
+        `numpy.ndarray`: The result of the element-wise inversion.
     """
-    # This uses scipy.linalg, not numpy.linalg
-    cho = linalg.cholesky(mat, check_finite=check_finite)
-    # Returns an upper triangle matrix that can be used to construct the inverse matrix (see below)
-    cho = linalg.solve_triangular(cho, np.identity(cho.shape[0]), check_finite=check_finite)
-    return cho if upper else np.dot(cho, cho.T)
+    return (array > 0.0)/(np.abs(array) + (array == 0.0))
 
 

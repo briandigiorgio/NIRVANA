@@ -241,9 +241,15 @@ class Kinematics(FitArgs):
         #    self.sb_mask  |= self.bordermask
         #    self.vel_mask |= self.bordermask
         #    self.sig_mask |= self.bordermask
+
+        # Ingest the covariance matrices, if they're provided
         self.vel_covar = self._ingest_covar(vel_covar, positive_definite=positive_definite)
-        self.sb_covar = self._ingest_covar(sb_covar, positive_definite=positive_definite)
+        self.sb_covar = self._ingest_covar(sb_covar, positive_definite=False) #positive_definite)
         self.sig_covar = self._ingest_covar(sig_covar, positive_definite=positive_definite)
+
+        # TODO: Need to issue a some warning if the user has provided
+        # both ivar and covar
+
 
     def _set_beam(self, psf, aperture):
         """
@@ -395,7 +401,7 @@ class Kinematics(FitArgs):
         # - Force it to be positive definite if requested
         return impose_positive_definite(_covar) if positive_definite else _covar
 
-    def remap(self, data, masked=True):
+    def remap(self, data, mask=None, masked=True):
         """
         Remap the requested attribute to the full 2D array.
 
@@ -403,12 +409,18 @@ class Kinematics(FitArgs):
             data (`numpy.ndarray`_, :obj:`str`):
                 The data or attribute to remap. If the object is a
                 string, the string must be a valid attribute.
+            mask (`numpy.ndarray`_, optional):
+                Boolean mask with the same shape as ``data`` or the selected
+                ``data`` attribute. If ``data`` is provided as a
+                `numpy.ndarray`_, this provides an associated mask. If
+                ``data`` is provided as a string, this is a mask is used *in
+                addition to* any mask associated with selected attribute.
+                Ignored if set to None.
             masked (:obj:`bool`, optional):
-                Return data as a masked array, where data that are
-                not filled by the provided data. If ``data`` is a
-                string selecting an attribute and an associated mask
-                exists for that attribute, also include the mask in
-                the output.
+                Return data as a masked array, where data that are not filled
+                by the provided data. If ``data`` is a string selecting an
+                attribute and an associated mask exists for that attribute
+                (called "{data}_mask"), also include the mask in the output.
 
         Returns:
             `numpy.ndarray`_, `numpy.ma.MaskedArray`_: 2D array with
@@ -423,35 +435,47 @@ class Kinematics(FitArgs):
                 attribute is invalid.
 
         """
-        if isinstance(data, np.ndarray):
-            if data.shape != self.vel.shape:
-                raise ValueError('To remap, must have the same shape as the internal data '
-                                 'attributes.')
-            _data = np.ma.masked_all(self.spatial_shape, dtype=float) \
-                        if masked else np.zeros(self.spatial_shape, dtype=float)
-            _data[np.unravel_index(self.grid_indx, self.spatial_shape)] = data[self.bin_inverse]
-            return _data
+        if isinstance(data, str):
+            # User attempting to select an attribute. First check it exists.
+            if not hasattr(self, data):
+                raise AttributeError('No attribute called {0}.'.format(data))
+            # Get the data
+            d = getattr(self, data)
+            if d is None:
+                # There is no data, so just return None
+                return None
+            # Try to find the mask
+            m = '{0}_mask'.format(data)
+            if not masked or not hasattr(self, m) or getattr(self, m) is None:
+                # If there user doesn't want the mask, there is no mask, or the
+                # mask is None, ignore it
+                m = None
+            else:
+                # Otherwise, get it
+                m = getattr(self, m)
+        else:
+            # User provided arrays directly
+            d = data
+            m = mask
 
-        if not hasattr(self, data):
-            raise AttributeError('No attribute called {0}.'.format(data))
-        if getattr(self, data) is None:
-            return None
+        # Check the shapes (overkill if the user selected an attribute...)    
+        if d.shape != self.vel.shape:
+            raise ValueError('To remap, data must have the same shape as the internal data '
+                             'attributes: {0}'.format(self.vel.shape))
+        if m is not None and m.shape != self.vel.shape:
+            raise ValueError('To remap, mask must have the same shape as the internal data '
+                             'attributes: {0}'.format(self.vel.shape))
 
-        _data = np.ma.masked_all(self.spatial_shape, dtype=float) \
-                        if masked else np.zeros(self.spatial_shape, dtype=float)
-#        _data = np.zeros(self.spatial_shape, dtype=float)
-        _data[np.unravel_index(self.grid_indx, self.spatial_shape)] \
-                = getattr(self, data)[self.bin_inverse]
-        mask_data = '{0}_mask'.format(data)
-        if not masked or not hasattr(self, mask_data) or getattr(self, mask_data) is None:
-            return _data
-
-        mask = np.ones(self.spatial_shape, dtype=bool)
-        mask[np.unravel_index(self.grid_indx, self.spatial_shape)] \
-                = getattr(self, mask_data)[self.bin_inverse]
-        _data[mask] = np.ma.masked
-#        return np.ma.MaskedArray(_data, mask=mask)
-        return _data
+        # Construct the output map
+        _data = np.ma.masked_all(self.spatial_shape, dtype=d.dtype)
+        _data[np.unravel_index(self.grid_indx, self.spatial_shape)] = d[self.bin_inverse]
+        if m is not None:
+            np.ma.getmaskarray(_data)[np.unravel_index(self.grid_indx, self.spatial_shape)] \
+                    = m[self.bin_inverse]
+        # Return a masked array if requested; otherwise, fill the masked values
+        # with the equivalent of 0. WARNING: this will be False for a boolean
+        # array...
+        return _data if masked else _data.filled(d.dtype.type(0))
 
     def bin(self, data):
         """

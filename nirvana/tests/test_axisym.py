@@ -3,11 +3,13 @@ from IPython import embed
 
 import numpy
 
-from nirvana.data import manga
+from scipy import stats, special
+from nirvana import data
 from nirvana.tests.util import remote_data_file, requires_remote
 from nirvana.models.oned import HyperbolicTangent, Exponential
 from nirvana.models.axisym import AxisymmetricDisk
 from nirvana.models.beam import gauss2d_kernel
+from nirvana.data.scatter import IntrinsicScatter
 
 
 def test_disk():
@@ -32,8 +34,8 @@ def test_lsq_nopsf():
 
     # Read the data to fit
     data_root = remote_data_file()
-    kin = manga.MaNGAGasKinematics.from_plateifu(8138, 12704, cube_path=data_root,
-                                                 maps_path=data_root, ignore_psf=True)
+    kin = data.manga.MaNGAGasKinematics.from_plateifu(8138, 12704, cube_path=data_root,
+                                                      maps_path=data_root, ignore_psf=True)
     # Set the rotation curve
     rc = HyperbolicTangent(lb=numpy.array([0., 1e-3]), ub=numpy.array([500., kin.max_radius()]))
     # Set the disk velocity field
@@ -52,8 +54,8 @@ def test_lsq_psf():
 
     # Read the data to fit
     data_root = remote_data_file()
-    kin = manga.MaNGAGasKinematics.from_plateifu(8138, 12704, cube_path=data_root,
-                                                 maps_path=data_root)
+    kin = data.manga.MaNGAGasKinematics.from_plateifu(8138, 12704, cube_path=data_root,
+                                                      maps_path=data_root)
     # Set the rotation curve
     rc = HyperbolicTangent(lb=numpy.array([0., 1e-3]), ub=numpy.array([500., kin.max_radius()]))
     # Set the disk velocity field
@@ -72,8 +74,8 @@ def test_lsq_with_sig():
 
     # Read the data to fit
     data_root = remote_data_file()
-    kin = manga.MaNGAGasKinematics.from_plateifu(8138, 12704, cube_path=data_root,
-                                                 maps_path=data_root)
+    kin = data.manga.MaNGAGasKinematics.from_plateifu(8138, 12704, cube_path=data_root,
+                                                      maps_path=data_root)
     # Set the rotation curve
     rc = HyperbolicTangent(lb=numpy.array([0., 1e-3]), ub=numpy.array([500., kin.max_radius()]))
     # Set the dispersion profile
@@ -92,24 +94,47 @@ def test_lsq_with_sig():
 
 @requires_remote
 def test_lsq_with_covar():
+    # NOTE: This only fits the velocity field....
 
     # Read the data to fit
     data_root = remote_data_file()
-    kin = manga.MaNGAGasKinematics.from_plateifu(8138, 12704, cube_path=data_root,
-                                                 maps_path=data_root)
+    kin = data.manga.MaNGAGasKinematics.from_plateifu(8138, 12704, cube_path=data_root,
+                                                      maps_path=data_root, covar=True)
+
+    kin.vel_covar = data.util.impose_positive_definite(kin.vel_covar)
+
     # Set the rotation curve
     rc = HyperbolicTangent(lb=numpy.array([0., 1e-3]), ub=numpy.array([500., kin.max_radius()]))
-    # Set the dispersion profile
-    dc = Exponential(lb=numpy.array([0., 1e-3]), ub=numpy.array([500., kin.max_radius()]))
     # Set the disk velocity field
-    disk = AxisymmetricDisk(rc=rc, dc=dc)
+    disk = AxisymmetricDisk(rc=rc) #, dc=dc)
     # Fit it with a non-linear least-squares optimizer
-    disk.lsq_fit(kin, sb_wgt=True)
+    disk.lsq_fit(kin, sb_wgt=True) #, verbose=2)
+    # Rejected based on error-weighted residuals, accounting for intrinsic scatter
+    resid = kin.vel - kin.bin(disk.model())
+    err = 1/numpy.sqrt(kin.vel_ivar)
+    scat = IntrinsicScatter(resid, err=err, gpm=disk.vel_gpm)
+    sig, rej, gpm = scat.iter_fit(fititer=5) #, verbose=2)
+    # Check
+    assert sig > 8., 'Different intrinsic scatter'
+    assert numpy.sum(rej) == 19, 'Different number of pixels were rejected'
 
+    # Refit with new mask, include scatter and covariance
+    kin.vel_mask = numpy.logical_not(gpm)
+    p0 = disk.par
+    disk.lsq_fit(kin, scatter=sig, sb_wgt=True, p0=p0, ignore_covar=False,
+                 assume_posdef_covar=True) #, verbose=2)
+    # Reject
+    resid = kin.vel - kin.bin(disk.model())
+    scat = IntrinsicScatter(resid, covar=kin.vel_covar, gpm=disk.vel_gpm,
+                            assume_posdef_covar=True)
+    sig, rej, gpm = scat.iter_fit(fititer=5) #, verbose=2)
+    # Check
+    assert sig > 5., 'Different intrinsic scatter'
+    assert numpy.sum(rej) == 7, 'Different number of pixels were rejected'
+    # Model parameters
     assert numpy.all(numpy.absolute(disk.par[:2]) < 0.1), 'Center changed'
     assert 165. < disk.par[2] < 167., 'PA changed'
     assert 56. < disk.par[3] < 58., 'Inclination changed'
-    assert 250. < disk.par[5] < 253., 'Projected rotation changed'
-    assert 28. < disk.par[7] < 30., 'Central velocity dispersion changed'
+    assert 249. < disk.par[5] < 252., 'Projected rotation changed'
 
 

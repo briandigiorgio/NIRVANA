@@ -35,4 +35,9 @@
  - Copy over the BitMask class from the sdss-mangadap
  - Update masking and add method that determines the target sample given
    the targeting bits
+ - Added construction of MaNGA covariance matrices and incorporated them into
+   `Kinematics`.
+ - Added handling of covariance matrices in `AxisymmetricDisk`.
+ - Added `nirvana.data.scatter.IntrinsicScatter` used to both reject outlying
+   residuals and determine the intrinsic scatter in the data.
 

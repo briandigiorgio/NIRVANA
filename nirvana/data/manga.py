@@ -62,7 +62,7 @@ def channel_dictionary(hdu, ext, prefix='C'):
     return channel_dict
 
 
-def read_manga_psf(cube_file, psf_ext, fwhm=False, quiet=False):
+def read_manga_psf(cube_file, psf_ext, fwhm=False, quiet=True):
     """
     Read the image of the reconstructed datacube point-spread
     function from the MaNGA DRP CUBE file.
@@ -205,7 +205,7 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
     return maps_file, cube_file, image_file
 
 
-def read_drpall(plate, ifu, redux_path, dr, ext='elpetro', quiet=False):
+def read_drpall(plate, ifu, redux_path, dr, ext='elpetro', quiet=True):
     """
     Read the NASA Sloan Atlas data from the DRPall file for the
     appropriate data release.
@@ -573,7 +573,7 @@ class MaNGAGasKinematics(MaNGAKinematics):
             Suppress printed output.
     """
     def __init__(self, maps_file, cube_file=None, image_file=None, psf_ext='RPSF', line='Ha-6564',
-                 mask_flags='any', covar=False, positive_definite=False, quiet=False):
+                 mask_flags='any', covar=False, positive_definite=False, quiet=True):
 
         if not os.path.isfile(maps_file):
             raise FileNotFoundError(f'File does not exist: {maps_file}')
@@ -692,7 +692,7 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             Suppress printed output.
     """
     def __init__(self, maps_file, cube_file=None, image_file=None, psf_ext='GPSF',
-                 mask_flags='any', covar=False, positive_definite=False, quiet=False):
+                 mask_flags='any', covar=False, positive_definite=False, quiet=True):
 
         if not os.path.isfile(maps_file):
             raise FileNotFoundError(f'File does not exist: {maps_file}')

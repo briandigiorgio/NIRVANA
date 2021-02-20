@@ -14,7 +14,9 @@ def cov_err(jac):
     Press et al. 2007, Numerical Recipes, 3rd ed., Section 15.4.2
 
     This is directly pulled from ppxf.capfit.cov_err, but only
-    returns the covariance matrix.
+    returns the covariance matrix:
+
+    https://pypi.org/project/ppxf/
 
     Args:
         jac (`numpy.ndarray`_):

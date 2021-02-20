@@ -520,11 +520,11 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
         if stellar:
             args = MaNGAStellarKinematics.from_plateifu(plate, ifu, daptype=daptype, dr=dr,
                                                         ignore_psf=not smearing, cube_path=root,
-                                                        maps_path=root)
+                                                        image_path=root, maps_path=root)
         else:
             args = MaNGAGasKinematics.from_plateifu(plate, ifu, line='Ha-6564', daptype=daptype,
                                                     dr=dr, ignore_psf=not smearing, cube_path=root,
-                                                    maps_path=root)
+                                                    image_path=root, maps_path=root)
 
     #set basic parameters for galaxy
     args.setnglobs(6) if cen else args.setnglobs(4)

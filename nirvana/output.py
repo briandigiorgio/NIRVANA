@@ -1,58 +1,95 @@
 import numpy as np
 import matplotlib.pyplot as plt
+
 from glob import glob
 from tqdm import tqdm
+import multiprocessing as mp
+
 from astropy.io import fits
 from astropy.table import Table,Column
 
-from nirvana.plotting import fileprep
-from nirvana.fitting import bisym_model
-from nirvana.models.axisym import AxisymmetricDisk
-from nirvana.models.geometry import projected_polar
+from .plotting import fileprep
+from .fitting import bisym_model
+from .models.axisym import AxisymmetricDisk
+from .models.geometry import projected_polar
 
-def extractdir(directory = '/data/manga/digiorgio/nirvana/')
+def extractfile(f):
+    try: 
+        #get info out of each file and make bisym model
+        args, resdict, chains, meds = fileprep(f)
+        velmodel,sigmodel = bisym_model(args, resdict, plot=True)
+
+        #axisym fit holding xc, yc, pa, and inc constant
+        fit = AxisymmetricDisk()
+        fit.lsq_fit(args,p0=[resdict['xc'], resdict['yc'], resdict['pa'], resdict['inc'], 0, 100, 10], fix = [1, 1, 1, 1, 0, 0, 0])
+        symmodel = fit.model()
+
+        #fractional difference between bisym and axisym
+        asym = np.abs((velmodel-symmodel)/velmodel)
+        median = np.ma.median(asym)
+
+    #failure if bad file
+    except:
+        median, args, asym, resdict = (None, None, None, None)
+
+    return median, args, asym, resdict
+
+def extractdir(cores=10, directory='/data/manga/digiorgio/nirvana/'):
     '''
     Scan an entire directory for nirvana output files and extract useful data from them.
     '''
 
-    #load up files
+    #find nirvana files
     fs = glob(directory + '*.nirv')
+    with mp.Pool(cores) as p:
+        out = p.map(extractfile, fs)
+
     medians = np.zeros(len(fs))
-    galaxies = []
-    asyms = []
-    dicts = []
-    for i in tqdm(range(len(fs))):
-        try: 
-            #get info out of each file and make bisym model
-            args, resdict, chains, meds = fileprep(fs[i])
-            velmodel,sigmodel = bisym_model(args, resdict, plot=True)
-
-            #axisym fit holding xc, yc, pa, and inc constant
-            fit = AxisymmetricDisk()
-            fit.lsq_fit(args,p0=[resdict['xc'], resdict['yc'], resdict['pa'], resdict['inc'], 0, 100, 10], fix = [1, 1, 1, 1, 0, 0, 0])
-            symmodel = fit.model()
-
-            #fractional difference between bisym and axisym
-            asym = np.abs((velmodel-symmodel)/velmodel)
-
-            #store data
-            medians[i] = np.ma.median(asym)
-            galaxies += [args]
-            asyms += [asym]
-            dicts += [resdict]
-
-        #failure if bad file
-        except:
-            galaxies += [None]
-            asyms += [None]
-            dicts += [None]
+    galaxies = np.zeros(len(fs), dtype=object)
+    asyms = np.zeros(len(fs), dtype=object)
+    dicts = np.zeros(len(fs), dtype=object)
+    for i in range(len(out)):
+        medians[i], galaxies[i], asyms[i], dicts[i] = out[i]
 
     return medians, galaxies, asyms, dicts
+
+def dictformatting(d, drp=None, dap=None):
+    #load dapall and drpall
+    if drp is None:
+        drp = fits.open('/data/manga/spectro/redux/MPL-10/drpall-v3_0_1.fits')[1].data
+    if dap is None:
+        dap = fits.open('/data/manga/spectro/analysis/MPL-10/dapall-v3_0_1-3.0.1.fits')[1].data
+    try:
+        data = list(d.values())
+        for i in range(len(data)):
+            #put arrays into longer array to make them the same length
+            if type(data[i]) is np.ndarray:
+                dnew = np.zeros(20)
+                dnew[:len(data[i])] = data[i]
+                data[i] = dnew
+
+        #make mask to get rid of extra padding in arrays
+        velmask = np.ones(20,dtype=bool)
+        velmask[:len(d['vt'])] = False
+        sigmask = np.ones(20,dtype=bool)
+        sigmask[:len(d['sig'])] = False
+
+        #corresponding indicies in dapall and drpall
+        drpindex = np.where(drp['plateifu'] == f"{d['plate']}-{d['ifu']}")[0][0]
+        dapindex = np.where(dap['plateifu'] == f"{d['plate']}-{d['ifu']}")[0][0]
+        data += [velmask, sigmask, drpindex, dapindex]
+
+    #failure for empty dict
+    except:
+        data = None
+
+    return data
 
 def makealltable(dicts, outfile=None):
     '''
     Take a list of dictionaries from extractdir and turn them into an astropy table (and a fits file if a filename is given).
     '''
+
 
     #load dapall and drpall
     drp = fits.open('/data/manga/spectro/redux/MPL-10/drpall-v3_0_1.fits')[1].data
@@ -65,33 +102,11 @@ def makealltable(dicts, outfile=None):
               '20D','20D','20D','20D','20D','20D','20D','20D',
               'I','I','S','20L','20L','I','I']
 
+    data = []
+    for d in dicts: data += [dictformatting(d, drp, dap)]
+
     t = Table(names=names,dtype=dtypes)
-    for i in range(len(dicts)):
-        try:
-            data = list(dicts[i].values())
-            for d in range(len(data)):
-                #put arrays into longer array to make them the same length
-                if type(data[d]) is np.ndarray:
-                    dnew = np.zeros(20)
-                    dnew[:len(data[d])] = data[d]
-                    data[d] = dnew
-
-            #make mask to get rid of extra padding in arrays
-            velmask = np.ones(20,dtype=bool)
-            velmask[:len(dicts[i]['vt'])] = False
-            sigmask = np.ones(20,dtype=bool)
-            sigmask[:len(dicts[i]['sig'])] = False
-
-            #corresponding indicies in dapall and drpall
-            drpindex = np.where(drp['plateifu'] == f"{dicts[i]['plate']}-{dicts[i]['ifu']}")[0][0]
-            dapindex = np.where(dap['plateifu'] == f"{dicts[i]['plate']}-{dicts[i]['ifu']}")[0][0]
-            data += [velmask,sigmask,drpindex,dapindex]
-
-        #failure for empty dict
-        except:
-            data = None
-
-        t.add_row(data)
+    for d in data: t.add_row(d)
 
     #correct bad data types
     for n in names:

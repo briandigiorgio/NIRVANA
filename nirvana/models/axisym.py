@@ -13,25 +13,6 @@ from .beam import smear
 from .util import cov_err
 from ..data.util import impose_positive_definite, cinv, inverse
 
-# TODO: I don't think this is used anymore right?
-#def rotcurveeval(x,y,vmax,inc,pa,h,vsys=0,xc=0,yc=0,reff=1):
-#    '''
-#    Evaluate a simple tanh rotation curve with asymtote vmax, inclination inc
-#    in degrees, position angle pa in degrees, rotation scale h, systematic
-#    velocity vsys, and x and y offsets xc and yc. Returns array in same shape
-#    as input x andy.
-#    '''
-#
-#    _inc, _pa = np.radians([inc,pa])
-#    r,th = projected_polar(x-xc, y-yc, _pa, _inc)
-#    if reff is not None: r /= reff
-#
-#    # TODO: Why is there a negative here (i.e., -vmax)? ... After
-#    # playing around, I assume this is here because it worked for
-#    # 8078-12703 because it flips the PA to be ~180 instead of near 0?
-#    model = -vmax * np.tanh(r/h) * np.cos(th) * np.sin(_inc) + vsys
-#    return model
-
 
 class AxisymmetricDisk:
     r"""

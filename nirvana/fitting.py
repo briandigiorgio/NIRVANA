@@ -181,8 +181,9 @@ def smoothing(array, weight=1):
     A penalty function for encouraging smooth arrays. 
     
     For each bin, it computes the average of the bins to the left and right and
-    computes the chi squared of the bin with that average. It assumes 0 at the
-    left edge and repeats the final value at the right edge. 
+    computes the chi squared of the bin with that average. It repeats the
+    values at the left and right edges, so they are effectively smoothed with
+    themselves.
 
     Args:
         array (`numpy.ndarray`_):
@@ -194,8 +195,9 @@ def smoothing(array, weight=1):
         :obj:`float`: Chi squared value that serves as a measurement for how
         smooth the array is, normalized by the weight.
     """
-    edgearray = np.array([0, *array,array[-1]]) #bin edges
-    avgs = (edgearray[:-2] + edgearray[2:])/2 #average of each bin
+
+    edgearray = np.array([array[0], *array, array[-1]]) #bin edges
+    avgs = (edgearray[:-2] + edgearray[2:])/2 #average of surrounding bins
     chisq = (avgs - array)**2 / np.abs(array) #chi sq of each bin to averages
     chisq[~np.isfinite(chisq)] = 0 #catching nans
     return chisq.sum() * weight
@@ -541,10 +543,9 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
     args.setfixcent(fixcent)
 
     #set bin edges
+    inc = args.getguess()[1] if args.phot_inc is None else args.phot_inc
     if nbins is not None: args.setedges(nbins, nbin=True, maxr=maxr)
-    else:
-        inc = args.getguess()[1] if args.phot_inc is None else args.phot_inc
-        args.setedges(inc, maxr=maxr)
+    else: args.setedges(inc, maxr=maxr)
 
     #define a variable for speeding up convolutions
     #has to be a global because multiprocessing can't pickle cython

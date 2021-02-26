@@ -83,6 +83,14 @@ def main():
                         HOST, drp_test_version, dap_test_version, dap_test_daptype, plate, ifu)
         download_file(url_root, usr, passwd, local_root, f)
 
+    # DRPall file
+    f = 'drpall-{0}.fits'.format(drp_test_version)
+    url_root = 'https://{0}/sas/mangawork/manga/spectro/redux/{1}/'.format(HOST, drp_test_version)
+    if os.path.isfile(os.path.join(local_root, f)):
+        warnings.warn('{0} exists.  Skipping...'.format(f))
+    else:    
+        download_file(url_root, usr, passwd, local_root, f)
+
 if __name__ == '__main__':
     main()
 

@@ -25,6 +25,7 @@ from astropy.io import fits
 
 from .util import get_map_bin_transformations, impose_positive_definite
 from .kinematics import Kinematics
+from .meta import GlobalPar
 from ..util.bitmask import BitMask
 
 
@@ -62,7 +63,7 @@ def channel_dictionary(hdu, ext, prefix='C'):
     return channel_dict
 
 
-def read_manga_psf(cube_file, psf_ext, fwhm=False, quiet=True):
+def read_manga_psf(cube_file, psf_ext, fwhm=False, quiet=False):
     """
     Read the image of the reconstructed datacube point-spread
     function from the MaNGA DRP CUBE file.
@@ -205,7 +206,7 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
     return maps_file, cube_file, image_file
 
 
-def read_drpall(plate, ifu, redux_path, dr, ext='elpetro', quiet=True):
+def read_drpall(plate, ifu, redux_path, dr, ext='elpetro', quiet=False):
     """
     Read the NASA Sloan Atlas data from the DRPall file for the
     appropriate data release.
@@ -573,7 +574,7 @@ class MaNGAGasKinematics(MaNGAKinematics):
             Suppress printed output.
     """
     def __init__(self, maps_file, cube_file=None, image_file=None, psf_ext='RPSF', line='Ha-6564',
-                 mask_flags='any', covar=False, positive_definite=False, quiet=True):
+                 mask_flags='any', covar=False, positive_definite=False, quiet=False):
 
         if not os.path.isfile(maps_file):
             raise FileNotFoundError(f'File does not exist: {maps_file}')
@@ -692,7 +693,7 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             Suppress printed output.
     """
     def __init__(self, maps_file, cube_file=None, image_file=None, psf_ext='GPSF',
-                 mask_flags='any', covar=False, positive_definite=False, quiet=True):
+                 mask_flags='any', covar=False, positive_definite=False, quiet=False):
 
         if not os.path.isfile(maps_file):
             raise FileNotFoundError(f'File does not exist: {maps_file}')
@@ -772,5 +773,67 @@ class MaNGAStellarKinematics(MaNGAKinematics):
                          grid_y=grid_y, reff=reff, fwhm=fwhm, image=image,
                          phot_inc=phot_inc, maxr=maxr, positive_definite=positive_definite)
 
+
+class MaNGAGlobalPar(GlobalPar):
+    """
+    Provides MaNGA-specific implementation of global parameters.
+
+    Args:
+        plate (:obj:`int`):
+            Plate identifier
+        ifu (:obj:`int`):
+            IFU identifier
+        redux_path (:obj:`str`, optional):
+            The top-level directory with all DRP output. If None,
+            this will be set to the ``MANGA_SPECTRO_REDUX``
+            environmental variable, if it is defined.
+        dr (:obj:`str`, optional):
+            Data release identifier that matches the directory with
+            the data.
+        drpall_file (:obj:`str`, optional):
+            DRPall filename. If None, the filename is assumed to be
+            ``drpall*.fits`` and the path is constructed from other
+            parameters.
+        drpall_path (:obj:`str`, optional):
+            This provides the *direct* path to the drpall file,
+            circumventing the use of ``dr`` and ``redux_path``.
+    """
+    def __init__(self, plate, ifu, redux_path=None, dr=None, drpall_file=None, drpall_path=None, 
+                 **kwargs):
+
+        if drpall_file is None:
+            # Set the path to the DRPall file
+            if drpall_path is None:
+                _redux_path = os.getenv('MANGA_SPECTRO_REDUX') \
+                                if redux_path is None else redux_path
+                if _redux_path is None:
+                    raise ValueError('Could not define top-level root for DRP output.')
+                drpall_path = os.path.join(_redux_path, dr)
+            drpall_file = glob.glob(os.path.join(drpall_path, 'drpall*.fits'))[0]
+
+        # Read the table
+        plateifu = f'{plate}-{ifu}'
+        print('Reading DRPall file...')
+        with fits.open(drpall_file) as hdu:
+            drpall = hdu['MANGA'].data
+        print('    DONE')
+
+        # Find the relevant row
+        indx = np.where(drpall['PLATEIFU'] == plateifu)[0]
+        if len(indx) != 1:
+            raise ValueError(f'Could not find {plateifu} in {drpall_file}.')
+
+        # Instantiate the object
+        indx = indx[0]
+        super().__init__(ra=drpall['objra'][indx], dec=drpall['objdec'][indx],
+                         mass=drpall['nsa_sersic_mass'][indx], z=drpall['z'][indx],
+                         pa=drpall['nsa_elpetro_phi'][indx], ell=1.-drpall['nsa_elpetro_ba'][indx],
+                         reff=drpall['nsa_elpetro_th50_r'][indx],
+                         sersic_n=drpall['nsa_sersic_n'][indx], **kwargs)
+
+        # Save MaNGA-specific attributes
+        self.plate = plate
+        self.ifu = ifu
+        self.drpall_file = drpall_file
 
 

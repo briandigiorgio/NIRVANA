@@ -9,7 +9,6 @@ from nirvana.tests.util import remote_data_file, requires_remote
 from nirvana.models.oned import HyperbolicTangent, Exponential
 from nirvana.models.axisym import AxisymmetricDisk
 from nirvana.models.beam import gauss2d_kernel
-from nirvana.data.scatter import IntrinsicScatter
 
 
 def test_disk():
@@ -112,7 +111,7 @@ def test_lsq_with_covar():
     # Rejected based on error-weighted residuals, accounting for intrinsic scatter
     resid = kin.vel - kin.bin(disk.model())
     err = 1/numpy.sqrt(kin.vel_ivar)
-    scat = IntrinsicScatter(resid, err=err, gpm=disk.vel_gpm)
+    scat = data.scatter.IntrinsicScatter(resid, err=err, gpm=disk.vel_gpm)
     sig, rej, gpm = scat.iter_fit(fititer=5) #, verbose=2)
     # Check
     assert sig > 8., 'Different intrinsic scatter'
@@ -125,8 +124,8 @@ def test_lsq_with_covar():
                  assume_posdef_covar=True) #, verbose=2)
     # Reject
     resid = kin.vel - kin.bin(disk.model())
-    scat = IntrinsicScatter(resid, covar=kin.vel_covar, gpm=disk.vel_gpm,
-                            assume_posdef_covar=True)
+    scat = data.scatter.IntrinsicScatter(resid, covar=kin.vel_covar, gpm=disk.vel_gpm,
+                                         assume_posdef_covar=True)
     sig, rej, gpm = scat.iter_fit(fititer=5) #, verbose=2)
     # Check
     assert sig > 5., 'Different intrinsic scatter'

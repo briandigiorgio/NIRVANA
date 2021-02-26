@@ -505,7 +505,9 @@ class Kinematics(FitArgs):
 
     def max_radius(self):
         """
-        Calculate and return the maximum on-sky radius of the valid data.
+        Calculate and return the maximum *on-sky* radius of the valid data.
+        Note this not the in-plane disk radius; however, the two are the same
+        along the major axis.
         """
         minx = np.amin(self.x)
         maxx = np.amax(self.x)
@@ -799,3 +801,5 @@ class Kinematics(FitArgs):
             if m is None: continue
             if mask.ndim > 1: mask = self.bin(mask)
             setattr(self, m, np.array(getattr(self, m) + mask, dtype=bool))
+
+

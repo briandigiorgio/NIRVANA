@@ -9,7 +9,8 @@ from scipy import signal
 from astropy import convolution
 
 from nirvana import data
-from nirvana.tests.util import remote_data_file, requires_remote, dap_test_daptype
+from nirvana.tests.util import remote_data_file, requires_remote
+from nirvana.tests.util import drp_test_version, dap_test_daptype
 
 from nirvana.models.beam import convolve_fft, gauss2d_kernel
 
@@ -119,5 +120,15 @@ def test_inv_covar():
             'Multiplication by inverse matrix does not accurately produce identity matrix'
 
 
+@requires_remote
+def test_meta():
+    drpall_file = remote_data_file(f'drpall-{drp_test_version}.fits')
+    meta = data.manga.MaNGAGlobalPar(8138, 12704, drpall_file=drpall_file)
+
+    embed()
+    exit()
+
+if __name__ == '__main__':
+    test_meta()
 
 

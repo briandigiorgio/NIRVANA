@@ -242,6 +242,10 @@ class AxisymmetricDisk:
             ignore_beam (:obj:`bool`, optional):
                 Ignore the beam-smearing when constructing the model. I.e.,
                 construct the *intrinsic* model.
+
+        Returns:
+            `numpy.ndarray`_, :obj:`tuple`: The velocity field model, and the
+            velocity dispersion field model, if the latter is included
         """
         if x is not None or y is not None or beam is not None:
             self._init_coo(x, y, beam, is_fft)
@@ -508,19 +512,27 @@ class AxisymmetricDisk:
                 covariance matrices, ignore them and just use the inverse
                 variance.
         """
+        # Prepare to fit the data; the returned object is the callable function
+        # used to generate the figure-of-merit.
         fom = self._fit_prep(kin, p0, fix, scatter, sb_wgt, assume_posdef_covar, ignore_covar)
+        # Parameter boundaries
         lb, ub = self.par_bounds()
-        diff_step = np.full(self.np, 0.1, dtype=float)
+        # This means the derivative of the merit function wrt each parameter is
+        # determined by a 1% change in each parameter.
+        diff_step = np.full(self.np, 0.01, dtype=float)
+        # Run the optimization
         result = optimize.least_squares(fom, self.par[self.free], method='trf',
                                         bounds=(lb[self.free], ub[self.free]), 
                                         diff_step=diff_step[self.free], verbose=verbose)
+        # Save the best-fitting parameters
         self._set_par(result.x)
-
         try:
+            # Calculate the nominal parameter errors using the precision matrix
             cov = cov_err(result.jac)
             self.par_err = np.zeros(self.np, dtype=float)
             self.par_err[self.free] = np.sqrt(np.diag(cov))
-        except: 
+        except:
+            warnings.warn('Unable to compute parameter errors from precision matrix.')
             self.par_err = None
 
 

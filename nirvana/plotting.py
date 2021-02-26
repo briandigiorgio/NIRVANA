@@ -155,7 +155,7 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
 
     return paramdict
 
-def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, fixcent=False):
+def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, fixcent=False, clip=True):
 
     #get sampler in right format
     if type(f) == str: chains = pickle.load(open(f,'rb'))
@@ -200,7 +200,7 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
     args.setnglobs(4) if not cen else args.setnglobs(6)
     args.setmix(mix)
     args.setfixcent(fixcent)
-    args.clip()
+    if clip: args.clip()
 
     vel_r = args.remap('vel')
     sig_r = args.remap('sig') if args.sig_phys2 is None else np.sqrt(np.abs(args.remap('sig_phys2')))

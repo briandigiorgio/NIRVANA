@@ -9,7 +9,6 @@ from astropy.stats import sigma_clip
 
 from ..models.geometry import projected_polar
 from ..models.axisym import AxisymmetricDisk
-#from ..models.axisym import rotcurveeval, AxisymmetricDisk
 from ..models.beam import ConvolveFFTW
 
 class FitArgs:

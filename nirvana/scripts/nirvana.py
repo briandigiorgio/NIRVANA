@@ -9,6 +9,7 @@ import pickle
 import os
 
 from nirvana.fitting import fit
+from nirvana.output import imagefits
 
 def parse_args(options=None):
 
@@ -50,8 +51,10 @@ def parse_args(options=None):
                         help='Fit stellar velocity field rather than gas')
     parser.add_argument('--nocen', dest='cen', default=True, action='store_false',
                         help='Fit the position of the center')
-    parser.add_argument('--fix', dest='fixcent', default=False, action='store_true',
-                        help='Fix the center velocity bin to 0')
+    parser.add_argument('--free', dest='fixcent', default=True, action='store_false',
+                        help='Allow the center vel bin to be free')
+    parser.add_argument('--fits', default=False, action='store_true',
+                        help='Save results as a much smaller FITS file instead')
 
     return parser.parse_args() if options is None else parser.parse_args(options)
 
@@ -80,8 +83,14 @@ def main(args):
         if args.stellar: args.outfile += '_stel'
         else: args.outfile += '_gas'
         if not args.cen: args.outfile += '_nocen'
-        if args.fixcent: args.outfile += '_fixcent'
-    args.outfile += '.nirv'
+        if not args.fixcent: args.outfile += '_freecent'
 
-    # TODO: Do we need to use pickle?
-    pickle.dump(samp.results, open(args.dir+args.outfile, 'wb'))
+    #write out with sampler results or just FITS table
+    fname = args.dir + args.outfile + '.nirv'
+    pickle.dump(samp.results, open(fname, 'wb'))
+    if args.fits: 
+        try:
+            imagefits(fname, outfile=args.dir + args.outfile + '.fits') 
+            os.remove(fname)
+        except:
+            raise ValueError('Unable to save as FITS. Output still available as .nirv')

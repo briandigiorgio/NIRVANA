@@ -38,14 +38,6 @@ def extractdir(cores=10, directory='/data/manga/digiorgio/nirvana/'):
     with mp.Pool(cores) as p:
         out = p.map(extractfile, fs)
 
-    #medians = np.zeros(len(fs))
-    #galaxies = np.zeros(len(fs), dtype=object)
-    #asyms = np.zeros(len(fs), dtype=object)
-    #dicts = np.zeros(len(fs), dtype=object)
-    #for i in range(len(out)):
-    #    medians[i], galaxies[i], asyms[i], dicts[i] = out[i]
-    #return medians, galaxies, asyms, dicts
-
     galaxies = np.zeros(len(fs), dtype=object)
     arcs = np.zeros(len(fs))
     majors = np.zeros(len(fs), dtype=object)
@@ -98,11 +90,16 @@ def makealltable(dicts, outfile=None, padding=20):
     dap = fits.open('/data/manga/spectro/analysis/MPL-10/dapall-v3_0_1-3.0.1.fits')[1].data
 
     #make names and dtypes for columns
-    names = list(dicts[0].keys()) + ['velmask','sigmask','drpindex','dapindex']
+    names = None
+    i = 0
+    while names is None:
+        try: names = list(dicts[i].keys()) + ['velmask','sigmask','drpindex','dapindex']
+        except: i += 1
+
     dtypes = ['f4','f4','f4','f4','f4','f4','20f4','20f4','20f4','20f4',
               'f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4',
               '20f4','20f4','20f4','20f4','20f4','20f4','20f4','20f4',
-              'I','I','S','20L','20L','I','I']
+              'I','I','S','20?','20?','I','I']
 
     data = []
     for d in dicts: data += [dictformatting(d, drp, dap, padding=padding)]
@@ -112,9 +109,9 @@ def makealltable(dicts, outfile=None, padding=20):
 
     #rearrange columns
     t = t['plate','ifu','type','drpindex','dapindex',
-          'inc','pa','pab','vsys','vt','v2t','v2r','sig','velmask','sigmask',
-          'incl','pal','pabl','vsysl','vtl','v2tl','v2rl','sigl',
-          'incu','pau','pabu','vsysu','vtu','v2tu','v2ru','sigu']
+          'xc','yc','inc','pa','pab','vsys','vt','v2t','v2r','sig','velmask','sigmask',
+          'xcl','ycl','incl','pal','pabl','vsysl','vtl','v2tl','v2rl','sigl',
+          'xcu','ycu','incu','pau','pabu','vsysu','vtu','v2tu','v2ru','sigu']
     
     #write if desired
     if outfile is not None: t.write(outfile, format='fits', overwrite=True)
@@ -131,7 +128,7 @@ def imagefits(f, outfile=None, padding=20):
     dtypes = ['f4','f4','f4','f4','f4','f4','20f4','20f4','20f4','20f4',
               'f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4',
               '20f4','20f4','20f4','20f4','20f4','20f4','20f4','20f4',
-              'I','I','S','20L','20L','I','I']
+              'I','I','S','20?','20?','I','I']
 
     #make table of fit data
     t = Table(names=names, dtype=dtypes)

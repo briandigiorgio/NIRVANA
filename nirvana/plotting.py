@@ -24,7 +24,7 @@ from .data.kinematics import Kinematics
 from .models.beam import smear, ConvolveFFTW
 from .models.geometry import projected_polar
 
-def dynmeds(samp, stds=False, fixcent=False):
+def dynmeds(samp, stds=False, fixcent=True):
     """
     Get median values for each variable's posterior in a
     `dynesty.NestedSampler`_ sampler.
@@ -155,7 +155,7 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
 
     return paramdict
 
-def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, fixcent=False, clip=True):
+def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, fixcent=True, clip=True):
 
     #get sampler in right format
     if type(f) == str: chains = pickle.load(open(f,'rb'))
@@ -170,7 +170,9 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
         cen = True if 'nocen' not in info else False
         smearing = True if 'nosmear' not in info else False
         maxr = float([i for i in info if '.' in i and 'r' in i][0][:-1])
-        fixcent = True if 'fixcent' in info else False
+
+        if 'fixcent' in info: fixcent = True
+        elif 'freecent' in info: fixcent = False
 
     if plate is None or ifu is None:
         raise ValueError('Plate and IFU must be specified if auto=False')
@@ -219,7 +221,7 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
     resdict['type'] = 'Stars' if stellar else 'Gas'
     return args, resdict, chains, meds
 
-def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, save=False, clobber=False, fixcent=False):
+def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, save=False, clobber=False, fixcent=True):
     '''
     Make a summary plot for a `nirvana` output file with MaNGA velocity field.
 

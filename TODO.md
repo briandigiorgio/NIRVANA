@@ -2,16 +2,12 @@
 
 ## Main tasks
 
-- ~~define velocities along bin edges so center can be held at 0~~
 - computation time
-- improve clipping auto rejection of bad galaxies
 - compare fits with axisym
-- run all velocity field through to see how many will work
 - projected velocities
     - just take out sini
 - allow Kinematics to include (inverse) covariance
     - Include nominal MaNGA covariance for MaNGAKinematics
-- Treatment of the velocity dispersion and correction
 - smarter surface brightness with all gas channels
 - put prior, clipping, etc parameters into one config file
 

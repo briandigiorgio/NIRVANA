@@ -22,6 +22,7 @@ from scipy import sparse
 import matplotlib.image as img
 
 from astropy.io import fits
+from marvin.tools import Cube
 
 from .util import get_map_bin_transformations, impose_positive_definite
 from .kinematics import Kinematics
@@ -115,7 +116,7 @@ def read_manga_psf(cube_file, psf_ext, fwhm=False, quiet=True):
 
 def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10',
                               redux_path=None, cube_path=None, image_path=None, analysis_path=None,
-                              maps_path=None, check=True):
+                              maps_path=None, check=True, use_marvin=False):
     """
     Get MaNGA files used by NIRVANA.
 
@@ -153,6 +154,8 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
             circumventing the use of ``dr`` and ``analysis_path``.
         check (:obj:`bool`, optional):
             Check that the directories with the expected files exist.
+        use_marvin (:obj:`bool`, optional):
+            Use `marvin` to download data instead of looking locally.
 
     Returns:
         :obj:`tuple`: Full path to three files: (1) the DAP MAPS file, (2)
@@ -168,6 +171,20 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
             Raised if the directory where the datacube should exist can be
             defined but does not exist.
     """
+    #download using marvin instead of looking locally
+    if use_marvin:
+        #get files
+        cube = Cube(f'{plate}-{ifu}')
+        maps = cube.getMaps()
+        image = cube.getImage()
+        
+        #download to local sas directory (see marvin documentation)
+        cube.download()
+        maps.download()
+        image.download()
+
+        return maps.filename, cube.filename, image.filename
+
     if cube_path is None or image_path is None:
         _redux_path = os.getenv('MANGA_SPECTRO_REDUX') if redux_path is None else redux_path
         if _redux_path is None and cube_path is None:
@@ -497,7 +514,7 @@ class MaNGAKinematics(Kinematics):
     @classmethod
     def from_plateifu(cls, plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10',
                       redux_path=None, cube_path=None, image_path=None, analysis_path=None,
-                      maps_path=None, ignore_psf=False, **kwargs):
+                      maps_path=None, ignore_psf=False, use_marvin=False, **kwargs):
         """
         Instantiate the object using the plate and IFU number.
 
@@ -518,7 +535,7 @@ class MaNGAKinematics(Kinematics):
                 = manga_files_from_plateifu(plate, ifu, daptype=daptype, dr=dr,
                                             redux_path=redux_path, cube_path=cube_path,
                                             image_path=image_path, analysis_path=analysis_path,
-                                            maps_path=maps_path)
+                                            maps_path=maps_path, use_marvin=use_marvin)
         if ignore_psf:
             cube_file = None
         elif not os.path.isfile(cube_file):
@@ -590,7 +607,7 @@ class MaNGAGasKinematics(MaNGAKinematics):
         # measurement. The binned coordinates are only used if the data
         # is from the `VOR` bin case (which is probably never going to
         # be used with this package, but anyway...)
-        bintype = maps_file.split('.')[0].split('-')[-3]
+        bintype = maps_file.split('.fits')[0].split('-')[-3]
         coo_ext = 'BIN_LWSKYCOO' if 'VOR' in bintype else 'SPX_SKYCOO'
 
         # Read the kinematic maps

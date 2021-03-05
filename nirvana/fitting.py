@@ -455,7 +455,8 @@ def mixlike(params, args):
 
 def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
         cores=10, maxr=None, cen=True, weight=10, smearing=True, points=500,
-        stellar=False, root=None, verbose=False, disp=True, mix=False, fixcent=False, ultra=False):
+        stellar=False, root=None, verbose=False, disp=True, mix=False, 
+        fixcent=True, ultra=False, use_marvin=False):
     '''
     Main function for fitting a MaNGA galaxy with a nonaxisymmetric model.
 
@@ -500,8 +501,15 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
         disp (:obj:`bool`, optional):
             Flag for whether to fit the velocity dispersion profile as well.
         mix (:obj:`bool`, optional):
-            Flat for whether or not to fit a Bayesian mixture model a la Hogg
+            Flag for whether or not to fit a Bayesian mixture model a la Hogg
             2010. Not currently functional
+        fixcent (:obj:`bool`, optional):
+            Flag for whether to fix the center velocity bin at 0.
+        ultra (:obj:`bool`, optional):
+            Flag for whether to use `ultranest` rather than `dynesty` for
+            fitting (experimental).
+        use_marvin (:obj:`bool`, optional):
+            Whether to download data from marvin or not. Otherwise, will look locally
 
     Returns:
         :class:`dynesty.NestedSampler`: Sampler from `dynesty` containing
@@ -529,11 +537,13 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
         if stellar:
             args = MaNGAStellarKinematics.from_plateifu(plate, ifu, daptype=daptype, dr=dr,
                                                         ignore_psf=not smearing, cube_path=root,
-                                                        image_path=root, maps_path=root)
+                                                        image_path=root, maps_path=root, 
+                                                        use_marvin=use_marvin)
         else:
             args = MaNGAGasKinematics.from_plateifu(plate, ifu, line='Ha-6564', daptype=daptype,
                                                     dr=dr, ignore_psf=not smearing, cube_path=root,
-                                                    image_path=root, maps_path=root)
+                                                    image_path=root, maps_path=root, 
+                                                    use_marvin=use_marvin)
 
     #set basic parameters for galaxy
     args.setnglobs(6) if cen else args.setnglobs(4)
@@ -573,7 +583,7 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
         bounds[5] = (theta0[5] - 5, theta0[5] + 5)
 
     #cap velocities at maximum in vf
-    vmax = min(np.max(args.vel)/np.cos(np.radians(inc)), 400)
+    vmax = min(np.max(args.vel)/np.cos(np.radians(inc)) * 1.5, 400)
     bounds[args.nglobs:args.nglobs + nbin] = (0, vmax)
     bounds[args.nglobs + nbin:args.nglobs + 3*nbin] = (0, vmax)
     if args.disp: bounds[args.nglobs + 3*nbin:] = (0, min(np.max(args.sig), 300))

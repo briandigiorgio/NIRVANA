@@ -24,7 +24,7 @@ from .data.kinematics import Kinematics
 from .models.beam import smear, ConvolveFFTW
 from .models.geometry import projected_polar
 
-def dynmeds(samp, stds=False, fixcent=False):
+def dynmeds(samp, stds=False, fixcent=True):
     """
     Get median values for each variable's posterior in a
     `dynesty.NestedSampler`_ sampler.
@@ -155,7 +155,7 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
 
     return paramdict
 
-def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, fixcent=False, clip=True):
+def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, fixcent=True, clip=True, use_marvin=True):
 
     #get sampler in right format
     if type(f) == str: chains = pickle.load(open(f,'rb'))
@@ -163,14 +163,18 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
     elif type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler: chains = f.results
 
     if plate is None or ifu is None:
-        info = re.split('/|-|_', f[:-5])
-        plate = int(info[5]) if plate is None else plate
-        ifu = int(info[6]) if ifu is None else ifu
+        fname = re.split('/', f[:-5])[-1]
+        info = re.split('/|-|_', fname)
+        plate = int(info[0]) if plate is None else plate
+        ifu = int(info[1]) if ifu is None else ifu
         stellar = True if 'stel' in info else False
         cen = True if 'nocen' not in info else False
         smearing = True if 'nosmear' not in info else False
         maxr = float([i for i in info if '.' in i and 'r' in i][0][:-1])
-        fixcent = True if 'fixcent' in info else False
+
+        if 'fixcent' in info: fixcent = True
+        elif 'freecent' in info: fixcent = False
+        print(plate,ifu,stellar,cen,smearing,maxr,fixcent)
 
     if plate is None or ifu is None:
         raise ValueError('Plate and IFU must be specified if auto=False')
@@ -191,9 +195,9 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
     #load in MaNGA data
     else:
         if stellar:
-            args = MaNGAStellarKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing)
+            args = MaNGAStellarKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing, use_marvin=use_marvin)
         else:
-            args = MaNGAGasKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing)
+            args = MaNGAGasKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing, use_marvin=use_marvin)
 
     #set relevant parameters for galaxy
     args.setdisp(True)
@@ -219,7 +223,7 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
     resdict['type'] = 'Stars' if stellar else 'Gas'
     return args, resdict, chains, meds
 
-def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, save=False, clobber=False, fixcent=False):
+def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, save=False, clobber=False, fixcent=True, use_marvin=False):
     '''
     Make a summary plot for a `nirvana` output file with MaNGA velocity field.
 
@@ -282,7 +286,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
         if os.path.isfile(f'{path}/plots/{fname}.pdf'):
             raise ValueError('Plot file already exists')
 
-    args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, mix, cen, fixcent)
+    args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, mix, cen, fixcent, use_marvin=use_marvin)
     velmodel, sigmodel = bisym_model(args,resdict,plot=True)
     vel_r = args.remap('vel')
     sig_r = np.sqrt(args.remap('sig_phys2')) if hasattr(args, 'sig_phys2') else args.remap('sig')

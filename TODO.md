@@ -2,14 +2,12 @@
 
 ## Main tasks
 
-- output files
 - computation time
 - compare fits with axisym
 - projected velocities
     - just take out sini
 - allow Kinematics to include (inverse) covariance
     - Include nominal MaNGA covariance for MaNGAKinematics
-- Treatment of the velocity dispersion and correction
 - smarter surface brightness with all gas channels
 - put prior, clipping, etc parameters into one config file
 

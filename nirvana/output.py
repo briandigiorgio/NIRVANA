@@ -20,13 +20,14 @@ def extractfile(f):
         args, resdict, chains, meds = fileprep(f)
 
         #fractional difference between bisym and axisym
-        arc, major, minor = asymmetry(args)
+        arc, asymmap = asymmetry(args)
+        resdict['a_rc'] = arc
 
     #failure if bad file
     except:
-        args, arc, major, minor, resdict = (None, None, None, None, None)
+        args, arc, asymmap, resdict = (None, None, None, None, None)
 
-    return args, arc, major, minor, resdict
+    return args, arc, asymmap, resdict
 
 def extractdir(cores=10, directory='/data/manga/digiorgio/nirvana/'):
     '''
@@ -40,13 +41,12 @@ def extractdir(cores=10, directory='/data/manga/digiorgio/nirvana/'):
 
     galaxies = np.zeros(len(fs), dtype=object)
     arcs = np.zeros(len(fs))
-    majors = np.zeros(len(fs), dtype=object)
-    minors = np.zeros(len(fs), dtype=object)
+    asyms = np.zeros(len(fs), dtype=object)
     dicts = np.zeros(len(fs), dtype=object)
     for i in range(len(out)):
-        galaxies[i], arcs[i], majors[i], minors[i], dicts[i] = out[i]
+        galaxies[i], arcs[i], asyms[i], dicts[i] = out[i]
 
-    return galaxies, arcs, majors, minors, dicts
+    return galaxies, arcs, asyms, dicts
 
 def dictformatting(d, drp=None, dap=None, padding=20, fill=-9999):
     #load dapall and drpall
@@ -99,7 +99,7 @@ def makealltable(dicts, outfile=None, padding=20):
     dtypes = ['f4','f4','f4','f4','f4','f4','20f4','20f4','20f4','20f4',
               'f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4',
               '20f4','20f4','20f4','20f4','20f4','20f4','20f4','20f4',
-              'I','I','S','20?','20?','I','I']
+              'I','I','S','f4','20?','20?','I','I']
 
     data = []
     for d in dicts: data += [dictformatting(d, drp, dap, padding=padding)]
@@ -111,7 +111,7 @@ def makealltable(dicts, outfile=None, padding=20):
     t = t['plate','ifu','type','drpindex','dapindex',
           'xc','yc','inc','pa','pab','vsys','vt','v2t','v2r','sig','velmask','sigmask',
           'xcl','ycl','incl','pal','pabl','vsysl','vtl','v2tl','v2rl','sigl',
-          'xcu','ycu','incu','pau','pabu','vsysu','vtu','v2tu','v2ru','sigu']
+          'xcu','ycu','incu','pau','pabu','vsysu','vtu','v2tu','v2ru','sigu','a_rc']
     
     #write if desired
     if outfile is not None: t.write(outfile, format='fits', overwrite=True)
@@ -123,12 +123,12 @@ def imagefits(f, outfile=None, padding=20):
     '''
 
     #get relevant data
-    args, resdict, chains, meds = fileprep(f, clip=False)
+    args, arc, asymmap, resdict = extractfile(f)
     names = list(resdict.keys()) + ['velmask','sigmask','drpindex','dapindex']
     dtypes = ['f4','f4','f4','f4','f4','f4','20f4','20f4','20f4','20f4',
               'f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4',
               '20f4','20f4','20f4','20f4','20f4','20f4','20f4','20f4',
-              'I','I','S','20?','20?','I','I']
+              'I','I','S','f4','20?','20?','I','I']
 
     #make table of fit data
     t = Table(names=names, dtype=dtypes)
@@ -148,13 +148,20 @@ def imagefits(f, outfile=None, padding=20):
         hdu = fits.ImageHDU(data)
         hdu.name = m
         hdus += [hdu]
+    hdus[-1].name = 'MaNGA_mask'
 
     #add mask from clipping
-    hdus[-1].name = 'MaNGA_mask'
     args.clip()
     clipmask = fits.ImageHDU(np.array(args.remap('vel').mask, dtype=int))
     clipmask.name = 'clip_mask'
-    hdus += [clipmask]
+
+    #get asymmetry map in right format and add
+    asymmap[asymmap.mask] = 0
+    asymmap = asymmap.data
+    asym = fits.ImageHDU(asymmap)
+    asym.name = 'asymmetry'
+
+    hdus += [clipmask, asym]
 
     #write out
     hdul = fits.HDUList(hdus)
@@ -210,7 +217,8 @@ def asymmetry(args, resdict=None):
     
     #sum over maps to get global params
     arc = np.sum([np.sum(a) for a in arc2d])
-    return arc, *arc2d
+    asymmap = np.ma.array(arc2d).mean(axis=0)
+    return arc, asymmap
 
 def A_RC(vel, velr, ivar, ivarr):
     '''

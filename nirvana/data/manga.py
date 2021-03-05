@@ -832,8 +832,20 @@ class MaNGAGlobalPar(GlobalPar):
                          sersic_n=drpall['nsa_sersic_n'][indx], **kwargs)
 
         # Save MaNGA-specific attributes
+        self.mangaid = drpall['mangaid'][indx]
         self.plate = plate
         self.ifu = ifu
         self.drpall_file = drpall_file
+        self.primaryplus, self.secondary, self.ancillary, self.other \
+                = parse_manga_targeting_bits(drpall['mngtarg1'][indx],
+                                             mngtarg3=drpall['mngtarg3'][indx])
+        self.psf_band = np.array(['g', 'r', 'i', 'z'])
+        self.psf_fwhm = np.array([drpall['gfwhm'][indx], drpall['rfwhm'][indx],
+                                  drpall['ifwhm'][indx], drpall['zfwhm'][indx]])
+
+        self.mag_band = np.array(['NUV', 'r', 'i'])
+        self.mag = np.array([drpall['nsa_elpetro_absmag'][indx][1],
+                             drpall['nsa_elpetro_absmag'][indx][4],
+                             drpall['nsa_elpetro_absmag'][indx][5]])
 
 

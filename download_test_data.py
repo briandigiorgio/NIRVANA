@@ -5,7 +5,8 @@ import tqdm
 import requests
 import netrc
 
-from nirvana.tests.util import remote_data_file, remote_drp_test_files, remote_dap_test_files
+from nirvana.tests.util import remote_data_file, remote_drp_test_files, remote_drp_test_images
+from nirvana.tests.util import remote_dap_test_files
 from nirvana.tests.util import drp_test_version, dap_test_version, dap_test_daptype
 
 try:
@@ -62,14 +63,21 @@ def main():
 
     # DRP files
     drp_files = remote_drp_test_files()
+    drp_images = remote_drp_test_images()
     plates = [f.split('-')[1] for f in drp_files]
-    for plate, f in zip(plates, drp_files):
-        if os.path.isfile(os.path.join(local_root, f)):
-            warnings.warn('{0} exists.  Skipping...'.format(f))
-            continue
-        url_root = 'https://{0}/sas/mangawork/manga/spectro/redux/{1}/{2}/stack/'.format(
-                        HOST, drp_test_version, plate)
-        download_file(url_root, usr, passwd, local_root, f)
+    for plate, fcube, fimg in zip(plates, drp_files, drp_images):
+        if os.path.isfile(os.path.join(local_root, fcube)):
+            warnings.warn('{0} exists.  Skipping...'.format(fcube))
+        else:
+            url_root = 'https://{0}/sas/mangawork/manga/spectro/redux/{1}/{2}/stack/'.format(
+                            HOST, drp_test_version, plate)
+            download_file(url_root, usr, passwd, local_root, fcube)
+        if os.path.isfile(os.path.join(local_root, fimg)):
+            warnings.warn('{0} exists.  Skipping...'.format(fimg))
+        else:
+            url_root = 'https://{0}/sas/mangawork/manga/spectro/redux/{1}/{2}/images/'.format(
+                            HOST, drp_test_version, plate)
+            download_file(url_root, usr, passwd, local_root, fimg)
 
     # DAP files
     dap_files = remote_dap_test_files(daptype=dap_test_daptype)

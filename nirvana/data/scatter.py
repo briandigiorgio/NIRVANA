@@ -9,28 +9,11 @@ from IPython import embed
 
 import numpy as np
 from scipy import sparse, stats, optimize
+from matplotlib import pyplot
 
 from astropy.stats import sigma_clip
 
-from .util import cinv, impose_positive_definite
-
-
-def sigma_clip_stdfunc_mad(data, **kwargs):
-    """
-    A simple wrapper for `scipy.stats.median_abs_deviation`_ that omits NaN
-    values and rescales the output to match a normal distribution for use in
-    `astropy.stats.sigma_clip`_.
-
-    Args:
-        data (`numpy.ndarray`_):
-            Data to clip.
-        **kwargs:
-            Passed directly to `scipy.stats.median_abs_deviation`_.
-
-    Returns:
-        scalar-like, `numpy.ndarray`_: See `scipy.stats.median_abs_deviation`_.
-    """
-    return stats.median_abs_deviation(data, **kwargs, nan_policy='omit', scale='normal')
+from .util import cinv, impose_positive_definite, sigma_clip_stdfunc_mad
 
 
 class IntrinsicScatter:
@@ -180,9 +163,9 @@ class IntrinsicScatter:
         Returns:
             :obj:`tuple`: Returns the value of the intrinsic scatter, a
             `numpy.ndarray`_ selecting the rejected data points, and a
-            `numpy.ndarray`_ selecting all good data points; the latter the
-            intersection of the input good-pixel mask and those data *not*
-            rejected by the function.
+            `numpy.ndarray`_ selecting all good data points; the latter is
+            the intersection of the input good-pixel mask and those data
+            *not* rejected by the function.
         """
         if sig0 is not None and not sig0 > 0:
             warnings.warn('Initial guess for sigma must be greater than 0.  Ignoring input.')
@@ -266,11 +249,13 @@ class IntrinsicScatter:
                 iterations.
 
         Returns:
+
             :obj:`tuple`: Returns the value of the intrinsic scatter, a
             `numpy.ndarray`_ selecting the rejected data points, and a
-            `numpy.ndarray`_ selecting all good data points; the latter the
-            intersection of the input good-pixel mask and those data *not*
-            rejected by the function.
+            `numpy.ndarray`_ selecting all good data points; the latter is
+            the intersection of the input good-pixel mask and those data
+            *not* rejected by the function.
+        
         """
         # In debug mode?
         self.debug = verbose > 0
@@ -313,5 +298,45 @@ class IntrinsicScatter:
 #        pyplot.plot(x, chisqr_fcv)
 #        pyplot.xscale('log')
 #        pyplot.show()
+
+
+#    def show(self):
+#        # ADD SIGMA_REJ
+#
+#        # Do a first pass at clipping the data based on the standard deviation
+#        # in the (error-normalized) residuals
+#        _chi = self.resid.copy()
+#        if _sig0 is not None and _sig0 > 0:
+#            _chi[self.gpm] /= _sig0 if self.err is None \
+#                                else np.sqrt(_sig0**2 + self.err[self.gpm]**2)
+#        elif self.err is not None:
+#            _chi[self.gpm] /= self.err[self.gpm]
+#        clip = sigma_clip(np.ma.MaskedArray(_chi, mask=np.logical_not(self.gpm)),
+#                          sigma=_sigma_rej, stdfunc=sigma_clip_stdfunc_mad, maxiters=rejiter)
+#        clipped = np.ma.getmaskarray(clip)
+#        self.rej = self.inp_gpm & clipped
+#        self.gpm = np.logical_not(clipped)
+#
+#        if self.err is None and self.covar is None:
+#            # No need to fit; just return the clipped standard deviation.
+#            self.sig = np.std(self.resid[self.gpm])
+#            return self.sig, self.rej, self.gpm
+#
+#        # Initialize the fit workspace objects
+#        self._fit_init(sig0=_sig0, fixed_rho=fixed_rho)
+#
+#        # Assign the merit function to use based on the availability of the
+#        # covariance
+#        fom = self._merit_err if self.covar is None else self._merit_covar
+#
+#        # Run the fit
+#        result = optimize.least_squares(fom, self._x, method='lm', diff_step=np.array([1e-5]),
+#                                        verbose=verbose)
+#        # Save the result
+#        self.sig = abs(result.x[0])
+#        # TODO: Save the success somehow?
+#
+#        return self.sig, self.rej, self.gpm
+
 
 

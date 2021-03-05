@@ -23,6 +23,9 @@ def remote_data_file(filename=None):
     root = os.path.join(data_file(), 'remote')
     return root if filename is None else os.path.join(root, filename)
 
+def remote_drp_test_images():
+    return ['12704.png', '12703.png']
+
 def remote_drp_test_files():
     return ['manga-8138-12704-LOGCUBE.fits.gz', 'manga-8078-12703-LOGCUBE.fits.gz']
 

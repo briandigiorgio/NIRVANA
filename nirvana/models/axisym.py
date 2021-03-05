@@ -96,6 +96,21 @@ class AxisymmetricDisk:
         """
         return None if self.par is None else self.par[:self.nbp]
 
+    def rc_par(self):
+        """
+        Return the rotation curve parameters. Returns None if parameters are
+        not defined yet.
+        """
+        return None if self.par is None else self.par[self.nbp:self.nbp+self.rc.np]
+
+    def dc_par(self):
+        """
+        Return the dispersion profile parameters. Returns None if parameters
+        are not defined yet or if no dispersion profile has been defined.
+        """
+        return None if self.par is None or self.dc is None \
+                else self.par[self.nbp+self.rc.np:]
+
     def par_bounds(self):
         """
         Return the lower and upper boundaries on the model parameters.

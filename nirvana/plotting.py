@@ -174,7 +174,6 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
 
         if 'fixcent' in info: fixcent = True
         elif 'freecent' in info: fixcent = False
-        print(plate,ifu,stellar,cen,smearing,maxr,fixcent)
 
     if plate is None or ifu is None:
         raise ValueError('Plate and IFU must be specified if auto=False')
@@ -211,7 +210,7 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
 
     #get appropriate number of edges  by looking at length of meds
     meds = dynmeds(chains)
-    nbins = (len(meds) - args.nglobs - 3*args.mix - args.fixcent)/4
+    nbins = (len(meds) - args.nglobs - 3*args.mix - fixcent)/4
     if not nbins.is_integer(): 
         raise ValueError('Dynesty output array has a bad shape.')
     else: nbins = int(nbins)

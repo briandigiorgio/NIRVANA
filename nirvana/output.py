@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from glob import glob
 from tqdm import tqdm
 import multiprocessing as mp
+import os
 
 from astropy.io import fits
 from astropy.table import Table,Column
@@ -51,9 +52,9 @@ def extractdir(cores=10, directory='/data/manga/digiorgio/nirvana/'):
 def dictformatting(d, drp=None, dap=None, padding=20, fill=-9999):
     #load dapall and drpall
     if drp is None:
-        drp = fits.open('/data/manga/spectro/redux/MPL-10/drpall-v3_0_1.fits')[1].data
+        drp = fits.open(os.getenv('MANGA_SPECTRO_REDUX') + '/MPL-10/drpall-v3_0_1.fits')[1].data
     if dap is None:
-        dap = fits.open('/data/manga/spectro/analysis/MPL-10/dapall-v3_0_1-3.0.1.fits')[1].data
+        dap = fits.open(os.getenv('MANGA_SPECTRO_ANALYSIS') + '/MPL-10/dapall-v3_0_1-3.0.1.fits')[1].data
     try:
         data = list(d.values())
         for i in range(len(data)):

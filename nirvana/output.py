@@ -118,6 +118,18 @@ def makealltable(dicts, outfile=None, padding=20):
     if outfile is not None: t.write(outfile, format='fits', overwrite=True)
     return t
 
+def maskedarraytofile(array, name=None, fill=0):
+    '''
+    Write a masked array to an HDU. 
+    
+    Numpy says it's not implemented yet so I'm implementing it.
+    '''
+    array[array.mask] = fill
+    array = array.data
+    arrayhdu = fits.ImageHDU(array)
+    if name is not None: arrayhdu.name = name
+    return arrayhdu
+
 def imagefits(f, outfile=None, padding=20):
     '''
     Make a fits file for an individual galaxy with its fit parameters and relevant data.
@@ -155,14 +167,17 @@ def imagefits(f, outfile=None, padding=20):
     args.clip()
     clipmask = fits.ImageHDU(np.array(args.remap('vel').mask, dtype=int))
     clipmask.name = 'clip_mask'
+    hdus += [clipmask]
 
-    #get asymmetry map in right format and add
-    asymmap[asymmap.mask] = 0
-    asymmap = asymmap.data
-    asym = fits.ImageHDU(asymmap)
-    asym.name = 'asymmetry'
+    #smeared and intrinsic velocity/dispersion models
+    velmodel, sigmodel = bisym_model(args, resdict, plot=True)
+    args.beam_fft = None
+    intvelmodel, intsigmodel = bisym_model(args, resdict, plot=True)
 
-    hdus += [clipmask, asym]
+    #name them all and add them to the list
+    newnames = ['vel_model','sig_model','vel_int_model','sig_int_model','asymmetry']
+    for i,a in enumerate([velmodel, sigmodel, intvelmodel, intsigmodel, asymmap]):
+        hdus += [maskedarraytofile(a, name=newnames[i])]
 
     #write out
     hdul = fits.HDUList(hdus)

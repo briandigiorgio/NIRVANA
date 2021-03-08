@@ -57,6 +57,8 @@ def parse_args(options=None):
                         help='Save results as a much smaller FITS file instead')
     parser.add_argument('--marv', default=False, action='store_true',
                         help='Use downloaded marvin data instead of local')
+    parser.add_argument('--clobber', default=False, action='store_true',
+                        help='Overwrite preexisting outfiles')
 
     return parser.parse_args() if options is None else parser.parse_args(options)
 
@@ -68,14 +70,8 @@ def main(args):
         raise NotADirectoryError(f'Outfile directory does not exist: {args.dir}')
     if args.nbins == 0: args.nbins = None
 
-    #run fit with supplied args
-    plate, ifu = args.plateifu
-    samp = fit(plate, ifu, daptype=args.daptype, dr=args.dr, cores=args.cores, nbins=args.nbins,
-                  weight=args.weight, maxr=args.maxr, smearing=args.smearing, root=args.root,
-                  verbose=args.verbose, disp=args.disp, points=args.points, 
-                  stellar=args.stellar, cen=args.cen, fixcent=args.fixcent, use_marvin=args.marv)
-
     #make descriptive outfile name
+    plate, ifu = args.plateifu
     if args.outfile is None:
         args.outfile = f'{plate}-{ifu}_{args.weight}w_{args.points}p'
         if args.nbins is not None: args.outfile += f'_{args.nbins}bin'
@@ -86,13 +82,26 @@ def main(args):
         else: args.outfile += '_gas'
         if not args.cen: args.outfile += '_nocen'
         if not args.fixcent: args.outfile += '_freecent'
+    fname = args.dir + args.outfile + '.nirv'
+    fitsname = args.dir + args.outfile + '.fits'
+
+    #check if outfile already exists
+    if not args.clobber and os.path.isfile(fname):
+        raise FileExistsError(f'Output .nirv file already exists. Use --clobber to overwrite it: {fname}')
+    elif args.clobber and args.fits and os.path.isfile(fitsname):
+        raise FileExistsError(f'Output FITS file already exists. Use --clobber to overwrite it: {fitsname}')
+
+    #run fit with supplied args
+    samp = fit(plate, ifu, daptype=args.daptype, dr=args.dr, cores=args.cores, nbins=args.nbins,
+                  weight=args.weight, maxr=args.maxr, smearing=args.smearing, root=args.root,
+                  verbose=args.verbose, disp=args.disp, points=args.points, 
+                  stellar=args.stellar, cen=args.cen, fixcent=args.fixcent, use_marvin=args.marv)
 
     #write out with sampler results or just FITS table
-    fname = args.dir + args.outfile + '.nirv'
     pickle.dump(samp.results, open(fname, 'wb'))
     if args.fits: 
         try:
-            imagefits(fname, outfile=args.dir + args.outfile + '.fits') 
+            imagefits(fname, outfile=fitsname) 
             os.remove(fname)
         except:
             raise ValueError('Unable to save as FITS. Output still available as .nirv')

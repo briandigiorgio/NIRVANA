@@ -109,7 +109,7 @@ class FitArgs:
     def setmix(self, mix):
         self.mix = mix
 
-    def getguess(self, fill=10, clip=False):
+    def getguess(self, fill=10, clip=False, simple=False):
         '''
         Generate a set of guess parameters for the galaxy using a simple least
         squares fit.
@@ -162,7 +162,7 @@ class FitArgs:
         if hasattr(self, 'nglobs') and self.nglobs == 6: guess += [0,0]
 
         #if edges have not been defined, just return global parameters
-        if not hasattr(self, 'edges'): return [vmax,inc,pa,h,vsys]
+        if not hasattr(self, 'edges') or simple: return [vmax,inc,pa,h,vsys]
 
         #define polar coordinates and normalize to effective radius
         r,th = projected_polar(self.grid_x, self.grid_y, *np.radians([pa,inc]))
@@ -187,3 +187,31 @@ class FitArgs:
         guess[np.isnan(guess)] = 100
         self.guess = guess
         return self.guess
+
+    def setnbin(self, nbin):
+        self.nbin = nbin
+
+    def setbounds(self, incpad=30, papad=30, vsyspad=30, cenpad=3, velmax=400, sigmax=300):
+        try: theta0 = self.guess
+        except: raise AttributeError('Must define guess first')
+        try: self.nbin
+        except: raise AttributeError('Must define nbin first')
+        inc = self.guess[1] if self.phot_inc is None else self.phot_inc
+        ndim = len(self.guess) + (self.nbin + self.fixcent) * self.disp
+
+        #prior bounds defined based off of guess
+        bounds = np.zeros((ndim, 2))
+        bounds[0] = (max(inc - incpad, 5), min(inc + incpad, 85))
+        bounds[1] = (max(theta0[1] - papad, 0), min(theta0[1] + papad, 360))
+        bounds[2] = (0, 180)
+        bounds[3] = (theta0[3] - vsyspad, theta0[3] + vsyspad)
+        if self.nglobs == 6:
+            bounds[4] = (theta0[4] - cenpad, theta0[4] + cenpad)
+            bounds[5] = (theta0[5] - cenpad, theta0[5] + cenpad)
+
+        #cap velocities at maximum in vf
+        vmax = min(np.max(self.vel)/np.cos(np.radians(inc)) * 1.5, velmax)
+        bounds[self.nglobs:self.nglobs + self.nbin] = (0, vmax)
+        bounds[self.nglobs + self.nbin:self.nglobs + 3*self.nbin] = (0, vmax)
+        if self.disp: bounds[self.nglobs + 3*self.nbin:] = (0, min(np.max(self.sig), sigmax))
+        self.bounds = bounds

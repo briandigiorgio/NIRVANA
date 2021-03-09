@@ -273,7 +273,7 @@ def ptform(params, args, bounds=None, gaussprior=False):
     '''
 
     paramdict = unpack(params, args)
-    bounddict = unpack(bounds, args, bound=True)
+    bounddict = unpack(args.bounds, args, bound=True)
 
     #attempt at smarter posteriors, currently super slow though
     #truncated gaussian prior around guess values
@@ -570,23 +570,11 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
     nbin = len(args.edges) - args.fixcent
     if disp: ndim += nbin + args.fixcent
     if mix: ndim += 3
+    args.setnbin(nbin)
     print(f'{nbin + args.fixcent} radial bins, {ndim} parameters')
     
     #prior bounds defined based off of guess
-    bounds = np.zeros((ndim, 2))
-    bounds[0] = (max(theta0[0] - 30, 5), min(theta0[0] + 30, 85))
-    bounds[1] = (max(theta0[1] - 30, 0), min(theta0[1] + 30, 360))
-    bounds[2] = (0, 180)
-    bounds[3] = (theta0[3] - 5, theta0[3] + 5)
-    if cen:
-        bounds[4] = (theta0[4] - 5, theta0[4] + 5)
-        bounds[5] = (theta0[5] - 5, theta0[5] + 5)
-
-    #cap velocities at maximum in vf
-    vmax = min(np.max(args.vel)/np.cos(np.radians(inc)) * 1.5, 400)
-    bounds[args.nglobs:args.nglobs + nbin] = (0, vmax)
-    bounds[args.nglobs + nbin:args.nglobs + 3*nbin] = (0, vmax)
-    if args.disp: bounds[args.nglobs + 3*nbin:] = (0, min(np.max(args.sig), 300))
+    args.setbounds()
 
     #open up multiprocessing pool if needed
     if cores > 1 and not ultra:
@@ -609,7 +597,7 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
 
         #define likelihood and prior with arguments
         ulike = lambda params: loglike(params, args)
-        uprior = lambda params: ptform(params, args, bounds)
+        uprior = lambda params: ptform(params, args)
 
         #ultranest step sampler
         sampler = ReactiveNestedSampler(names, ulike, uprior, wrapped_params=wrap, 
@@ -621,8 +609,11 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
         #dynesty sampler with periodic pa and pab
         sampler = dynesty.NestedSampler(loglike, ptform, ndim, nlive=points,
                 periodic=[1,2], pool=pool,
-                ptform_args = [args, bounds], logl_args = [args], verbose=verbose)
+                ptform_args = [args], logl_args = [args], verbose=verbose)
         sampler.run_nested()
 
         if pool is not None: pool.close()
-    return sampler
+
+    args.npoints = points
+    args.smearing = smearing
+    return sampler, args

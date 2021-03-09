@@ -130,21 +130,25 @@ def maskedarraytofile(array, name=None, fill=0):
     if name is not None: arrayhdu.name = name
     return arrayhdu
 
-def imagefits(f, outfile=None, padding=20, use_marvin=False):
+def imagefits(f, args, outfile=None, padding=20, use_marvin=False):
     '''
     Make a fits file for an individual galaxy with its fit parameters and relevant data.
     '''
 
     #get relevant data
     args, arc, asymmap, resdict = extractfile(f, use_marvin=use_marvin)
-    names = list(resdict.keys()) + ['velmask','sigmask','drpindex','dapindex']
+    names = list(resdict.keys()) + ['velmask','sigmask','bin_edges','prior_lbound','prior_ubound','drpindex','dapindex']
     dtypes = ['f4','f4','f4','f4','f4','f4','20f4','20f4','20f4','20f4',
               'f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4',
               '20f4','20f4','20f4','20f4','20f4','20f4','20f4','20f4',
-              'I','I','S','f4','20?','20?','I','I']
+              'I','I','S','f4','20?','20?','20f4','20f4','20f4','I','I']
 
     #make table of fit data
     t = Table(names=names, dtype=dtypes)
+    t = t['plate','ifu','type','drpindex','dapindex','bin_edges','prior_lbound','prior_ubound',
+          'xc','yc','inc','pa','pab','vsys','vt','v2t','v2r','sig','velmask','sigmask',
+          'xcl','ycl','incl','pal','pabl','vsysl','vtl','v2tl','v2rl','sigl',
+          'xcu','ycu','incu','pau','pabu','vsysu','vtu','v2tu','v2ru','sigu','a_rc']
     data = dictformatting(resdict, padding=padding)
     t.add_row(data)
     bintable = fits.BinTableHDU(t)
@@ -178,6 +182,16 @@ def imagefits(f, outfile=None, padding=20, use_marvin=False):
     newnames = ['vel_model','sig_model','vel_int_model','sig_int_model','asymmetry']
     for i,a in enumerate([velmodel, sigmodel, intvelmodel, intsigmodel, asymmap]):
         hdus += [maskedarraytofile(a, name=newnames[i])]
+
+    #add parameters to the header
+    hdr = hdus[0].header
+    hdr['maxr'] = args.maxr
+    hdr['smooth_weight'] = args.weight
+    hdr['fixed_cent'] = args.fixcent
+    hdr['nbin'] = args.nbin
+    hdr['npoints'] = args.npoints
+    hdr['smearing'] = args.smearing
+    hdr['guess_vmax'], hdr['guess_inc'], hdr['guess_pa'], hdr['guess_hrot'], hdr['guess_vsys'] = args.getguess(simple=True)
 
     #write out
     hdul = fits.HDUList(hdus)

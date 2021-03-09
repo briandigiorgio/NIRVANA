@@ -92,7 +92,7 @@ def main(args):
         raise FileExistsError(f'Output FITS file already exists. Use --clobber to overwrite it: {fitsname}')
 
     #run fit with supplied args
-    samp = fit(plate, ifu, daptype=args.daptype, dr=args.dr, cores=args.cores, nbins=args.nbins,
+    samp, args = fit(plate, ifu, daptype=args.daptype, dr=args.dr, cores=args.cores, nbins=args.nbins,
                   weight=args.weight, maxr=args.maxr, smearing=args.smearing, root=args.root,
                   verbose=args.verbose, disp=args.disp, points=args.points, 
                   stellar=args.stellar, cen=args.cen, fixcent=args.fixcent, use_marvin=args.marv)

@@ -101,7 +101,7 @@ def main(args):
     pickle.dump(samp.results, open(fname, 'wb'))
     if args.fits: 
         try:
-            imagefits(fname, outfile=fitsname) 
+            imagefits(fname, outfile=fitsname, use_marvin=args.marv) 
             os.remove(fname)
         except:
             raise ValueError('Unable to save as FITS. Output still available as .nirv')

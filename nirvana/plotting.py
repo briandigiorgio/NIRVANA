@@ -480,7 +480,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
         plt.savefig(f'{path}plots/{fname}.pdf', format='pdf')
         plt.close()
 
-    return resdict
+    return fig
 
 def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True): 
     '''

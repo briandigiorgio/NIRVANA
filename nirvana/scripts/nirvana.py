@@ -84,6 +84,7 @@ def main(args):
         if not args.fixcent: args.outfile += '_freecent'
     fname = args.dir + args.outfile + '.nirv'
     fitsname = args.dir + args.outfile + '.fits'
+    galname = args.dir + args.outfile + '.gal'
 
     #check if outfile already exists
     if not args.clobber and os.path.isfile(fname):
@@ -92,16 +93,18 @@ def main(args):
         raise FileExistsError(f'Output FITS file already exists. Use --clobber to overwrite it: {fitsname}')
 
     #run fit with supplied args
-    samp, args = fit(plate, ifu, daptype=args.daptype, dr=args.dr, cores=args.cores, nbins=args.nbins,
+    samp, gal = fit(plate, ifu, daptype=args.daptype, dr=args.dr, cores=args.cores, nbins=args.nbins,
                   weight=args.weight, maxr=args.maxr, smearing=args.smearing, root=args.root,
                   verbose=args.verbose, disp=args.disp, points=args.points, 
                   stellar=args.stellar, cen=args.cen, fixcent=args.fixcent, use_marvin=args.marv)
 
     #write out with sampler results or just FITS table
     pickle.dump(samp.results, open(fname, 'wb'))
+    pickle.dump(gal, open(galname, 'wb'))
     if args.fits: 
         try:
-            imagefits(fname, outfile=fitsname, use_marvin=args.marv) 
+            imagefits(fname, gal, outfile=fitsname, use_marvin=args.marv) 
             os.remove(fname)
+            os.remove(galname)
         except:
             raise ValueError('Unable to save as FITS. Output still available as .nirv')

@@ -191,7 +191,7 @@ class FitArgs:
     def setnbin(self, nbin):
         self.nbin = nbin
 
-    def setbounds(self, incpad=30, papad=30, vsyspad=30, cenpad=3, velmax=400, sigmax=300):
+    def setbounds(self, incpad=30, papad=30, vsyspad=30, cenpad=2, velmax=400, sigmax=300):
         try: theta0 = self.guess
         except: raise AttributeError('Must define guess first')
         try: self.nbin

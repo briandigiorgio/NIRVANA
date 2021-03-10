@@ -161,7 +161,8 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
     #unpack fits file
     if type(f) == str and '.fits' in f:
         isfits = True
-        table = fits.open(f)[1].data
+        with fits.open(f) as fitsfile:
+            table = fitsfile[1].data
         keys = table.columns.names
         vals = [table[k][0] for k in keys]
         resdict = dict(zip(keys, vals))
@@ -170,7 +171,7 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
         for s in ['sig','sigl','sigu']:
             resdict[s] = resdict[s][resdict['sigmask'] == 0]
 
-        if resdict['type'] == 'stellar':
+        if resdict['type'] == 'Stars':
             args = MaNGAStellarKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, use_marvin=use_marvin)
         else:
             args = MaNGAGasKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, use_marvin=use_marvin)
@@ -673,6 +674,7 @@ def plotdir(directory=None, fname=None, **kwargs):
     if fname is None: fname = '*-*_*.nirv'
     fs = glob(directory+fname)
     if len(fs) == 0: raise FileNotFoundError('No files found')
+    else: print(len(fs), 'files found')
     for i,f in tqdm(enumerate(fs)):
         try:
             summaryplot(f, save=True, **kwargs)

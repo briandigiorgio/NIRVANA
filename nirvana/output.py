@@ -141,12 +141,14 @@ def imagefits(f, gal=None, outfile=None, padding=20, use_marvin=False):
     if gal is not None: args = gal
     resdict['bin_edges'] = args.edges
     data = dictformatting(resdict, padding=padding)
-    data += [*args.bounds.T]
+
+    data += [*np.delete(args.bounds.T, slice(7,-1), axis=1)]
+
     names = list(resdict.keys()) + ['velmask','sigmask','drpindex','dapindex','prior_lbound','prior_ubound']
     dtypes = ['f4','f4','f4','f4','f4','f4','20f4','20f4','20f4','20f4',
               'f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4',
               '20f4','20f4','20f4','20f4','20f4','20f4','20f4','20f4',
-              'I','I','S','f4','20f4','20?','20?','I','I','15f4','15f4']
+              'I','I','S','f4','20f4','20?','20?','I','I','8f4','8f4']
 
     #make table of fit data
     t = Table(names=names, dtype=dtypes)
@@ -276,7 +278,7 @@ def fig2data(fig):
     fig.canvas.draw( )
  
     # Get the RGBA buffer from the figure
-    w,h = fig.canvas.get_width_height()
+    h,w = fig.canvas.get_width_height()
     buf = np.fromstring(fig.canvas.tostring_argb(), dtype=np.uint8)
     buf.shape = (w, h, 4)
  

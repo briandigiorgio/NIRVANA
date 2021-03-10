@@ -22,7 +22,10 @@ from scipy import sparse
 import matplotlib.image as img
 
 from astropy.io import fits
-from marvin.tools import Cube
+try:
+    from marvin.tools import Cube
+except:
+    Cube = None
 
 from .util import get_map_bin_transformations, impose_positive_definite
 from .kinematics import Kinematics
@@ -156,7 +159,8 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
         check (:obj:`bool`, optional):
             Check that the directories with the expected files exist.
         use_marvin (:obj:`bool`, optional):
-            Use `marvin` to download data instead of looking locally.
+            Use `Marvin`_ to both download the data and return the relevant
+            file paths. If True, all other keyword arguments are ignored.
 
     Returns:
         :obj:`tuple`: Full path to three files: (1) the DAP MAPS file, (2)
@@ -173,6 +177,8 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
             defined but does not exist.
     """
     #download using marvin instead of looking locally
+    if use_marvin and Cube is None:
+        raise ImportError('Could not use marvin because marvin Cube could not be imported.')
     if use_marvin:
         #get files
         cube = Cube(f'{plate}-{ifu}')

@@ -2,6 +2,7 @@
 Script that runs the an axisymmetric, least-squares fit for MaNGA data.
 """
 import os
+import argparse
 
 from IPython import embed
 
@@ -10,11 +11,12 @@ import numpy as np
 from matplotlib import pyplot, rc, patches, ticker, colors
 from nirvana.models.geometry import projected_polar
 from nirvana import data
+from nirvana import plotting
+from nirvana.models.oned import HyperbolicTangent, Exponential, ExpBase, Const, PolyEx
+from nirvana.models.axisym import AxisymmetricDisk
 
 
 def parse_args(options=None):
-
-    import argparse
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('plate', default=None, type=int, 
@@ -59,6 +61,11 @@ def parse_args(options=None):
                              'photometric ellipticity')
     parser.add_argument('-t', '--tracer', default='Gas', type=str,
                         help='The tracer to fit; must be either Gas or Stars.')
+    parser.add_argument('--rc', default='HyperbolicTangent', type=str,
+                        help='Rotation curve parameterization to use: HyperbolicTangent or PolyEx')
+    parser.add_argument('--dc', default='Exponential', type=str,
+                        help='Dispersion profile parameterization to use: Exponential, ExpBase, '
+                             'or Const.')
 
     # TODO: Other options:
     #   - Fit with least-squares vs. dynesty
@@ -69,12 +76,6 @@ def parse_args(options=None):
     return parser.parse_args() if options is None else parser.parse_args(options)
 
 def main(args):
-
-    import numpy as np
-
-    from nirvana import data
-    from nirvana.models.oned import HyperbolicTangent, Exponential, ExpBase, Const
-    from nirvana.models.axisym import AxisymmetricDisk
 
     #---------------------------------------------------------------------------
     # Setup
@@ -119,39 +120,84 @@ def main(args):
     #---------------------------------------------------------------------------
 
     #---------------------------------------------------------------------------
-    # Get the guess parameters: xc, yc, pa, inc, vsys, vrot, hrot, sig0, hsig
-    
+    # Get the guess parameters and the model parameterizations
+    #   - Geometry
     pa, vproj = galmeta.guess_kinematic_pa(kin.grid_x, kin.grid_y, kin.remap('vel'),
                                            return_vproj=True)
-    # TODO: Maybe want to make the guess hrot based on the effective radius...
-    p0 = np.array([10., 10., pa, galmeta.guess_inclination(), 0., vproj, 1.])
+    p0 = np.array([0., 0., pa, galmeta.guess_inclination(), 0.])
+
+    #   - Rotation Curve
+    rc = None
+    if args.rc == 'HyperbolicTangent':
+        # TODO: Maybe want to make the guess hrot based on the effective radius...
+        p0 = np.append(p0, np.array([vproj, 1.]))
+        rc = HyperbolicTangent(lb=np.array([0., 1e-3]), ub=np.array([1000., kin.max_radius()]))
+    elif args.rc == 'PolyEx':
+        p0 = np.append(p0, np.array([vproj, 1., 0.1]))
+        rc = PolyEx(lb=np.array([0., 1e-3, -1.]), ub=np.array([1000., kin.max_radius(), 1.]))
+    else:
+        raise ValueError(f'Unknown RC parameterization: {args.rc}')
+
+    #   - Dispersion profile
+    dc = None
     if args.disp:
         sig0 = galmeta.guess_central_dispersion(kin.grid_x, kin.grid_y, kin.remap('sig'))
         # For disks, 1 Re = 1.7 hr (hr = disk scale length). The dispersion
         # e-folding length is ~2 hr, meaning that I use a guess of 2/1.7 Re for
         # the dispersion e-folding length.
-#        p0 = np.append(p0, np.array([sig0, 2*galmeta.reff/1.7]))
-#        p0 = np.append(p0, np.array([sig0, 2*galmeta.reff/1.7, 1.]))
-        p0 = np.append(p0, np.array([sig0]))
+        if args.dc == 'Exponential':
+            p0 = np.append(p0, np.array([sig0, 2*galmeta.reff/1.7]))
+            dc = Exponential(lb=np.array([0., 1e-3]), ub=np.array([1000., kin.max_radius()]))
+        elif args.dc == 'ExpBase':
+            p0 = np.append(p0, np.array([sig0, 2*galmeta.reff/1.7, 1.]))
+            dc = ExpBase(lb=np.array([0., 1e-3, 0.]), ub=np.array([1000., kin.max_radius(), 100.]))
+        elif args.dc == 'Const':
+            p0 = np.append(p0, np.array([sig0]))
+            dc = Const(lb=np.array([0.]), ub=np.array([1000.]))
     #---------------------------------------------------------------------------
 
     #---------------------------------------------------------------------------
-    # Setup the model
-    #  - Set the rotation curve parameterization and bounds
-    rc = HyperbolicTangent(lb=np.array([0., 1e-3]), ub=np.array([1000., kin.max_radius()]))
-    #  - Set the dispersion parameterization and bounds
-#    dc = Exponential(lb=np.array([0., 1e-3]), ub=np.array([1000., kin.max_radius()])) \
-#            if args.disp else None
-#    dc = ExpBase(lb=np.array([0., 1e-3, 0.]), ub=np.array([1000., kin.max_radius(), 30.])) \
-#            if args.disp else None
-    dc = Const(lb=np.array([0.]), ub=np.array([1000.])) \
-            if args.disp else None
-    #  - Set the disk velocity field
+    # Setup the full velocity-field model
     disk = AxisymmetricDisk(rc=rc, dc=dc)
+
+    # Hardcoded Procedure:
+    #   - Reject data with large errors and low S/N
+    #       - These are rejected throughout
+    #   - Fit with the inclination and center fixed
+    #   - Reject very large outliers, sigma_rej=15
+    #   - Refit with the inclination and center fixed
+    #       - Ignore measured scatter
+    #   - Reject large outliers, sigma_rej=10
+    #   - Refit with the inclination and center fixed
+    #       - Include measured scatter
+    #       - Save results, use as starting point for the remainder
+    #   - Refit with the inclination fixed
+    #       - Include measured scatter
+    #       - Save results
+    #   - Refit with the center fixed
+    #       - Include measured scatter
+    #       - Save results
+    #   - Refit with everything free
+    #       - Include measured scatter
+    #       - Save results
+    #   - Reject very large outliers, sigma_rej=15
+    #   - Refit with everything free
+    #       - Include measured scatter
+    #   - Reject large outliers, sigma_rej=10
+    #   - Refit with everything free
+    #       - Include measured scatter
+    #       - Save results
 
     #---------------------------------------------------------------------------
     # Run the first fit using all the data
-    disk.lsq_fit(kin, sb_wgt=True, p0=p0, verbose=2)
+    fix = np.array([True, True, False, True, False])
+    npar = p0.size
+    fix = np.append(fix, np.zeros(npar-fix.size, dtype=bool))
+    disk.lsq_fit(kin, sb_wgt=True, p0=p0, fix=fix, verbose=2)
+    # Show
+    axisym_fit_plot(galmeta, kin, disk)
+
+    exit()
 
     # Get the models
     models = disk.model()
@@ -160,30 +206,35 @@ def main(args):
     resid = kin.vel - kin.bin(vmod)
     err = 1/np.sqrt(kin.vel_ivar)
     scat = data.scatter.IntrinsicScatter(resid, err=err, gpm=disk.vel_gpm)
-    sig, rej, gpm = scat.iter_fit(fititer=5, verbose=2)
+    vel_sig, vel_rej, vel_gpm = scat.iter_fit(fititer=5, verbose=2)
+    scat.show()
+    kin.vel_mask = np.logical_not(vel_gpm)
+    scatter = np.array([vel_sig])
 
-#    if args.disp:
-#        smod = models[1]
-#        # Rejected based on error-weighted residuals, accounting for intrinsic scatter
-#        resid = np.ma.sqrt(kin.sig_phys2) - kin.bin(smod)
-#        err = 4*kin.sig_phys2*kin.sig_phys2_ivar
-#        err = 1/np.ma.sqrt(err)
-#        scat = data.scatter.IntrinsicScatter(resid, err=err) #, gpm=disk.vel_gpm)
-#        sig, rej, gpm = scat.iter_fit(fititer=5, verbose=2)
-#        embed()
-#        exit()
-
+    if args.disp:
+        # Rejected based on error-weighted residuals, accounting for intrinsic scatter
+        resid = kin.sig_phys2 - kin.bin(models[1])**2
+        err = 1/np.ma.sqrt(kin.sig_phys2_ivar)
+        scat = data.scatter.IntrinsicScatter(resid, err=err, gpm=disk.sig_gpm)
+        sig_sig, sig_rej, sig_gpm = scat.iter_fit(fititer=5, verbose=2)
+        scat.show()
+        kin.sig_mask = np.logical_not(sig_gpm)
+        scatter = np.array([vel_sig, sig_sig])
 
     # Refit with new mask, include scatter and covariance
-    kin.vel_mask = np.logical_not(gpm)
     p0 = disk.par
-    disk.lsq_fit(kin, scatter=sig, sb_wgt=True, p0=disk.par, verbose=2)
-    models = disk.model()
-    vmod = models[0] if args.disp else models
-    # Reject
-    resid = kin.vel - kin.bin(vmod)
-    scat = data.scatter.IntrinsicScatter(resid, err=err) #, gpm=disk.vel_gpm)
-    sig, rej, gpm = scat.iter_fit(fititer=5, verbose=2)
+    disk.lsq_fit(kin, scatter=scatter, sb_wgt=True, p0=disk.par, verbose=2)
+
+    axisym_fit_plot(galmeta, kin, disk)
+
+    exit()
+
+#    models = disk.model()
+#    vmod = models[0] if args.disp else models
+#    # Reject
+#    resid = kin.vel - kin.bin(vmod)
+#    scat = data.scatter.IntrinsicScatter(resid, err=err) #, gpm=disk.vel_gpm)
+#    sig, rej, gpm = scat.iter_fit(fititer=5, verbose=2)
 
     print(disk.par)
 
@@ -191,44 +242,6 @@ def main(args):
 
     embed()
     exit()
-
-    embed()
-    exit()
-
-
-def init_ax(fig, pos, facecolor='0.85', top=True, right=True):
-    ax = fig.add_axes(pos, facecolor=facecolor)
-    ax.minorticks_on()
-    ax.tick_params(which='major', length=4, direction='in', top=top, right=right)
-    ax.tick_params(which='minor', length=2, direction='in', top=top, right=right)
-    ax.grid(True, which='major', color='0.75', zorder=0, linestyle='-')
-    return ax
-
-
-def get_twin(ax, axis):
-    axt = ax.twinx() if axis == 'y' else ax.twiny()
-    axt.minorticks_on()
-    axt.tick_params(which='major', length=4, direction='in')
-    axt.tick_params(which='minor', length=2, direction='in')
-    return axt
-
-
-def force_one_decade(lim):
-    lglim = np.log10(lim)
-    if int(lglim[1]) - int(np.ceil(lglim[0])) > 0:
-        return (10**lglim).tolist()
-    m = np.sum(lglim)/2
-    ld = lglim[0] - np.floor(lglim[0])
-    fd = np.ceil(lglim[1]) - lglim[1]
-    w = lglim[1] - m
-    dw = ld*1.01 if ld < fd else fd*1.01
-    return force_one_decade((10**np.array([m - w - dw, m + w + dw])).tolist())
-    
-
-def rotate_y_ticks(ax, rotation, va):
-    for tick in ax.get_yticklabels():
-        tick.set_rotation(rotation)
-        tick.set_verticalalignment(va)
 
 
 # TODO: Add keyword for:
@@ -284,7 +297,8 @@ def axisym_fit_plot(galmeta, kin, disk, ofile=None, par=None, par_err=None):
     #   - Disk-plane coordinates
     r, th = projected_polar(kin.x - disk.par[0], kin.y - disk.par[1], *np.radians(disk.par[2:4]))
     #   - Mask for data along the major axis
-    major_gpm = data.util.select_major_axis(r, th, r_range='all', wedge=30.)
+    wedge = 30.
+    major_gpm = data.util.select_major_axis(r, th, r_range='all', wedge=wedge)
     #   - Projected rotation velocities
     indx = major_gpm & np.logical_not(kin.vel_mask)
     vrot_r = r[indx]
@@ -343,14 +357,14 @@ def axisym_fit_plot(galmeta, kin, disk, ofile=None, par=None, par_err=None):
     #-------------------------------------------------------------------
     # Surface-brightness
     sb_lim = np.power(10.0, data.util.growth_lim(np.ma.log10(sb_map), 0.90, 1.05))
-    sb_lim = force_one_decade(sb_lim)
+    sb_lim = data.util.atleast_one_decade(sb_lim)
     
-    ax = init_ax(fig, [0.02, 0.775, 0.19, 0.19])
+    ax = plotting.init_ax(fig, [0.02, 0.775, 0.19, 0.19])
     cax = fig.add_axes([0.05, 0.97, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
     ax.set_ylim(skylim)
-    rotate_y_ticks(ax, 90, 'center')
+    plotting.rotate_y_ticks(ax, 90, 'center')
     ax.xaxis.set_major_formatter(ticker.NullFormatter())
     ax.add_patch(patches.Circle((0.1, 0.1), fwhm/np.diff(skylim)[0]/2, transform=ax.transAxes,
                                 facecolor='0.7', edgecolor='k', zorder=4))
@@ -368,14 +382,14 @@ def axisym_fit_plot(galmeta, kin, disk, ofile=None, par=None, par_err=None):
     #-------------------------------------------------------------------
     # S/N
     snr_lim = np.power(10.0, data.util.growth_lim(np.ma.log10(snr_map), 0.90, 1.05))
-    snr_lim = force_one_decade(snr_lim)
+    snr_lim = data.util.atleast_one_decade(snr_lim)
 
-    ax = init_ax(fig, [0.02, 0.580, 0.19, 0.19])
+    ax = plotting.init_ax(fig, [0.02, 0.580, 0.19, 0.19])
     cax = fig.add_axes([0.05, 0.57, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
     ax.set_ylim(skylim)
-    rotate_y_ticks(ax, 90, 'center')
+    plotting.rotate_y_ticks(ax, 90, 'center')
 #    ax.set_yticklabels(ax.get_yticks(), rotation=90, va='center')
     ax.xaxis.set_major_formatter(ticker.NullFormatter())
     ax.add_patch(patches.Circle((0.1, 0.1), fwhm/np.diff(skylim)[0]/2, transform=ax.transAxes,
@@ -395,7 +409,7 @@ def axisym_fit_plot(galmeta, kin, disk, ofile=None, par=None, par_err=None):
                                    midpoint=disk.par[4])
 #    mult = get_multiple(vel_lim)
 
-    ax = init_ax(fig, [0.215, 0.775, 0.19, 0.19])
+    ax = plotting.init_ax(fig, [0.215, 0.775, 0.19, 0.19])
     cax = fig.add_axes([0.245, 0.97, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
@@ -422,9 +436,9 @@ def axisym_fit_plot(galmeta, kin, disk, ofile=None, par=None, par_err=None):
     # Velocity Dispersion
     sig_lim = np.power(10.0, data.util.growth_lim(np.ma.log10(np.ma.append(s_map, smod_map)),
                                                   0.80, 1.05))
-    sig_lim = force_one_decade(sig_lim)
+    sig_lim = data.util.atleast_one_decade(sig_lim)
 
-    ax = init_ax(fig, [0.215, 0.580, 0.19, 0.19])
+    ax = plotting.init_ax(fig, [0.215, 0.580, 0.19, 0.19])
     cax = fig.add_axes([0.245, 0.57, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
@@ -440,7 +454,7 @@ def axisym_fit_plot(galmeta, kin, disk, ofile=None, par=None, par_err=None):
 
     #-------------------------------------------------------------------
     # Velocity Model
-    ax = init_ax(fig, [0.410, 0.775, 0.19, 0.19])
+    ax = plotting.init_ax(fig, [0.410, 0.775, 0.19, 0.19])
     cax = fig.add_axes([0.440, 0.97, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
@@ -464,9 +478,9 @@ def axisym_fit_plot(galmeta, kin, disk, ofile=None, par=None, par_err=None):
     # Velocity Dispersion
     sig_lim = np.power(10.0, data.util.growth_lim(np.ma.log10(np.ma.append(s_map, smod_map)),
                                                   0.80, 1.05))
-    sig_lim = force_one_decade(sig_lim)
+    sig_lim = data.util.atleast_one_decade(sig_lim)
 
-    ax = init_ax(fig, [0.410, 0.580, 0.19, 0.19])
+    ax = plotting.init_ax(fig, [0.410, 0.580, 0.19, 0.19])
     cax = fig.add_axes([0.440, 0.57, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
@@ -486,7 +500,7 @@ def axisym_fit_plot(galmeta, kin, disk, ofile=None, par=None, par_err=None):
     v_resid = v_map - vmod_map
     v_res_lim = data.util.growth_lim(v_resid, 0.80, 1.15, midpoint=0.0)
 
-    ax = init_ax(fig, [0.605, 0.775, 0.19, 0.19])
+    ax = plotting.init_ax(fig, [0.605, 0.775, 0.19, 0.19])
     cax = fig.add_axes([0.635, 0.97, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
@@ -511,7 +525,7 @@ def axisym_fit_plot(galmeta, kin, disk, ofile=None, par=None, par_err=None):
     s_resid = s_map - smod_map
     s_res_lim = data.util.growth_lim(s_resid, 0.80, 1.15, midpoint=0.0)
 
-    ax = init_ax(fig, [0.605, 0.580, 0.19, 0.19])
+    ax = plotting.init_ax(fig, [0.605, 0.580, 0.19, 0.19])
     cax = fig.add_axes([0.635, 0.57, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
@@ -530,9 +544,9 @@ def axisym_fit_plot(galmeta, kin, disk, ofile=None, par=None, par_err=None):
     # Velocity Model Chi-square
     v_chi = np.ma.divide(np.absolute(v_resid), v_err_map)
     v_chi_lim = np.power(10.0, data.util.growth_lim(np.ma.log10(v_chi), 0.90, 1.15))
-    v_chi_lim = force_one_decade(v_chi_lim)
+    v_chi_lim = data.util.atleast_one_decade(v_chi_lim)
 
-    ax = init_ax(fig, [0.800, 0.775, 0.19, 0.19])
+    ax = plotting.init_ax(fig, [0.800, 0.775, 0.19, 0.19])
     cax = fig.add_axes([0.830, 0.97, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
@@ -557,9 +571,9 @@ def axisym_fit_plot(galmeta, kin, disk, ofile=None, par=None, par_err=None):
     # Velocity Dispersion Model Chi-square
     s_chi = np.ma.divide(np.absolute(s_resid), s_err_map)
     s_chi_lim = np.power(10.0, data.util.growth_lim(np.ma.log10(s_chi), 0.90, 1.15))
-    s_chi_lim = force_one_decade(s_chi_lim)
+    s_chi_lim = data.util.atleast_one_decade(s_chi_lim)
 
-    ax = init_ax(fig, [0.800, 0.580, 0.19, 0.19])
+    ax = plotting.init_ax(fig, [0.800, 0.580, 0.19, 0.19])
     cax = fig.add_axes([0.830, 0.57, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
@@ -579,8 +593,8 @@ def axisym_fit_plot(galmeta, kin, disk, ofile=None, par=None, par_err=None):
 
     #-------------------------------------------------------------------
     # Intrinsic Velocity Model
-    ax = init_ax(fig, [0.800, 0.265, 0.19, 0.19])
-    cax = fig.add_axes([0.830, 0.46, 0.15, 0.005])
+    ax = plotting.init_ax(fig, [0.800, 0.305, 0.19, 0.19])
+    cax = fig.add_axes([0.830, 0.50, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
     ax.set_ylim(skylim)
@@ -605,10 +619,10 @@ def axisym_fit_plot(galmeta, kin, disk, ofile=None, par=None, par_err=None):
     # Intrinsic Velocity Dispersion
     sig_lim = np.power(10.0, data.util.growth_lim(np.ma.log10(np.ma.append(s_map, smod_map)),
                                                   0.80, 1.05))
-    sig_lim = force_one_decade(sig_lim)
+    sig_lim = data.util.atleast_one_decade(sig_lim)
 
-    ax = init_ax(fig, [0.800, 0.070, 0.19, 0.19])
-    cax = fig.add_axes([0.830, 0.06, 0.15, 0.005])
+    ax = plotting.init_ax(fig, [0.800, 0.110, 0.19, 0.19])
+    cax = fig.add_axes([0.830, 0.10, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
     ax.set_ylim(skylim)
@@ -627,10 +641,10 @@ def axisym_fit_plot(galmeta, kin, disk, ofile=None, par=None, par_err=None):
 
     reff_lines = np.arange(galmeta.reff, r_lim[1], galmeta.reff)
 
-    ax = init_ax(fig, [0.25, 0.27, 0.51, 0.23], facecolor='0.9', top=False, right=False)
+    ax = plotting.init_ax(fig, [0.27, 0.27, 0.51, 0.23], facecolor='0.9', top=False, right=False)
     ax.set_xlim(r_lim)
     ax.set_ylim(rc_lim)
-    rotate_y_ticks(ax, 90, 'center')
+    plotting.rotate_y_ticks(ax, 90, 'center')
     if smod is None:
         ax.text(0.5, -0.13, r'$R$ [arcsec]', horizontalalignment='center', verticalalignment='center',
                 transform=ax.transAxes, fontsize=10)
@@ -649,7 +663,7 @@ def axisym_fit_plot(galmeta, kin, disk, ofile=None, par=None, par_err=None):
     for l in reff_lines:
         ax.axvline(x=l, linestyle='--', lw=0.5, zorder=2, color='k')
 
-    axt = get_twin(ax, 'x')
+    axt = plotting.get_twin(ax, 'x')
     axt.set_xlim(np.array(r_lim) * galmeta.kpc_per_arcsec())
     axt.set_ylim(rc_lim)
     ax.text(0.5, 1.14, r'$R$ [$h^{-1}$ kpc]',
@@ -657,10 +671,20 @@ def axisym_fit_plot(galmeta, kin, disk, ofile=None, par=None, par_err=None):
                 transform=ax.transAxes, fontsize=10)
 
     kin_inc = disk.par[3]
-    axt = get_twin(ax, 'y')
+    axt = plotting.get_twin(ax, 'y')
     axt.set_xlim(r_lim)
     axt.set_ylim(np.array(rc_lim)/np.sin(np.radians(kin_inc)))
-    rotate_y_ticks(axt, 90, 'center')
+    plotting.rotate_y_ticks(axt, 90, 'center')
+    axt.spines['right'].set_color('0.4')
+    axt.tick_params(which='both', axis='y', colors='0.4')
+    axt.yaxis.label.set_color('0.4')
+
+    ax.add_patch(patches.Rectangle((0.62,0.03), 0.36, 0.19, facecolor='w', lw=0, edgecolor='none',
+                                   zorder=5, alpha=0.7, transform=ax.transAxes))
+    ax.text(0.97, 0.13, r'$V_{\rm rot}\ \sin i$ [km/s; left axis]', ha='right', va='bottom',
+            transform=ax.transAxes, fontsize=10, zorder=6)
+    ax.text(0.97, 0.04, r'$V_{\rm rot}$ [km/s; right axis]', ha='right', va='bottom', color='0.4',
+            transform=ax.transAxes, fontsize=10, zorder=6)
 
 #    ax.text(0.97, 0.6, r'$V_{{\rm H}\alpha}$', color='r',
 #            horizontalalignment='center', verticalalignment='center', rotation='vertical',
@@ -682,14 +706,14 @@ def axisym_fit_plot(galmeta, kin, disk, ofile=None, par=None, par_err=None):
     if smod is not None:
         sprof_lim = np.power(10.0, data.util.growth_lim(np.ma.log10(sprof_ewmean[sprof_nbin > 5]),
                                                         0.9, 1.5))
-        sprof_lim = force_one_decade(sprof_lim)
+        sprof_lim = data.util.atleast_one_decade(sprof_lim)
 
-        ax = init_ax(fig, [0.25, 0.04, 0.51, 0.23], facecolor='0.9')
+        ax = plotting.init_ax(fig, [0.27, 0.04, 0.51, 0.23], facecolor='0.9')
         ax.set_xlim(r_lim)
         ax.set_ylim(sprof_lim)#[10,275])
         ax.set_yscale('log')
         ax.yaxis.set_major_formatter(logformatter)
-        rotate_y_ticks(ax, 90, 'center')
+        plotting.rotate_y_ticks(ax, 90, 'center')
 
         indx = sprof_nbin > 0
         ax.scatter(sprof_r, sprof, marker='.', color='k', s=30, lw=0, alpha=0.6, zorder=1)
@@ -706,16 +730,21 @@ def axisym_fit_plot(galmeta, kin, disk, ofile=None, par=None, par_err=None):
         ax.text(0.5, -0.13, r'$R$ [arcsec]', horizontalalignment='center', verticalalignment='center',
                 transform=ax.transAxes, fontsize=10)
 
+        ax.add_patch(patches.Rectangle((0.81,0.86), 0.17, 0.09, facecolor='w', lw=0, edgecolor='none',
+                                    zorder=5, alpha=0.7, transform=ax.transAxes))
+        ax.text(0.97, 0.87, r'$\sigma_{\rm los}$ [km/s]', ha='right', va='bottom',
+                transform=ax.transAxes, fontsize=10, zorder=6)
+
     #-------------------------------------------------------------------
     # SDSS image
-    ax = fig.add_axes([0.01, 0.29, 0.20, 0.20])
+    ax = fig.add_axes([0.01, 0.29, 0.23, 0.23])
     if kin.image is not None:
         ax.imshow(kin.image)
     else:
         ax.text(0.5, 0.5, 'No Image', horizontalalignment='center', verticalalignment='center',
                 transform=ax.transAxes, fontsize=20)
 
-    ax.text(0.5, 1.07, 'SDSS gri Composite', horizontalalignment='center',
+    ax.text(0.5, 1.05, 'SDSS gri Composite', horizontalalignment='center',
             verticalalignment='center', transform=ax.transAxes, fontsize=10)
     ax.axes.get_xaxis().set_visible(False)
     ax.axes.get_yaxis().set_visible(False)
@@ -729,74 +758,102 @@ def axisym_fit_plot(galmeta, kin, disk, ofile=None, par=None, par_err=None):
     else:
         sample='Filler'
 
-    ax.text(0.00, -0.1, 'MaNGA ID:',
+    ax.text(0.00, -0.05, 'MaNGA ID:',
             horizontalalignment='left', verticalalignment='center', transform=ax.transAxes,
             fontsize=10)
-    ax.text(1.02, -0.1, f'{galmeta.mangaid}',
+    ax.text(1.01, -0.05, f'{galmeta.mangaid}',
             horizontalalignment='right', verticalalignment='center', transform=ax.transAxes,
             fontsize=10)
-    ax.text(0.00, -0.2, 'Observation:',
+    ax.text(0.00, -0.13, 'Observation:',
             horizontalalignment='left', verticalalignment='center', transform=ax.transAxes,
             fontsize=10)
-    ax.text(1.02, -0.2, f'{galmeta.plate}-{galmeta.ifu}',
+    ax.text(1.01, -0.13, f'{galmeta.plate}-{galmeta.ifu}',
             horizontalalignment='right', verticalalignment='center', transform=ax.transAxes,
             fontsize=10)
-    ax.text(0.00, -0.3, 'Sample:',
+    ax.text(0.00, -0.21, 'Sample:',
             horizontalalignment='left', verticalalignment='center', transform=ax.transAxes,
             fontsize=10)
-    ax.text(1.02, -0.3, f'{sample}',
+    ax.text(1.01, -0.21, f'{sample}',
             horizontalalignment='right', verticalalignment='center', transform=ax.transAxes,
             fontsize=10)
     # Redshift
-    ax.text(0.00, -0.4, 'Redshift:',
+    ax.text(0.00, -0.29, 'Redshift:',
             horizontalalignment='left', verticalalignment='center', transform=ax.transAxes,
             fontsize=10)
-    ax.text(1.02, -0.4, '{0:.4f}'.format(galmeta.z),
+    ax.text(1.01, -0.29, '{0:.4f}'.format(galmeta.z),
             horizontalalignment='right', verticalalignment='center', transform=ax.transAxes,
             fontsize=10)
     # Mag
-    ax.text(0.00, -0.5, 'Mag (N,r,i):',
+    ax.text(0.00, -0.37, 'Mag (N,r,i):',
             horizontalalignment='left', verticalalignment='center', transform=ax.transAxes,
             fontsize=10)
-    ax.text(1.02, -0.5, '{0:.1f}/{1:.1f}/{2:.1f}'.format(*galmeta.mag),
+    ax.text(1.01, -0.37, '{0:.1f}/{1:.1f}/{2:.1f}'.format(*galmeta.mag),
             horizontalalignment='right', verticalalignment='center', transform=ax.transAxes,
             fontsize=10)
 
     # PSF FWHM
-    ax.text(0.00, -0.6, 'FWHM (g,r):',
+    ax.text(0.00, -0.45, 'FWHM (g,r):',
             horizontalalignment='left', verticalalignment='center', transform=ax.transAxes,
             fontsize=10)
-    ax.text(1.02, -0.6, '{0:.2f}, {1:.2f}'.format(*galmeta.psf_fwhm[:2]),
+    ax.text(1.01, -0.45, '{0:.2f}, {1:.2f}'.format(*galmeta.psf_fwhm[:2]),
             horizontalalignment='right', verticalalignment='center', transform=ax.transAxes,
             fontsize=10)
 
 
     # Sersic n
-    ax.text(0.00, -0.7, r'Sersic $n$:',
+    ax.text(0.00, -0.53, r'Sersic $n$:',
             horizontalalignment='left', verticalalignment='center', transform=ax.transAxes,
             fontsize=10)
-    ax.text(1.02, -0.7, '{0:.2f}'.format(galmeta.sersic_n),
+    ax.text(1.01, -0.53, '{0:.2f}'.format(galmeta.sersic_n),
             horizontalalignment='right', verticalalignment='center', transform=ax.transAxes,
             fontsize=10)
     # Stellar Mass
-    ax.text(0.00, -0.8, r'$\log(\mathcal{M}_\ast/\mathcal{M}_\odot$):',
+    ax.text(0.00, -0.61, r'$\log(\mathcal{M}_\ast/\mathcal{M}_\odot$):',
             horizontalalignment='left', verticalalignment='center', transform=ax.transAxes,
             fontsize=10)
-    ax.text(1.02, -0.8, '{0:.2f}'.format(np.log10(galmeta.mass)),
+    ax.text(1.01, -0.61, '{0:.2f}'.format(np.log10(galmeta.mass)),
             horizontalalignment='right', verticalalignment='center', transform=ax.transAxes,
             fontsize=10)
     # Phot Inclination
-    ax.text(0.00, -0.9, r'$i_{\rm phot}$ [deg]',
+    ax.text(0.00, -0.69, r'$i_{\rm phot}$ [deg]',
             horizontalalignment='left', verticalalignment='center', transform=ax.transAxes,
             fontsize=10)
-    ax.text(1.02, -0.9, '{0:.1f}'.format(galmeta.guess_inclination()),
+    ax.text(1.01, -0.69, '{0:.1f}'.format(galmeta.guess_inclination()),
+            horizontalalignment='right', verticalalignment='center', transform=ax.transAxes,
+            fontsize=10)
+
+    # Fitted center
+    ax.text(0.00, -0.77, r'$x_0$ [arcsec]',
+            horizontalalignment='left', verticalalignment='center', transform=ax.transAxes,
+            fontsize=10)
+    ax.text(1.01, -0.77, r'{0:.2f} $\pm$ {1:.2f}'.format(disk.par[0], disk.par_err[0]),
+            horizontalalignment='right', verticalalignment='center', transform=ax.transAxes,
+            fontsize=10)
+    ax.text(0.00, -0.85, r'$y_0$ [arcsec]',
+            horizontalalignment='left', verticalalignment='center', transform=ax.transAxes,
+            fontsize=10)
+    ax.text(1.01, -0.85, r'{0:.2f} $\pm$ {1:.2f}'.format(disk.par[1], disk.par_err[1]),
+            horizontalalignment='right', verticalalignment='center', transform=ax.transAxes,
+            fontsize=10)
+    # PA
+    ax.text(0.00, -0.93, r'$\phi_0$ [deg]',
+            horizontalalignment='left', verticalalignment='center', transform=ax.transAxes,
+            fontsize=10)
+    ax.text(1.01, -0.93, r'{0:.2f} $\pm$ {1:.2f}'.format(disk.par[2], disk.par_err[2]),
             horizontalalignment='right', verticalalignment='center', transform=ax.transAxes,
             fontsize=10)
     # Kinematic Inclination
-    ax.text(0.00, -1.0, r'$i_{\rm kin}$ [deg]',
+    ax.text(0.00, -1.01, r'$i_{\rm kin}$ [deg]',
             horizontalalignment='left', verticalalignment='center', transform=ax.transAxes,
             fontsize=10)
-    ax.text(1.02, -1.0, '{0:.1f}'.format(kin_inc),
+    ax.text(1.01, -1.01, r'{0:.1f} $\pm$ {1:.1f}'.format(disk.par[3], disk.par_err[3]),
+            horizontalalignment='right', verticalalignment='center', transform=ax.transAxes,
+            fontsize=10)
+    # Systemic velocity
+    ax.text(0.00, -1.09, r'$V_{\rm sys}$ [km/s]',
+            horizontalalignment='left', verticalalignment='center', transform=ax.transAxes,
+            fontsize=10)
+    ax.text(1.01, -1.09, r'{0:.2f} $\pm$ {1:.2f}'.format(disk.par[4], disk.par_err[4]),
             horizontalalignment='right', verticalalignment='center', transform=ax.transAxes,
             fontsize=10)
 
@@ -807,6 +864,7 @@ def axisym_fit_plot(galmeta, kin, disk, ofile=None, par=None, par_err=None):
     # Surface brightness units
     # Unit in general
     pyplot.show()
+    return 
     exit()
 
     if pdf:

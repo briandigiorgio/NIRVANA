@@ -8,7 +8,7 @@ import warnings
 from IPython import embed
 
 import numpy as np
-from scipy import sparse, linalg, stats, optimize
+from scipy import sparse, linalg, stats, special
 
 from astropy.stats import sigma_clip
 
@@ -713,5 +713,52 @@ def growth_lim(a, lim, fac=1.0, midpoint=None, default=[0., 1.]):
 
     # Return the range for the plotted data
     return [ mid - Da/2, mid + Da/2 ]
+
+
+def atleast_one_decade(lim):
+    """
+    """
+    lglim = np.log10(lim)
+    if int(lglim[1]) - int(np.ceil(lglim[0])) > 0:
+        return (10**lglim).tolist()
+    m = np.sum(lglim)/2
+    ld = lglim[0] - np.floor(lglim[0])
+    fd = np.ceil(lglim[1]) - lglim[1]
+    w = lglim[1] - m
+    dw = ld*1.01 if ld < fd else fd*1.01
+    return atleast_one_decade((10**np.array([m - w - dw, m + w + dw])).tolist())
+    
+
+def pixelated_gaussian(x, c=0.0, s=1.0, density=False):
+    """
+    Construct a Gaussian function integrated over the width of each pixel.
+
+    Args:
+        x (`numpy.ndarray`_):
+            Coordinates for each pixel. The pixels should be regularly and
+            linearly sampled, but this **is not checked.***
+        c (:obj:`float`, optional):
+            The center of the Gaussian profile.
+        s (:obj:`float`, optional):
+            The standard deviation of the Gaussian profile.
+        density (:obj:`bool`, optional):
+            Return the density profile, instead of the profile integrated
+            over each pixel; i.e.::
+
+                dx = np.mean(np.diff(x))
+                assert np.array_equal(pixelated_gaussian(x, density=True),
+                                      pixelated_gaussian(x)/dx)
+
+            should return true.
+    
+    Returns:
+        `numpy.ndarray`_: The vector with the Gaussian function integrated
+        over the width of each pixel.
+    """
+    n = np.sqrt(2.)*s
+    d = np.asarray(x)-c
+    dx = np.mean(np.diff(x))
+    g = (special.erf((d+dx/2.)/n) - special.erf((d-dx/2.)/n))/2.
+    return g/dx if density else g
 
 

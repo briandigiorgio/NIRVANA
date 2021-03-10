@@ -386,6 +386,100 @@ class HyperbolicTangent(Func1D):
         return -2. * self.par[0] * sech2 * np.tanh(xh) / self.par[1]**2 
 
 
+class PolyEx(Func1D):
+    r"""
+    Instantiates a "PolyEx" rotation curve function.
+
+    The three-parameter functional form is:
+
+    .. math::
+
+        V(r) = V_0 (1 - e^{-r/h}) (1 + \alpha \frac{r}{h})
+
+    The parameter vector is ordered: :math:`V_0, h, \alpha`.
+
+    Args:
+        par (array-like, optional):
+            The three model parameters. If None, set by
+            :func:`guess_par`.
+        lb (array-like, optional):
+            Lower bounds for the model parameters. If None, set by
+            :func:`par_bounds`.
+        ub (:obj:`float`, optional):
+            Upper bounds for the model parameters. If None, set by
+            :func:`par_bounds`.
+    """
+    def __init__(self, par=None, lb=None, ub=None):
+        super().__init__(self.guess_par() if par is None else par)
+        if lb is not None and len(lb) != self.np:
+            raise ValueError('Number of lower bounds does not match the number of parameters.')
+        if ub is not None and len(ub) != self.np:
+            raise ValueError('Number of upper bounds does not match the number of parameters.')
+        _lb, _ub = self.par_bounds()
+        self.lb = _lb if lb is None else np.atleast_1d(lb)
+        self.ub = _ub if ub is None else np.atleast_1d(ub)
+
+    @staticmethod
+    def guess_par():
+        """Return default guess parameters."""
+        return np.array([100., 10., 0.1])
+
+    @staticmethod
+    def par_bounds():
+        """
+        Return default parameter boundaries.
+
+        Returns:
+            :obj:`tuple`: Two `numpy.ndarray`_ objects with,
+            respectively, the lower and upper bounds for the
+            parameters.
+        """
+        return np.array([0., 1e-3, -1.]), np.array([500., 100., 1.])
+
+    def sample(self, x, par=None, check=False):
+        """
+        Sample the function.
+
+        Args:
+            x (array-like):
+                Locations at which to sample the function.
+            par (array-like, optional):
+                The function parameters. If None, the current values
+                of :attr:`par` are used. Must have a length of
+                :attr:`np`.
+            check (:obj:`bool`, optional):
+                Ignored. Only included for a uniform interface with
+                other subclasses of :class:`Func1D`.
+
+        Returns:
+            `numpy.ndarray`_: Function evaluated at each ``x`` value.
+        """
+        if par is not None:
+            self._set_par(par)
+        s = np.asarray(x)/self.par[1]
+        return self.par[0] * (1 - np.exp(-s)) * (1 + self.par[2] * s)
+
+    def ddx(self, x, par=None):
+        """
+        Sample the derivative of the function. See :func:`sample` for
+        the argument descriptions.
+        """
+        if par is not None:
+            self._set_par(par)
+        s = np.asarray(x)/self.par[1]
+        return self.par[0] * (np.exp(-s) * (1 + self.par[2]*(s-1)) + self.par[2]) / self.par[1]
+
+    def d2dx2(self, x, par=None):
+        """
+        Sample the second derivative of the function. See
+        :func:`sample` for the argument descriptions.
+        """
+        if par is not None:
+            self._set_par(par)
+        s = np.asarray(x)/self.par[1]
+        return -self.par[0] * np.exp(-s) * (1+ self.par[2]*(s-2)) / self.par[1]**2 
+
+
 class Exponential(Func1D):
     """
     Instantiates an exponential function.

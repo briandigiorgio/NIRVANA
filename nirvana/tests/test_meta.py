@@ -33,6 +33,6 @@ def test_kinpa():
     assert numpy.isclose(pa, 45.), 'Position angle should have been flipped'
 
 
-if __name__ == '__main__':
-    test_kinpa()
+#if __name__ == '__main__':
+    #test_kinpa()
 

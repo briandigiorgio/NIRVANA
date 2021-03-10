@@ -4,20 +4,21 @@ import matplotlib.pyplot as plt
 from glob import glob
 from tqdm import tqdm
 import multiprocessing as mp
+import os
 
 from astropy.io import fits
 from astropy.table import Table,Column
 from scipy.spatial import KDTree
 
-from .plotting import fileprep
+from .plotting import fileprep, summaryplot
 from .fitting import bisym_model
 from .models.axisym import AxisymmetricDisk
 from .models.geometry import projected_polar
 
-def extractfile(f):
+def extractfile(f, use_marvin=False):
     try: 
         #get info out of each file and make bisym model
-        args, resdict, chains, meds = fileprep(f)
+        args, resdict, chains, meds = fileprep(f, use_marvin=use_marvin)
 
         #fractional difference between bisym and axisym
         arc, asymmap = asymmetry(args)
@@ -25,7 +26,8 @@ def extractfile(f):
 
     #failure if bad file
     except:
-        args, arc, asymmap, resdict = (None, None, None, None, None)
+        print(f'Extraction of {f} failed')
+        args, arc, asymmap, resdict = (None, None, None, None)
 
     return args, arc, asymmap, resdict
 
@@ -51,9 +53,9 @@ def extractdir(cores=10, directory='/data/manga/digiorgio/nirvana/'):
 def dictformatting(d, drp=None, dap=None, padding=20, fill=-9999):
     #load dapall and drpall
     if drp is None:
-        drp = fits.open('/data/manga/spectro/redux/MPL-10/drpall-v3_0_1.fits')[1].data
+        drp = fits.open(os.getenv('MANGA_SPECTRO_REDUX') + '/MPL-10/drpall-v3_0_1.fits')[1].data
     if dap is None:
-        dap = fits.open('/data/manga/spectro/analysis/MPL-10/dapall-v3_0_1-3.0.1.fits')[1].data
+        dap = fits.open(os.getenv('MANGA_SPECTRO_ANALYSIS') + '/MPL-10/dapall-v3_0_1-3.0.1.fits')[1].data
     try:
         data = list(d.values())
         for i in range(len(data)):
@@ -117,26 +119,55 @@ def makealltable(dicts, outfile=None, padding=20):
     if outfile is not None: t.write(outfile, format='fits', overwrite=True)
     return t
 
-def imagefits(f, outfile=None, padding=20):
+def maskedarraytofile(array, name=None, fill=0):
+    '''
+    Write a masked array to an HDU. 
+    
+    Numpy says it's not implemented yet so I'm implementing it.
+    '''
+    array[array.mask] = fill
+    array = array.data
+    arrayhdu = fits.ImageHDU(array)
+    if name is not None: arrayhdu.name = name
+    return arrayhdu
+
+def imagefits(f, gal=None, outfile=None, padding=20, use_marvin=False):
     '''
     Make a fits file for an individual galaxy with its fit parameters and relevant data.
     '''
 
     #get relevant data
-    args, arc, asymmap, resdict = extractfile(f)
-    names = list(resdict.keys()) + ['velmask','sigmask','drpindex','dapindex']
+    args, arc, asymmap, resdict = extractfile(f, use_marvin=use_marvin)
+    if gal is not None: args = gal
+    resdict['bin_edges'] = args.edges
+    data = dictformatting(resdict, padding=padding)
+
+    data += [*np.delete(args.bounds.T, slice(7,-1), axis=1)]
+
+    names = list(resdict.keys()) + ['velmask','sigmask','drpindex','dapindex','prior_lbound','prior_ubound']
     dtypes = ['f4','f4','f4','f4','f4','f4','20f4','20f4','20f4','20f4',
               'f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4',
               '20f4','20f4','20f4','20f4','20f4','20f4','20f4','20f4',
-              'I','I','S','f4','20?','20?','I','I']
+              'I','I','S','f4','20f4','20?','20?','I','I','8f4','8f4']
 
     #make table of fit data
     t = Table(names=names, dtype=dtypes)
-    data = dictformatting(resdict, padding=padding)
     t.add_row(data)
+    reordered = ['plate','ifu','type','drpindex','dapindex','bin_edges','prior_lbound','prior_ubound',
+          'xc','yc','inc','pa','pab','vsys','vt','v2t','v2r','sig','velmask','sigmask',
+          'xcl','ycl','incl','pal','pabl','vsysl','vtl','v2tl','v2rl','sigl',
+          'xcu','ycu','incu','pau','pabu','vsysu','vtu','v2tu','v2ru','sigu','a_rc']
+    t = t[reordered]
     bintable = fits.BinTableHDU(t)
     bintable.name = 'fit_params'
     hdus = [fits.PrimaryHDU(), bintable]
+
+    image = fits.ImageHDU(args.image)
+    image.name = 'image'
+    summplot = fits.ImageHDU(fig2data(summaryplot(f)))
+    summplot.name = 'summary'
+
+    hdus += [summplot, image]
 
     #add all data extensions from original data
     maps = ['vel', 'sig_phys2', 'sb', 'vel_ivar', 'sig_ivar', 'sb_ivar', 'vel_mask']
@@ -154,14 +185,27 @@ def imagefits(f, outfile=None, padding=20):
     args.clip()
     clipmask = fits.ImageHDU(np.array(args.remap('vel').mask, dtype=int))
     clipmask.name = 'clip_mask'
+    hdus += [clipmask]
 
-    #get asymmetry map in right format and add
-    asymmap[asymmap.mask] = 0
-    asymmap = asymmap.data
-    asym = fits.ImageHDU(asymmap)
-    asym.name = 'asymmetry'
+    #smeared and intrinsic velocity/dispersion models
+    velmodel, sigmodel = bisym_model(args, resdict, plot=True)
+    args.beam_fft = None
+    intvelmodel, intsigmodel = bisym_model(args, resdict, plot=True)
 
-    hdus += [clipmask, asym]
+    #name them all and add them to the list
+    newnames = ['vel_model','sig_model','vel_int_model','sig_int_model','asymmetry']
+    for i,a in enumerate([velmodel, sigmodel, intvelmodel, intsigmodel, asymmap]):
+        hdus += [maskedarraytofile(a, name=newnames[i])]
+
+    #add parameters to the header
+    hdr = hdus[0].header
+    hdr['maxr'] = args.maxr
+    hdr['weight'] = args.weight
+    hdr['fixcent'] = args.fixcent
+    hdr['nbin'] = args.nbin
+    hdr['npoints'] = args.npoints
+    hdr['smearing'] = args.smearing
+    hdr['avmax'], hdr['ainc'], hdr['apa'], hdr['ahrot'], hdr['avsys'] = args.getguess(simple=True)
 
     #write out
     hdul = fits.HDUList(hdus)
@@ -228,3 +272,16 @@ def A_RC(vel, velr, ivar, ivarr):
     '''
     return (np.abs(np.abs(vel) - np.abs(velr))/np.sqrt(1/ivar + 1/ivarr) 
          / (.5*np.sum(np.abs(vel) + np.abs(velr))/np.sqrt(1/ivar + 1/ivarr)))
+
+def fig2data(fig):
+    # draw the renderer
+    fig.canvas.draw( )
+ 
+    # Get the RGBA buffer from the figure
+    h,w = fig.canvas.get_width_height()
+    buf = np.fromstring(fig.canvas.tostring_argb(), dtype=np.uint8)
+    buf.shape = (w, h, 4)
+ 
+    # canvas.tostring_argb give pixmap in ARGB mode. Roll the ALPHA channel to have it in RGBA mode
+    buf = np.roll(buf, 3, axis=2)
+    return buf

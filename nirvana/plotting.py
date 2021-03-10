@@ -18,6 +18,7 @@ import corner
 import pickle
 from glob import glob
 from tqdm import tqdm
+from astropy.io import fits
 
 from .fitting import bisym_model, unpack
 from .data.manga import MaNGAStellarKinematics, MaNGAGasKinematics
@@ -163,47 +164,72 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
 
 def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, fixcent=True, clip=True, use_marvin=True):
 
-    #get sampler in right format
-    if type(f) == str: chains = pickle.load(open(f,'rb'))
-    elif type(f) == np.ndarray: chains = f
-    elif type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler: chains = f.results
+    #unpack fits file
+    if type(f) == str and '.fits' in f:
+        isfits = True
+        with fits.open(f) as fitsfile:
+            table = fitsfile[1].data
+        keys = table.columns.names
+        vals = [table[k][0] for k in keys]
+        resdict = dict(zip(keys, vals))
+        for v in ['vt','v2t','v2r','vtl','vtu','v2tl','v2tu','v2rl','v2ru']:
+            resdict[v] = resdict[v][resdict['velmask'] == 0]
+        for s in ['sig','sigl','sigu']:
+            resdict[s] = resdict[s][resdict['sigmask'] == 0]
 
-    if plate is None or ifu is None:
-        fname = re.split('/', f[:-5])[-1]
-        info = re.split('/|-|_', fname)
-        plate = int(info[0]) if plate is None else plate
-        ifu = int(info[1]) if ifu is None else ifu
-        stellar = True if 'stel' in info else False
-        cen = True if 'nocen' not in info else False
-        smearing = True if 'nosmear' not in info else False
-        maxr = float([i for i in info if '.' in i and 'r' in i][0][:-1])
-
-        if 'fixcent' in info: fixcent = True
-        elif 'freecent' in info: fixcent = False
-        print(plate,ifu,stellar,cen,smearing,maxr,fixcent)
-
-    if plate is None or ifu is None:
-        raise ValueError('Plate and IFU must be specified if auto=False')
-
-    #mock galaxy using stored values
-    if plate == 0:
-        mock = np.load('mockparams.npy', allow_pickle=True)[ifu]
-        print('Using mock:', mock['name'])
-        params = [mock['inc'], mock['pa'], mock['pab'], mock['vsys'], mock['vts'], mock['v2ts'], mock['v2rs'], mock['sig']]
-        args = Kinematics.mock(56,*params)
-        cnvfftw = ConvolveFFTW(args.spatial_shape)
-        smeared = smear(args.remap('vel'), args.beam_fft, beam_fft=True, sig=args.remap('sig'), sb=args.remap('sb'), cnvfftw=cnvfftw)
-        args.sb  = args.bin(smeared[0])
-        args.vel = args.bin(smeared[1])
-        args.sig = args.bin(smeared[2])
-        args.fwhm  = 2.44
-
-    #load in MaNGA data
-    else:
-        if stellar:
-            args = MaNGAStellarKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing, use_marvin=use_marvin)
+        if resdict['type'] == 'Stars':
+            args = MaNGAStellarKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, use_marvin=use_marvin)
         else:
-            args = MaNGAGasKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing, use_marvin=use_marvin)
+            args = MaNGAGasKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, use_marvin=use_marvin)
+
+        chains = None
+        fill = len(resdict['velmask'])
+        fixcent = resdict['vt'][0] == 0
+        lenmeds = 6 + 3*(fill - resdict['velmask'].sum() - fixcent) + (fill - resdict['sigmask'].sum())
+        meds = np.zeros(lenmeds)
+
+    else:
+        isfits = False
+        #get sampler in right format
+        if type(f) == str: chains = pickle.load(open(f,'rb'))
+        elif type(f) == np.ndarray: chains = f
+        elif type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler: chains = f.results
+
+        if plate is None or ifu is None:
+            fname = re.split('/', f[:-5])[-1]
+            info = re.split('/|-|_', fname)
+            plate = int(info[0]) if plate is None else plate
+            ifu = int(info[1]) if ifu is None else ifu
+            stellar = True if 'stel' in info else False
+            cen = True if 'nocen' not in info else False
+            smearing = True if 'nosmear' not in info else False
+            maxr = float([i for i in info if '.' in i and 'r' in i][0][:-1])
+
+            if 'fixcent' in info: fixcent = True
+            elif 'freecent' in info: fixcent = False
+
+        if plate is None or ifu is None:
+            raise ValueError('Plate and IFU must be specified if auto=False')
+
+        #mock galaxy using stored values
+        if plate == 0:
+            mock = np.load('mockparams.npy', allow_pickle=True)[ifu]
+            print('Using mock:', mock['name'])
+            params = [mock['inc'], mock['pa'], mock['pab'], mock['vsys'], mock['vts'], mock['v2ts'], mock['v2rs'], mock['sig']]
+            args = Kinematics.mock(56,*params)
+            cnvfftw = ConvolveFFTW(args.spatial_shape)
+            smeared = smear(args.remap('vel'), args.beam_fft, beam_fft=True, sig=args.remap('sig'), sb=args.remap('sb'), cnvfftw=cnvfftw)
+            args.sb  = args.bin(smeared[0])
+            args.vel = args.bin(smeared[1])
+            args.sig = args.bin(smeared[2])
+            args.fwhm  = 2.44
+
+        #load in MaNGA data
+        else:
+            if stellar:
+                args = MaNGAStellarKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing, use_marvin=use_marvin)
+            else:
+                args = MaNGAGasKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing, use_marvin=use_marvin)
 
     #set relevant parameters for galaxy
     args.setdisp(True)
@@ -215,18 +241,21 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
     vel_r = args.remap('vel')
     sig_r = args.remap('sig') if args.sig_phys2 is None else np.sqrt(np.abs(args.remap('sig_phys2')))
 
+    if not isfits: meds = dynmeds(chains)
+
     #get appropriate number of edges  by looking at length of meds
-    meds = dynmeds(chains)
-    nbins = (len(meds) - args.nglobs - 3*args.mix - args.fixcent)/4
+    nbins = (len(meds) - args.nglobs - 3*args.mix - fixcent)/4
     if not nbins.is_integer(): 
         raise ValueError('Dynesty output array has a bad shape.')
     else: nbins = int(nbins)
     args.setedges(nbins - 1 + args.fixcent, nbin=True, maxr=maxr)
 
-    resdict = profs(chains, args, stds=True)
-    resdict['plate'] = plate
-    resdict['ifu'] = ifu
-    resdict['type'] = 'Stars' if stellar else 'Gas'
+    if not isfits:
+        resdict = profs(chains, args, stds=True)
+        resdict['plate'] = plate
+        resdict['ifu'] = ifu
+        resdict['type'] = 'Stars' if stellar else 'Gas'
+
     return args, resdict, chains, meds
 
 def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, save=False, clobber=False, fixcent=True, use_marvin=False):
@@ -344,7 +373,16 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
 
     #Radial velocity profiles
     plt.subplot(3,4,3)
-    profs(chains, args, plt.gca(), stds=True)
+    #if chains is not None: profs(chains, args, plt.gca(), stds=True)
+    #else: 
+    ls = [r'$V_t$',r'$V_{2t}$',r'$V_{2r}$']
+    for i,v in enumerate(['vt', 'v2t', 'v2r']):
+        plt.plot(args.edges, resdict[v], label=ls[i]) 
+
+    errors = [[resdict['vtl'], resdict['vtu']], [resdict['v2tl'], resdict['v2tu']], [resdict['v2rl'], resdict['v2ru']]]
+    for i,p in enumerate(errors):
+        plt.fill_between(args.edges, p[0], p[1], alpha=.5) 
+
     plt.ylim(bottom=0)
     plt.title('Velocity Profiles')
 
@@ -448,7 +486,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
         plt.savefig(f'{path}plots/{fname}.pdf', format='pdf')
         plt.close()
 
-    return resdict
+    return fig
 
 def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True): 
     '''
@@ -642,14 +680,12 @@ def plotdir(directory=None, fname=None, **kwargs):
     if fname is None: fname = '*-*_*.nirv'
     fs = glob(directory+fname)
     if len(fs) == 0: raise FileNotFoundError('No files found')
+    else: print(len(fs), 'files found')
     for i,f in tqdm(enumerate(fs)):
         try:
             summaryplot(f, save=True, **kwargs)
         except:
             print(f, 'failed')
-
-def writefits(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True): 
-    args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, mix, cen, fixcent)
 
 
 def init_ax(fig, pos, facecolor='0.85', tickdir='in', top=True, right=True, majlen=4, minlen=2,

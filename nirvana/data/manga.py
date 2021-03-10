@@ -24,8 +24,10 @@ import matplotlib.image as img
 from astropy.io import fits
 try:
     from marvin.tools import Cube
+    from marvin import config
 except:
     Cube = None
+    config = None
 
 from .util import get_map_bin_transformations, impose_positive_definite
 from .kinematics import Kinematics
@@ -177,10 +179,11 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
             defined but does not exist.
     """
     #download using marvin instead of looking locally
-    if use_marvin and Cube is None:
+    if use_marvin and (Cube is None or config is None):
         raise ImportError('Could not use marvin because marvin Cube could not be imported.')
     if use_marvin:
         #get files
+        config.setMPL(dr)
         cube = Cube(f'{plate}-{ifu}')
         maps = cube.getMaps()
         image = cube.getImage()
@@ -733,7 +736,7 @@ class MaNGAStellarKinematics(MaNGAKinematics):
         # TODO: Actually, the BIN_* extensions are always right for the
         # stellar kinematics. I.e., in the SPX case, the BIN_* and
         # SPX_* extensions are identical.  Leaving it for now...
-        bintype = maps_file.split('.')[0].split('-')[-3]
+        bintype = maps_file.split('.fits')[0].split('-')[-3]
         coo_ext = 'SPX_SKYCOO' if bintype == 'SPX' else 'BIN_LWSKYCOO'
         flux_ext = 'SPX_MFLUX' if bintype == 'SPX' else 'BIN_MFLUX'
 

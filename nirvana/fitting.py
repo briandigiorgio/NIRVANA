@@ -556,6 +556,8 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
     inc = args.getguess()[1] if args.phot_inc is None else args.phot_inc
     if nbins is not None: args.setedges(nbins, nbin=True, maxr=maxr)
     else: args.setedges(inc, maxr=maxr)
+    if len(args.edges) - fixcent < 3:
+        raise ValueError('Galaxy unsuitable: too few radial bins')
 
     #define a variable for speeding up convolutions
     #has to be a global because multiprocessing can't pickle cython

@@ -32,7 +32,7 @@ def parse_args(options=None):
                         help='Number of radial bins in fit.')
     parser.add_argument('-w', '--weight', default=10, type=int,
                         help='How much to weight smoothness of rotation curves in fit')
-    parser.add_argument('-r', '--maxr', default=1.5, type=float,
+    parser.add_argument('-r', '--maxr', default=0, type=float,
                         help='Maximum radius in Re for bins')
     parser.add_argument('-p', '--points', default = 500, type=int,
                         help='Number of dynesty live points')

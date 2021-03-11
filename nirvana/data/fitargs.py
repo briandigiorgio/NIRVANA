@@ -48,7 +48,7 @@ class FitArgs:
 
         self.weight = weight
 
-    def setedges(self, inc, maxr=None, nbin=False):
+    def setedges(self, inc, maxr=0, nbin=False, clipmasked=True):
         '''
         Construct array of bin edges for the galaxy.
 
@@ -71,7 +71,7 @@ class FitArgs:
                 Flag for whether or not to set the number of bins manually.
         '''
 
-        if maxr is None: 
+        if maxr == 0: 
             if self.maxr is not None: maxr = self.maxr
             else:
                 #mask outside pixels if necessary
@@ -91,6 +91,27 @@ class FitArgs:
         else:
             binwidth = min(self.fwhm/2/np.cos(np.radians(inc)), self.fwhm)
             self.edges = np.arange(0, maxr, binwidth)/self.reff
+
+        #clip outer bins that have too many masked spaxels
+        if clipmasked:
+            if not hasattr(self, 'guess') or self.guess is None:
+                guess = self.getguess()
+            else: guess = self.guess
+            r,th = projected_polar(self.x, self.y, guess[1], inc)
+            r /= self.reff
+            mr = np.ma.array(r, mask=self.vel_mask)
+
+            nspax = np.zeros(len(self.edges)-1)
+            maskfrac = np.zeros_like(nspax)
+            for i in range(len(self.edges)-1):
+                mcut = (mr > self.edges[i]) * (mr < self.edges[i+1])
+                cut = (r > self.edges[i]) * (r < self.edges[i+1])
+                nspax[i] = np.sum(mcut)
+                maskfrac[i] = np.sum(self.vel_mask[cut])/cut.sum()
+            
+            bad = (nspax < 10) | (maskfrac > .75)
+            self.edges = self.edges[1:][~bad]
+            self.vel_mask[r > self.edges[-1]] = True
 
     def setdisp(self, disp):
         '''

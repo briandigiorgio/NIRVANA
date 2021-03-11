@@ -160,17 +160,17 @@ def imagefits(f, gal=None, outfile=None, padding=20, use_marvin=False):
     bintable.name = 'fit_params'
     hdus = [fits.PrimaryHDU(), bintable]
 
-    image = fits.ImageHDU(args.image)
-    image.name = 'image'
-    summplot = fits.ImageHDU(fig2data(summaryplot(f)))
-    summplot.name = 'summary'
-
-    hdus += [summplot, image]
+    #image = fits.ImageHDU(args.image)
+    #image.name = 'image'
+    #summplot = fits.ImageHDU(fig2data(summaryplot(f)))
+    #summplot.name = 'summary'
+    #hdus += [summplot, image]
 
     #add all data extensions from original data
-    maps = ['vel', 'sig_phys2', 'sb', 'vel_ivar', 'sig_ivar', 'sb_ivar', 'vel_mask']
+    maps = ['vel', 'sig', 'sb', 'vel_ivar', 'sig_ivar', 'sb_ivar', 'vel_mask']
     for m in maps:
         data = args.remap(m).data
+        if m == 'sig': data = np.sqrt(args.remap('sig_phys2'))
         if data.dtype == bool: data = data.astype(int) #catch for bools
         mask = args.remap(m).mask
         data[mask] = 0 if 'mask' not in m else data[mask]

@@ -631,6 +631,7 @@ class MaNGAGasKinematics(MaNGAKinematics):
             sb_anr = hdu['EMLINE_GANR'].data[eml[line]]
             vel = hdu['EMLINE_GVEL'].data[eml[line]]
             vel_ivar = hdu['EMLINE_GVEL_IVAR'].data[eml[line]]
+            vel_ivar = 1/(1/vel_ivar + 5**2)
             sig = hdu['EMLINE_GSIGMA'].data[eml[line]]
             sig_ivar = hdu['EMLINE_GSIGMA_IVAR'].data[eml[line]]
             sig_corr = hdu['EMLINE_INSTSIGMA'].data[eml[line]]
@@ -746,6 +747,7 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             sb_mask = np.logical_not((sb > 0) & (sb_ivar > 0))
             vel = hdu['STELLAR_VEL'].data
             vel_ivar = hdu['STELLAR_VEL_IVAR'].data
+            vel_ivar = 1/(1/vel_ivar + 5**2)
             sig = hdu['STELLAR_SIGMA'].data
             sig_ivar = hdu['STELLAR_SIGMA_IVAR'].data
             sig_corr = hdu['STELLAR_SIGMACORR'].data[0]

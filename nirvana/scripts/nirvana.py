@@ -55,8 +55,8 @@ def parse_args(options=None):
                         help='Allow the center vel bin to be free')
     parser.add_argument('--fits', default=False, action='store_true',
                         help='Save results as a much smaller FITS file instead')
-    parser.add_argument('--marv', default=False, action='store_true',
-                        help='Use downloaded marvin data instead of local')
+    parser.add_argument('--remote', default=None, 
+                        help='Download sas data into this dir instead of local')
     parser.add_argument('--clobber', default=False, action='store_true',
                         help='Overwrite preexisting outfiles')
 
@@ -96,14 +96,15 @@ def main(args):
     samp, gal = fit(plate, ifu, daptype=args.daptype, dr=args.dr, cores=args.cores, nbins=args.nbins,
                   weight=args.weight, maxr=args.maxr, smearing=args.smearing, root=args.root,
                   verbose=args.verbose, disp=args.disp, points=args.points, 
-                  stellar=args.stellar, cen=args.cen, fixcent=args.fixcent, use_marvin=args.marv)
+                  stellar=args.stellar, cen=args.cen, fixcent=args.fixcent,
+                  remotedir=args.remote)
 
     #write out with sampler results or just FITS table
     pickle.dump(samp.results, open(fname, 'wb'))
     pickle.dump(gal, open(galname, 'wb'))
     if args.fits: 
         try:
-            imagefits(fname, gal, outfile=fitsname, use_marvin=args.marv) 
+            imagefits(fname, gal, outfile=fitsname, remotedir=remotedir) 
             os.remove(fname)
             os.remove(galname)
         except:

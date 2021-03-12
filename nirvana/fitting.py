@@ -456,7 +456,7 @@ def mixlike(params, args):
 def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
         cores=10, maxr=None, cen=True, weight=10, smearing=True, points=500,
         stellar=False, root=None, verbose=False, disp=True, mix=False, 
-        fixcent=True, ultra=False, use_marvin=False):
+        fixcent=True, ultra=False, remotedir=None):
     '''
     Main function for fitting a MaNGA galaxy with a nonaxisymmetric model.
 
@@ -508,8 +508,9 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
         ultra (:obj:`bool`, optional):
             Flag for whether to use `ultranest` rather than `dynesty` for
             fitting (experimental).
-        use_marvin (:obj:`bool`, optional):
-            Whether to download data from marvin or not. Otherwise, will look locally
+        remotedir (:obj:`str`, optional):
+            If a directory is given, it will download data from sas into that
+            base directory rather than looking for it locally
 
     Returns:
         :class:`dynesty.NestedSampler`: Sampler from `dynesty` containing
@@ -538,12 +539,12 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
             args = MaNGAStellarKinematics.from_plateifu(plate, ifu, daptype=daptype, dr=dr,
                                                         ignore_psf=not smearing, cube_path=root,
                                                         image_path=root, maps_path=root, 
-                                                        use_marvin=use_marvin)
+                                                        remotedir=remotedir)
         else:
             args = MaNGAGasKinematics.from_plateifu(plate, ifu, line='Ha-6564', daptype=daptype,
                                                     dr=dr, ignore_psf=not smearing, cube_path=root,
                                                     image_path=root, maps_path=root, 
-                                                    use_marvin=use_marvin)
+                                                    remotedir=remotedir)
 
     #set basic parameters for galaxy
     args.setnglobs(6) if cen else args.setnglobs(4)

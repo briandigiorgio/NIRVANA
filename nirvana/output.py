@@ -15,10 +15,10 @@ from .fitting import bisym_model
 from .models.axisym import AxisymmetricDisk
 from .models.geometry import projected_polar
 
-def extractfile(f, use_marvin=False):
+def extractfile(f, remotedir=None):
     try: 
         #get info out of each file and make bisym model
-        args, resdict, chains, meds = fileprep(f, use_marvin=use_marvin)
+        args, resdict, chains, meds = fileprep(f, remotedir=remotedir)
 
         #fractional difference between bisym and axisym
         arc, asymmap = asymmetry(args)
@@ -131,13 +131,13 @@ def maskedarraytofile(array, name=None, fill=0):
     if name is not None: arrayhdu.name = name
     return arrayhdu
 
-def imagefits(f, gal=None, outfile=None, padding=20, use_marvin=False):
+def imagefits(f, gal=None, outfile=None, padding=20, remotedir=None):
     '''
     Make a fits file for an individual galaxy with its fit parameters and relevant data.
     '''
 
     #get relevant data
-    args, arc, asymmap, resdict = extractfile(f, use_marvin=use_marvin)
+    args, arc, asymmap, resdict = extractfile(f, remotedir=remotedir)
     if gal is not None: args = gal
     resdict['bin_edges'] = args.edges
     data = dictformatting(resdict, padding=padding)

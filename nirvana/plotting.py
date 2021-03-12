@@ -156,7 +156,7 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
 
     return paramdict
 
-def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, fixcent=True, clip=True, use_marvin=True):
+def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, fixcent=True, clip=True, remotedir=None):
 
     #unpack fits file
     if type(f) == str and '.fits' in f:
@@ -172,9 +172,9 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
             resdict[s] = resdict[s][resdict['sigmask'] == 0]
 
         if resdict['type'] == 'Stars':
-            args = MaNGAStellarKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, use_marvin=use_marvin)
+            args = MaNGAStellarKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir)
         else:
-            args = MaNGAGasKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, use_marvin=use_marvin)
+            args = MaNGAGasKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir)
 
         chains = None
         fill = len(resdict['velmask'])
@@ -222,9 +222,9 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
         #load in MaNGA data
         else:
             if stellar:
-                args = MaNGAStellarKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing, use_marvin=use_marvin)
+                args = MaNGAStellarKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing, remotedir=remotedir)
             else:
-                args = MaNGAGasKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing, use_marvin=use_marvin)
+                args = MaNGAGasKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing, remotedir=remotedir)
 
     #set relevant parameters for galaxy
     args.setdisp(True)
@@ -253,7 +253,7 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
 
     return args, resdict, chains, meds
 
-def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, save=False, clobber=False, fixcent=True, use_marvin=False):
+def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, save=False, clobber=False, fixcent=True, remotedir=None):
     '''
     Make a summary plot for a `nirvana` output file with MaNGA velocity field.
 
@@ -316,7 +316,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
         if os.path.isfile(f'{path}/plots/{fname}.pdf'):
             raise ValueError('Plot file already exists')
 
-    args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, mix, cen, fixcent, use_marvin=use_marvin)
+    args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, mix, cen, fixcent, remotedir=remotedir)
     velmodel, sigmodel = bisym_model(args,resdict,plot=True)
     vel_r = args.remap('vel')
     sig_r = np.sqrt(args.remap('sig_phys2')) if hasattr(args, 'sig_phys2') else args.remap('sig')

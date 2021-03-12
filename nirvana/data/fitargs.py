@@ -94,10 +94,8 @@ class FitArgs:
 
         #clip outer bins that have too many masked spaxels
         if clipmasked:
-            if not hasattr(self, 'guess') or self.guess is None:
-                guess = self.getguess()
-            else: guess = self.guess
-            r,th = projected_polar(self.x, self.y, guess[1], inc)
+            guess = self.getguess(simple=True)
+            r,th = projected_polar(self.x, self.y, guess[2], inc)
             r /= self.reff
             mr = np.ma.array(r, mask=self.vel_mask)
 
@@ -109,8 +107,9 @@ class FitArgs:
                 nspax[i] = np.sum(mcut)
                 maskfrac[i] = np.sum(self.vel_mask[cut])/cut.sum()
             
-            bad = (nspax < 10) | (maskfrac > .75)
-            self.edges = self.edges[1:][~bad]
+            bad = (maskfrac > .75) #| (nspax < 10)
+            print(self.edges, bad)
+            self.edges = [self.edges[0], *self.edges[1:][~bad]]
             self.vel_mask[r > self.edges[-1]] = True
 
     def setdisp(self, disp):
@@ -212,7 +211,7 @@ class FitArgs:
     def setnbin(self, nbin):
         self.nbin = nbin
 
-    def setbounds(self, incpad=30, papad=30, vsyspad=30, cenpad=2, velmax=400, sigmax=300):
+    def setbounds(self, incpad=20, papad=30, vsyspad=30, cenpad=2, velmax=400, sigmax=300):
         try: theta0 = self.guess
         except: raise AttributeError('Must define guess first')
         try: self.nbin
@@ -227,8 +226,8 @@ class FitArgs:
         bounds[2] = (0, 180)
         bounds[3] = (theta0[3] - vsyspad, theta0[3] + vsyspad)
         if self.nglobs == 6:
-            bounds[4] = (theta0[4] - cenpad, theta0[4] + cenpad)
-            bounds[5] = (theta0[5] - cenpad, theta0[5] + cenpad)
+            bounds[4] = (-cenpad, cenpad)
+            bounds[5] = (-cenpad, cenpad)
 
         #cap velocities at maximum in vf
         vmax = min(np.max(self.vel)/np.cos(np.radians(inc)) * 1.5, velmax)

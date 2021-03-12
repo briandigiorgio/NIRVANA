@@ -197,7 +197,8 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
             stellar = True if 'stel' in info else False
             cen = True if 'nocen' not in info else False
             smearing = True if 'nosmear' not in info else False
-            maxr = float([i for i in info if '.' in i and 'r' in i][0][:-1])
+            #maxr = float([i for i in info if '.' in i and 'r' in i][0][:-1])
+            maxr = float([i for i in info if 'r' in i][0][:-1])
 
             if 'fixcent' in info: fixcent = True
             elif 'freecent' in info: fixcent = False

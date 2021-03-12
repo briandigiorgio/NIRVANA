@@ -25,11 +25,11 @@ def extractfile(f, remotedir=None):
         resdict['a_rc'] = arc
 
     #failure if bad file
-    except:
-        print(f'Extraction of {f} failed')
+    except Exception as e:
+        print(f'Extraction of {f} failed:', e)
         args, arc, asymmap, resdict = (None, None, None, None)
 
-    return args, arc, asymmap, resdict
+        return args, arc, asymmap, resdict
 
 def extractdir(cores=10, directory='/data/manga/digiorgio/nirvana/'):
     '''
@@ -53,9 +53,9 @@ def extractdir(cores=10, directory='/data/manga/digiorgio/nirvana/'):
 def dictformatting(d, drp=None, dap=None, padding=20, fill=-9999):
     #load dapall and drpall
     if drp is None:
-        drp = fits.open(os.getenv('MANGA_SPECTRO_REDUX') + '/MPL-10/drpall-v3_0_1.fits')[1].data
+        drp = fits.open('/home/bdigiorg/dapall-v3_0_1-3.0.1.fits')[1].data
     if dap is None:
-        dap = fits.open(os.getenv('MANGA_SPECTRO_ANALYSIS') + '/MPL-10/dapall-v3_0_1-3.0.1.fits')[1].data
+        dap = fits.open('/home/bdigiorg/drpall-v3_1_1.fits')[1].data
     try:
         data = list(d.values())
         for i in range(len(data)):

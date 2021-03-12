@@ -404,8 +404,8 @@ def loglike(params, args, squared=False):
         if sigdataivar is not None: 
             siglike = siglike * sigdataivar - .5 * np.log(2*np.pi * sigdataivar)
         llike -= .5*np.ma.sum(siglike)
-        if args.weight != -1:
-            llike -= smoothing(paramdict['sig'], args.weight)
+        #if args.weight != -1:
+        #    llike -= smoothing(paramdict['sig'], args.weight)
 
     return llike
 
@@ -453,7 +453,7 @@ def mixlike(params, args):
 
     return llike
 
-def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10', nbins=None,
+def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11', nbins=None,
         cores=10, maxr=None, cen=True, weight=10, smearing=True, points=500,
         stellar=False, root=None, verbose=False, disp=True, mix=False, 
         fixcent=True, ultra=False, remotedir=None):

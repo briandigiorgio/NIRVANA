@@ -20,7 +20,7 @@ def parse_args(options=None):
                         help='DAP analysis key used to select the data files.  This is needed '
                              'regardless of whether or not you specify the directory with the '
                              'data files (using --root).')
-    parser.add_argument('--dr', default='MPL-10', type=str,
+    parser.add_argument('--dr', default='MPL-11', type=str,
                         help='The MaNGA data release.  This is only used to automatically '
                              'construct the directory to the MaNGA galaxy data, and it will be '
                              'ignored if the root directory is set directly (using --root).')

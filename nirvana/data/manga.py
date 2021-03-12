@@ -114,7 +114,7 @@ def read_manga_psf(cube_file, psf_ext, fwhm=False, quiet=True):
     return psf
 
 
-def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10',
+def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11',
                               redux_path=None, cube_path=None, image_path=None, analysis_path=None,
                               maps_path=None, check=True, remotedir=None):
     """
@@ -503,7 +503,7 @@ class MaNGAKinematics(Kinematics):
     """
 
     @classmethod
-    def from_plateifu(cls, plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10',
+    def from_plateifu(cls, plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11',
                       redux_path=None, cube_path=None, image_path=None, analysis_path=None,
                       maps_path=None, ignore_psf=False, remotedir=None, **kwargs):
         """

@@ -174,7 +174,7 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
     """
     #download from sas instead of looking locally
     if remotedir is not None:
-        return download_plateifu(plate, ifu, remotedir, dr, daptype, clobber=True)
+        return download_plateifu(plate, ifu, remotedir, dr, daptype, clobber=False)
 
     if cube_path is None or image_path is None:
         _redux_path = os.getenv('MANGA_SPECTRO_REDUX') if redux_path is None else redux_path

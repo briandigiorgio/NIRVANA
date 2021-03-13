@@ -20,7 +20,7 @@ def parse_args(options=None):
                         help='DAP analysis key used to select the data files.  This is needed '
                              'regardless of whether or not you specify the directory with the '
                              'data files (using --root).')
-    parser.add_argument('--dr', default='MPL-10', type=str,
+    parser.add_argument('--dr', default='MPL-11', type=str,
                         help='The MaNGA data release.  This is only used to automatically '
                              'construct the directory to the MaNGA galaxy data, and it will be '
                              'ignored if the root directory is set directly (using --root).')
@@ -32,7 +32,7 @@ def parse_args(options=None):
                         help='Number of radial bins in fit.')
     parser.add_argument('-w', '--weight', default=10, type=int,
                         help='How much to weight smoothness of rotation curves in fit')
-    parser.add_argument('-r', '--maxr', default=1.5, type=float,
+    parser.add_argument('-r', '--maxr', default=0.0, type=float,
                         help='Maximum radius in Re for bins')
     parser.add_argument('-p', '--points', default = 500, type=int,
                         help='Number of dynesty live points')
@@ -55,8 +55,8 @@ def parse_args(options=None):
                         help='Allow the center vel bin to be free')
     parser.add_argument('--fits', default=False, action='store_true',
                         help='Save results as a much smaller FITS file instead')
-    parser.add_argument('--marv', default=False, action='store_true',
-                        help='Use downloaded marvin data instead of local')
+    parser.add_argument('--remote', default=None, 
+                        help='Download sas data into this dir instead of local')
     parser.add_argument('--clobber', default=False, action='store_true',
                         help='Overwrite preexisting outfiles')
 
@@ -96,14 +96,15 @@ def main(args):
     samp, gal = fit(plate, ifu, daptype=args.daptype, dr=args.dr, cores=args.cores, nbins=args.nbins,
                   weight=args.weight, maxr=args.maxr, smearing=args.smearing, root=args.root,
                   verbose=args.verbose, disp=args.disp, points=args.points, 
-                  stellar=args.stellar, cen=args.cen, fixcent=args.fixcent, use_marvin=args.marv)
+                  stellar=args.stellar, cen=args.cen, fixcent=args.fixcent,
+                  remotedir=args.remote)
 
     #write out with sampler results or just FITS table
     pickle.dump(samp.results, open(fname, 'wb'))
     pickle.dump(gal, open(galname, 'wb'))
     if args.fits: 
         try:
-            imagefits(fname, gal, outfile=fitsname, use_marvin=args.marv) 
+            imagefits(fname, gal, outfile=fitsname, remotedir=args.remote) 
             os.remove(fname)
             os.remove(galname)
         except:

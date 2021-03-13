@@ -22,12 +22,11 @@ from scipy import sparse
 import matplotlib.image as img
 
 from astropy.io import fits
-from marvin.tools import Cube
-from marvin import config
 
 from .util import get_map_bin_transformations, impose_positive_definite
 from .kinematics import Kinematics
 from ..util.bitmask import BitMask
+from ..util.download import download_plateifu
 
 
 def channel_dictionary(hdu, ext, prefix='C'):
@@ -115,9 +114,9 @@ def read_manga_psf(cube_file, psf_ext, fwhm=False, quiet=True):
     return psf
 
 
-def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10',
+def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11',
                               redux_path=None, cube_path=None, image_path=None, analysis_path=None,
-                              maps_path=None, check=True, use_marvin=False):
+                              maps_path=None, check=True, remotedir=None):
     """
     Get MaNGA files used by NIRVANA.
 
@@ -155,8 +154,9 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
             circumventing the use of ``dr`` and ``analysis_path``.
         check (:obj:`bool`, optional):
             Check that the directories with the expected files exist.
-        use_marvin (:obj:`bool`, optional):
-            Use `marvin` to download data instead of looking locally.
+        remotedir (:obj:`str`, optional):
+            If specified, it will download the data from sas into this root
+            directory instead of looking locally
 
     Returns:
         :obj:`tuple`: Full path to three files: (1) the DAP MAPS file, (2)
@@ -172,20 +172,9 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
             Raised if the directory where the datacube should exist can be
             defined but does not exist.
     """
-    #download using marvin instead of looking locally
-    if use_marvin:
-        #get files
-        config.setMPL(dr)
-        cube = Cube(f'{plate}-{ifu}')
-        maps = cube.getMaps()
-        image = cube.getImage()
-        
-        #download to local sas directory (see marvin documentation)
-        cube.download()
-        maps.download()
-        image.download()
-
-        return maps.filename, cube.filename, image.filename
+    #download from sas instead of looking locally
+    if remotedir is not None:
+        return download_plateifu(plate, ifu, remotedir, dr, daptype, clobber=False)
 
     if cube_path is None or image_path is None:
         _redux_path = os.getenv('MANGA_SPECTRO_REDUX') if redux_path is None else redux_path
@@ -514,9 +503,9 @@ class MaNGAKinematics(Kinematics):
     """
 
     @classmethod
-    def from_plateifu(cls, plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-10',
+    def from_plateifu(cls, plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11',
                       redux_path=None, cube_path=None, image_path=None, analysis_path=None,
-                      maps_path=None, ignore_psf=False, use_marvin=False, **kwargs):
+                      maps_path=None, ignore_psf=False, remotedir=None, **kwargs):
         """
         Instantiate the object using the plate and IFU number.
 
@@ -537,7 +526,7 @@ class MaNGAKinematics(Kinematics):
                 = manga_files_from_plateifu(plate, ifu, daptype=daptype, dr=dr,
                                             redux_path=redux_path, cube_path=cube_path,
                                             image_path=image_path, analysis_path=analysis_path,
-                                            maps_path=maps_path, use_marvin=use_marvin)
+                                            maps_path=maps_path, remotedir=remotedir)
         if ignore_psf:
             cube_file = None
         elif not os.path.isfile(cube_file):
@@ -631,6 +620,7 @@ class MaNGAGasKinematics(MaNGAKinematics):
             sb_anr = hdu['EMLINE_GANR'].data[eml[line]]
             vel = hdu['EMLINE_GVEL'].data[eml[line]]
             vel_ivar = hdu['EMLINE_GVEL_IVAR'].data[eml[line]]
+            vel_ivar = 1/(1/vel_ivar + 5**2)
             sig = hdu['EMLINE_GSIGMA'].data[eml[line]]
             sig_ivar = hdu['EMLINE_GSIGMA_IVAR'].data[eml[line]]
             sig_corr = hdu['EMLINE_INSTSIGMA'].data[eml[line]]
@@ -746,6 +736,7 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             sb_mask = np.logical_not((sb > 0) & (sb_ivar > 0))
             vel = hdu['STELLAR_VEL'].data
             vel_ivar = hdu['STELLAR_VEL_IVAR'].data
+            vel_ivar = 1/(1/vel_ivar + 5**2)
             sig = hdu['STELLAR_SIGMA'].data
             sig_ivar = hdu['STELLAR_SIGMA_IVAR'].data
             sig_corr = hdu['STELLAR_SIGMACORR'].data[0]

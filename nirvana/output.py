@@ -15,18 +15,18 @@ from .fitting import bisym_model
 from .models.axisym import AxisymmetricDisk
 from .models.geometry import projected_polar
 
-def extractfile(f, use_marvin=False):
+def extractfile(f, remotedir=None):
     try: 
         #get info out of each file and make bisym model
-        args, resdict, chains, meds = fileprep(f, use_marvin=use_marvin)
+        args, resdict, chains, meds = fileprep(f, remotedir=remotedir)
 
         #fractional difference between bisym and axisym
         arc, asymmap = asymmetry(args)
         resdict['a_rc'] = arc
 
     #failure if bad file
-    except:
-        print(f'Extraction of {f} failed')
+    except Exception as e:
+        print(f'Extraction of {f} failed:', e)
         args, arc, asymmap, resdict = (None, None, None, None)
 
     return args, arc, asymmap, resdict
@@ -53,9 +53,9 @@ def extractdir(cores=10, directory='/data/manga/digiorgio/nirvana/'):
 def dictformatting(d, drp=None, dap=None, padding=20, fill=-9999):
     #load dapall and drpall
     if drp is None:
-        drp = fits.open(os.getenv('MANGA_SPECTRO_REDUX') + '/MPL-10/drpall-v3_0_1.fits')[1].data
+        drp = fits.open('/home/bdigiorg/dapall-v3_0_1-3.0.1.fits')[1].data
     if dap is None:
-        dap = fits.open(os.getenv('MANGA_SPECTRO_ANALYSIS') + '/MPL-10/dapall-v3_0_1-3.0.1.fits')[1].data
+        dap = fits.open('/home/bdigiorg/drpall-v3_1_1.fits')[1].data
     try:
         data = list(d.values())
         for i in range(len(data)):
@@ -131,15 +131,15 @@ def maskedarraytofile(array, name=None, fill=0):
     if name is not None: arrayhdu.name = name
     return arrayhdu
 
-def imagefits(f, gal=None, outfile=None, padding=20, use_marvin=False):
+def imagefits(f, gal=None, outfile=None, padding=20, remotedir=None, outdir=''):
     '''
     Make a fits file for an individual galaxy with its fit parameters and relevant data.
     '''
 
     #get relevant data
-    args, arc, asymmap, resdict = extractfile(f, use_marvin=use_marvin)
+    args, arc, asymmap, resdict = extractfile(f, remotedir=remotedir)
     if gal is not None: args = gal
-    resdict['bin_edges'] = args.edges
+    resdict['bin_edges'] = np.array(args.edges)
     data = dictformatting(resdict, padding=padding)
 
     data += [*np.delete(args.bounds.T, slice(7,-1), axis=1)]
@@ -162,19 +162,23 @@ def imagefits(f, gal=None, outfile=None, padding=20, use_marvin=False):
     bintable.name = 'fit_params'
     hdus = [fits.PrimaryHDU(), bintable]
 
-    image = fits.ImageHDU(args.image)
-    image.name = 'image'
-    summplot = fits.ImageHDU(fig2data(summaryplot(f)))
-    summplot.name = 'summary'
-
-    hdus += [summplot, image]
+    #image = fits.ImageHDU(args.image)
+    #image.name = 'image'
+    #summplot = fits.ImageHDU(fig2data(summaryplot(f)))
+    #summplot.name = 'summary'
+    #hdus += [summplot, image]
 
     #add all data extensions from original data
-    maps = ['vel', 'sig_phys2', 'sb', 'vel_ivar', 'sig_ivar', 'sb_ivar', 'vel_mask']
+    maps = ['vel', 'sig', 'sb', 'vel_ivar', 'sig_ivar', 'sb_ivar', 'vel_mask']
     for m in maps:
-        data = args.remap(m).data
+        if m == 'sig': 
+            data = np.sqrt(args.remap('sig_phys2').data)
+            mask = args.remap('sig_phys2').mask
+        else:
+            data = args.remap(m).data
+            mask = args.remap(m).mask
+
         if data.dtype == bool: data = data.astype(int) #catch for bools
-        mask = args.remap(m).mask
         data[mask] = 0 if 'mask' not in m else data[mask]
         hdu = fits.ImageHDU(data)
         hdu.name = m
@@ -192,7 +196,7 @@ def imagefits(f, gal=None, outfile=None, padding=20, use_marvin=False):
     args.beam_fft = None
     intvelmodel, intsigmodel = bisym_model(args, resdict, plot=True)
 
-    #name them all and add them to the list
+    #unmask them, name them all, and add them to the list
     newnames = ['vel_model','sig_model','vel_int_model','sig_int_model','asymmetry']
     for i,a in enumerate([velmodel, sigmodel, intvelmodel, intsigmodel, asymmap]):
         hdus += [maskedarraytofile(a, name=newnames[i])]
@@ -210,8 +214,8 @@ def imagefits(f, gal=None, outfile=None, padding=20, use_marvin=False):
     #write out
     hdul = fits.HDUList(hdus)
     if outfile is None: 
-        hdul.writeto(f"nirvana_{resdict['plate']}-{resdict['ifu']}_{resdict['type']}.fits", overwrite=True)
-    else: hdul.writeto(outfile)
+        hdul.writeto(f"{outdir}/nirvana_{resdict['plate']}-{resdict['ifu']}_{resdict['type']}.fits", overwrite=True)
+    else: hdul.writeto(outdir + outfile)
 
 def reflect(pa, x, y):
     '''

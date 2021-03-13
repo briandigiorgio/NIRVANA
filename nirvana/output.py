@@ -29,7 +29,7 @@ def extractfile(f, remotedir=None):
         print(f'Extraction of {f} failed:', e)
         args, arc, asymmap, resdict = (None, None, None, None)
 
-        return args, arc, asymmap, resdict
+    return args, arc, asymmap, resdict
 
 def extractdir(cores=10, directory='/data/manga/digiorgio/nirvana/'):
     '''
@@ -131,7 +131,7 @@ def maskedarraytofile(array, name=None, fill=0):
     if name is not None: arrayhdu.name = name
     return arrayhdu
 
-def imagefits(f, gal=None, outfile=None, padding=20, remotedir=None):
+def imagefits(f, gal=None, outfile=None, padding=20, remotedir=None, outdir=''):
     '''
     Make a fits file for an individual galaxy with its fit parameters and relevant data.
     '''
@@ -139,7 +139,7 @@ def imagefits(f, gal=None, outfile=None, padding=20, remotedir=None):
     #get relevant data
     args, arc, asymmap, resdict = extractfile(f, remotedir=remotedir)
     if gal is not None: args = gal
-    resdict['bin_edges'] = args.edges
+    resdict['bin_edges'] = np.array(args.edges)
     data = dictformatting(resdict, padding=padding)
 
     data += [*np.delete(args.bounds.T, slice(7,-1), axis=1)]
@@ -171,10 +171,14 @@ def imagefits(f, gal=None, outfile=None, padding=20, remotedir=None):
     #add all data extensions from original data
     maps = ['vel', 'sig', 'sb', 'vel_ivar', 'sig_ivar', 'sb_ivar', 'vel_mask']
     for m in maps:
-        data = args.remap(m).data
-        if m == 'sig': data = np.sqrt(args.remap('sig_phys2'))
+        if m == 'sig': 
+            data = np.sqrt(args.remap('sig_phys2').data)
+            mask = args.remap('sig_phys2').mask
+        else:
+            data = args.remap(m).data
+            mask = args.remap(m).mask
+
         if data.dtype == bool: data = data.astype(int) #catch for bools
-        mask = args.remap(m).mask
         data[mask] = 0 if 'mask' not in m else data[mask]
         hdu = fits.ImageHDU(data)
         hdu.name = m
@@ -192,7 +196,7 @@ def imagefits(f, gal=None, outfile=None, padding=20, remotedir=None):
     args.beam_fft = None
     intvelmodel, intsigmodel = bisym_model(args, resdict, plot=True)
 
-    #name them all and add them to the list
+    #unmask them, name them all, and add them to the list
     newnames = ['vel_model','sig_model','vel_int_model','sig_int_model','asymmetry']
     for i,a in enumerate([velmodel, sigmodel, intvelmodel, intsigmodel, asymmap]):
         hdus += [maskedarraytofile(a, name=newnames[i])]
@@ -210,8 +214,8 @@ def imagefits(f, gal=None, outfile=None, padding=20, remotedir=None):
     #write out
     hdul = fits.HDUList(hdus)
     if outfile is None: 
-        hdul.writeto(f"nirvana_{resdict['plate']}-{resdict['ifu']}_{resdict['type']}.fits", overwrite=True)
-    else: hdul.writeto(outfile)
+        hdul.writeto(f"{outdir}/nirvana_{resdict['plate']}-{resdict['ifu']}_{resdict['type']}.fits", overwrite=True)
+    else: hdul.writeto(outdir + outfile)
 
 def reflect(pa, x, y):
     '''

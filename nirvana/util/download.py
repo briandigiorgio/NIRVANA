@@ -21,7 +21,8 @@ def download_file(url, user, password, outfile, clobber=True):
             warnings.warn('Overwriting existing file: {0}'.format(outfile))
             os.remove(outfile)
         else:
-            raise FileExistsError('File already exists.  To overwrite, set overwrite=True.')
+            warnings.warn('Using already existing file. To overwrite, set overwrite=True.')
+            return
 
     print('Downloading: {0}'.format(url))
     # Streaming, so we can iterate over the response.

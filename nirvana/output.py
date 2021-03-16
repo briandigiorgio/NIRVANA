@@ -5,6 +5,7 @@ from glob import glob
 from tqdm import tqdm
 import multiprocessing as mp
 import os
+import traceback
 
 from astropy.io import fits
 from astropy.table import Table,Column
@@ -15,18 +16,19 @@ from .fitting import bisym_model
 from .models.axisym import AxisymmetricDisk
 from .models.geometry import projected_polar
 
-def extractfile(f, remotedir=None):
+def extractfile(f, remotedir=None, gal=None):
     try: 
         #get info out of each file and make bisym model
-        args, resdict, chains, meds = fileprep(f, remotedir=remotedir)
+        args, resdict, chains, meds = fileprep(f, remotedir=remotedir, gal=gal)
 
         #fractional difference between bisym and axisym
         arc, asymmap = asymmetry(args)
         resdict['a_rc'] = arc
 
     #failure if bad file
-    except Exception as e:
-        print(f'Extraction of {f} failed:', e)
+    except Exception:
+        print(f'Extraction of {f} failed:')
+        print(traceback.format_exc())
         args, arc, asymmap, resdict = (None, None, None, None)
 
     return args, arc, asymmap, resdict
@@ -137,7 +139,7 @@ def imagefits(f, gal=None, outfile=None, padding=20, remotedir=None, outdir=''):
     '''
 
     #get relevant data
-    args, arc, asymmap, resdict = extractfile(f, remotedir=remotedir)
+    args, arc, asymmap, resdict = extractfile(f, remotedir=remotedir, gal=gal)
     if gal is not None: args = gal
     resdict['bin_edges'] = np.array(args.edges)
     data = dictformatting(resdict, padding=padding)

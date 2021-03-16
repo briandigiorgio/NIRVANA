@@ -65,6 +65,9 @@ def bisym_model(args, paramdict, plot=False):
     r, th = projected_polar(args.grid_x-paramdict['xc'], args.grid_y-paramdict['yc'], pa, inc)
     r /= args.reff
 
+    #interpolate the velocity arrays over full coordinates
+    if len(args.edges) != len(paramdict['vt']):
+        raise ValueError(f"Bin edge and velocity arrays are not the same shape: {len(args.edges)} and {len(paramdict['vt'])}")
     vtvals  = np.interp(r, args.edges, paramdict['vt'])
     v2tvals = np.interp(r, args.edges, paramdict['v2t'])
     v2rvals = np.interp(r, args.edges, paramdict['v2r'])
@@ -333,8 +336,8 @@ def ptform(params, args, bounds=None, gaussprior=False):
             xcp = stats.norm.ppf(paramdict['xc'], guessdict['xc'], 5)
             ycp = stats.norm.ppf(paramdict['yc'], guessdict['yc'], 5)
         else:
-            xcp = (2*paramdict['xc'] - 1) * 10
-            ycp = (2*paramdict['yc'] - 1) * 10
+            xcp = unifprior('xc', paramdict, bounddict)
+            ycp = unifprior('yc', paramdict, bounddict)
         repack += [xcp,ycp]
 
     #repack all the velocities
@@ -348,7 +351,8 @@ def loglike(params, args, squared=False):
     Log likelihood for :class:`dynesty.NestedSampler` fit. 
     
     Makes a model based on current parameters and computes a chi squared with
-    the original data.
+    tht
+    original data.
 
     Args:
         params (:obj:`tuple`):
@@ -404,8 +408,8 @@ def loglike(params, args, squared=False):
         if sigdataivar is not None: 
             siglike = siglike * sigdataivar - .5 * np.log(2*np.pi * sigdataivar)
         llike -= .5*np.ma.sum(siglike)
-        #if args.weight != -1:
-        #    llike -= smoothing(paramdict['sig'], args.weight)
+        if args.weight != -1:
+            llike -= smoothing(paramdict['sig'], args.weight*.1)
 
     return llike
 

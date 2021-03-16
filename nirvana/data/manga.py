@@ -649,7 +649,6 @@ class MaNGAGasKinematics(MaNGAKinematics):
             sb_anr = hdu['EMLINE_GANR'].data[eml[line]]
             vel = hdu['EMLINE_GVEL'].data[eml[line]]
             vel_ivar = hdu['EMLINE_GVEL_IVAR'].data[eml[line]]
-            vel_ivar = 1/(1/vel_ivar + 5**2)
             sig = hdu['EMLINE_GSIGMA'].data[eml[line]]
             sig_ivar = hdu['EMLINE_GSIGMA_IVAR'].data[eml[line]]
             sig_corr = hdu['EMLINE_INSTSIGMA'].data[eml[line]]
@@ -658,6 +657,9 @@ class MaNGAGasKinematics(MaNGAKinematics):
             phot_inc = np.degrees(np.arccos(1 - phot_ell))
             pri, sec, anc, oth = parse_manga_targeting_bits(hdu[0].header['MNGTARG1'], hdu[0].header['MNGTARG3'])
             maxr = 2.5 if sec else 1.5
+
+            vel_ivar = 1/(1/vel_ivar + 5**2)
+            sig_ivar = 1/(1/sig_ivar + 5**2)
 
             # Get the masks
             if mask_flags is None:
@@ -769,7 +771,6 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             sb_mask = np.logical_not((sb > 0) & (sb_ivar > 0))
             vel = hdu['STELLAR_VEL'].data
             vel_ivar = hdu['STELLAR_VEL_IVAR'].data
-            vel_ivar = 1/(1/vel_ivar + 5**2)
             sig = hdu['STELLAR_SIGMA'].data
             sig_ivar = hdu['STELLAR_SIGMA_IVAR'].data
             sig_corr = hdu['STELLAR_SIGMACORR'].data[0]
@@ -778,6 +779,9 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             phot_inc = np.degrees(np.arccos(1 - phot_ell))
             pri, sec, anc, oth = parse_manga_targeting_bits(hdu[0].header['MNGTARG1'], hdu[0].header['MNGTARG3'])
             maxr = 2.5 if sec else 1.5
+
+            vel_ivar = 1/(1/vel_ivar + 5**2)
+            sig_ivar = 1/(1/sig_ivar + 5**2)
 
             # Get the masks
             if mask_flags is None:

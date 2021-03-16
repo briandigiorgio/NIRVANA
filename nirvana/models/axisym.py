@@ -385,10 +385,10 @@ class AxisymmetricDisk:
                         else map(lambda x : self.kin.bin(x), self.model())
         if self.has_covar:
             vfom = self._v_chisqr_covar(vel)
-            sfom = numpy.array([]) if self.dc is None else self._s_chisqr_covar(sig)
+            sfom = np.array([]) if self.dc is None else self._s_chisqr_covar(sig)
         else:
             vfom = self._v_chisqr(vel)
-            sfom = numpy.array([]) if self.dc is None else self._s_chisqr(sig)
+            sfom = np.array([]) if self.dc is None else self._s_chisqr(sig)
         return (vfom, sfom) if sep else np.append(vfom, sfom)
 
     def _fit_prep(self, kin, p0, fix, scatter, sb_wgt, assume_posdef_covar, ignore_covar):

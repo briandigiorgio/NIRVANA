@@ -703,7 +703,7 @@ def plotdir(directory=None, fname=None, **kwargs):
             summaryplot(fs[i], save=True, **kwargs)
         except Exception:
             print(fs[i], 'failed')
-            print(traceback.format_exc()
+            print(traceback.format_exc())
 
 
 def init_ax(fig, pos, facecolor='0.85', tickdir='in', top=True, right=True, majlen=4, minlen=2,

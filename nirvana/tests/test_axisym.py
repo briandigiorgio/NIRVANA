@@ -44,8 +44,8 @@ def test_lsq_nopsf():
 
     assert numpy.all(numpy.absolute(disk.par[:2]) < 0.1), 'Center changed'
     assert 165. < disk.par[2] < 167., 'PA changed'
-    assert 53. < disk.par[3] < 54., 'Inclination changed'
-    assert 242. < disk.par[5] < 244., 'Projected rotation changed'
+    assert 55. < disk.par[3] < 57., 'Inclination changed'
+    assert 245. < disk.par[5] < 247., 'Projected rotation changed'
 
 
 @requires_remote
@@ -64,8 +64,8 @@ def test_lsq_psf():
 
     assert numpy.all(numpy.absolute(disk.par[:2]) < 0.1), 'Center changed'
     assert 165. < disk.par[2] < 167., 'PA changed'
-    assert 56. < disk.par[3] < 57., 'Inclination changed'
-    assert 251. < disk.par[5] < 254., 'Projected rotation changed'
+    assert 57. < disk.par[3] < 59., 'Inclination changed'
+    assert 252. < disk.par[5] < 255., 'Projected rotation changed'
 
 
 @requires_remote
@@ -86,9 +86,9 @@ def test_lsq_with_sig():
 
     assert numpy.all(numpy.absolute(disk.par[:2]) < 0.1), 'Center changed'
     assert 165. < disk.par[2] < 167., 'PA changed'
-    assert 56. < disk.par[3] < 58., 'Inclination changed'
+    assert 58. < disk.par[3] < 60., 'Inclination changed'
     assert 250. < disk.par[5] < 253., 'Projected rotation changed'
-    assert 28. < disk.par[7] < 30., 'Central velocity dispersion changed'
+    assert 35. < disk.par[7] < 37., 'Central velocity dispersion changed'
 
 
 @requires_remote
@@ -114,7 +114,7 @@ def test_lsq_with_covar():
     scat = data.scatter.IntrinsicScatter(resid, err=err, gpm=disk.vel_gpm)
     sig, rej, gpm = scat.iter_fit(fititer=5) #, verbose=2)
     # Check
-    assert sig > 8., 'Different intrinsic scatter'
+    assert sig > 6., 'Different intrinsic scatter'
     assert numpy.sum(rej) == 19, 'Different number of pixels were rejected'
 
     # Refit with new mask, include scatter and covariance
@@ -128,8 +128,8 @@ def test_lsq_with_covar():
                                          assume_posdef_covar=True)
     sig, rej, gpm = scat.iter_fit(fititer=5) #, verbose=2)
     # Check
-    assert sig > 5., 'Different intrinsic scatter'
-    assert numpy.sum(rej) == 7, 'Different number of pixels were rejected'
+    assert sig > 1., 'Different intrinsic scatter'
+    assert numpy.sum(rej) == 5, 'Different number of pixels were rejected'
     # Model parameters
     assert numpy.all(numpy.absolute(disk.par[:2]) < 0.1), 'Center changed'
     assert 165. < disk.par[2] < 167., 'PA changed'

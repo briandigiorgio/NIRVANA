@@ -1,9 +1,13 @@
 import os
 import warnings
-import tqdm
 import requests
 import netrc
 from astropy.io import fits
+
+try:
+    from tqdm import tqdm
+except:
+    tqdm = None
 
 try:
     NETRC = netrc.netrc()

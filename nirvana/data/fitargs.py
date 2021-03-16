@@ -95,7 +95,7 @@ class FitArgs:
         #clip outer bins that have too many masked spaxels
         if clipmasked:
             guess = self.getguess(simple=True)
-            r,th = projected_polar(self.x, self.y, guess[2], inc)
+            r,th = projected_polar(self.x, self.y, *np.radians((guess[2], inc)))
             r /= self.reff
             mr = np.ma.array(r, mask=self.vel_mask)
 
@@ -108,7 +108,6 @@ class FitArgs:
                 maskfrac[i] = np.sum(self.vel_mask[cut])/cut.sum()
             
             bad = (maskfrac > .75) #| (nspax < 10)
-            print(self.edges, bad)
             self.edges = [self.edges[0], *self.edges[1:][~bad]]
             self.vel_mask[r > self.edges[-1]] = True
 
@@ -222,7 +221,8 @@ class FitArgs:
         #prior bounds defined based off of guess
         bounds = np.zeros((ndim, 2))
         bounds[0] = (max(inc - incpad, 5), min(inc + incpad, 85))
-        bounds[1] = (max(theta0[1] - papad, 0), min(theta0[1] + papad, 360))
+        bounds[1] = (theta0[1] - papad, theta0[1] + papad)
+        if bounds[1][0] < 0 or bounds[1][1] > 360: bounds[1] = (0,360)
         bounds[2] = (0, 180)
         bounds[3] = (theta0[3] - vsyspad, theta0[3] + vsyspad)
         if self.nglobs == 6:

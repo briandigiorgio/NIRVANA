@@ -1,9 +1,13 @@
 import os
 import warnings
-import tqdm
 import requests
 import netrc
 from astropy.io import fits
+
+try:
+    from tqdm import tqdm
+except:
+    tqdm = None
 
 try:
     NETRC = netrc.netrc()
@@ -30,12 +34,13 @@ def download_file(url, user, password, outfile, clobber=True):
     # Total size in bytes.
     total_size = int(r.headers.get('content-length', 0))
     block_size = 1024 #1 Kibibyte
-    t = tqdm.tqdm(total=total_size, unit='iB', unit_scale=True)
+    if tqdm is not None:
+        t = tqdm(total=total_size, unit='iB', unit_scale=True)
     with open(outfile, 'wb') as f:
         for data in r.iter_content(block_size):
-            t.update(len(data))
+            if tqdm is not None: t.update(len(data))
             f.write(data)
-    t.close()
+    if tqdm is not None: t.close()
     if total_size != 0 and t.n != total_size:
         raise ValueError('Downloaded file may be corrupted.')
 

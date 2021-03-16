@@ -10,6 +10,7 @@ import matplotlib
 from mpl_toolkits.axes_grid1 import make_axes_locatable as mal
 import re
 import os
+import traceback
 
 import dynesty
 import dynesty.plotting
@@ -156,13 +157,16 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
 
     return paramdict
 
-def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, fixcent=True, clip=True, remotedir=None):
+def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, fixcent=True, clip=True, remotedir=None, gal=None):
 
     #unpack fits file
     if type(f) == str and '.fits' in f:
         isfits = True
         with fits.open(f) as fitsfile:
             table = fitsfile[1].data
+            maxr = fitsfile[0].header['maxr']
+            smearing = fitsfile[0].header['smearing']
+
         keys = table.columns.names
         vals = [table[k][0] for k in keys]
         resdict = dict(zip(keys, vals))
@@ -171,10 +175,13 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
         for s in ['sig','sigl','sigu']:
             resdict[s] = resdict[s][resdict['sigmask'] == 0]
 
-        if resdict['type'] == 'Stars':
-            args = MaNGAStellarKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir)
+        if gal is None:
+            if resdict['type'] == 'Stars':
+                args = MaNGAStellarKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir)
+            else:
+                args = MaNGAGasKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir)
         else:
-            args = MaNGAGasKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir)
+            args = gal
 
         chains = None
         fill = len(resdict['velmask'])
@@ -202,9 +209,6 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
 
             if 'fixcent' in info: fixcent = True
             elif 'freecent' in info: fixcent = False
-
-        if plate is None or ifu is None:
-            raise ValueError('Plate and IFU must be specified if auto=False')
 
         #mock galaxy using stored values
         if plate == 0:
@@ -243,13 +247,15 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
     if not nbins.is_integer(): 
         raise ValueError('Dynesty output array has a bad shape.')
     else: nbins = int(nbins)
-    args.setedges(nbins - 1 + args.fixcent, nbin=True, maxr=maxr)
 
     if not isfits:
+        args.setedges(nbins - 1 + args.fixcent, nbin=True, maxr=maxr)
         resdict = profs(chains, args, stds=True)
         resdict['plate'] = plate
         resdict['ifu'] = ifu
         resdict['type'] = 'Stars' if stellar else 'Gas'
+    else:
+        args.edges = resdict['bin_edges'][~resdict['velmask']]
 
     return args, resdict, chains, meds
 
@@ -676,8 +682,9 @@ def plotdir(directory=None, fname=None, **kwargs):
     fs = glob(directory+fname)
     if len(fs) == 0: raise FileNotFoundError('No files found')
     else: print(len(fs), 'files found')
-    for i,f in tqdm(enumerate(fs)):
+    for i in tqdm(range(len(fs))):
         try:
-            summaryplot(f, save=True, **kwargs)
-        except:
-            print(f, 'failed')
+            summaryplot(fs[i], save=True, **kwargs)
+        except Exception:
+            print(fs[i], 'failed')
+            print(traceback.format_exc())

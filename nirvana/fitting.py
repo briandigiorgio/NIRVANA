@@ -65,6 +65,9 @@ def bisym_model(args, paramdict, plot=False):
     r, th = projected_polar(args.grid_x-paramdict['xc'], args.grid_y-paramdict['yc'], pa, inc)
     r /= args.reff
 
+    #interpolate the velocity arrays over full coordinates
+    if len(args.edges) != len(paramdict['vt']):
+        raise ValueError(f"Bin edge and velocity arrays are not the same shape: {len(args.edges)} and {len(paramdict['vt'])}")
     vtvals  = np.interp(r, args.edges, paramdict['vt'])
     v2tvals = np.interp(r, args.edges, paramdict['v2t'])
     v2rvals = np.interp(r, args.edges, paramdict['v2r'])

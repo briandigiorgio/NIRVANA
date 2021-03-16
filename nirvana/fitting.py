@@ -336,8 +336,8 @@ def ptform(params, args, bounds=None, gaussprior=False):
             xcp = stats.norm.ppf(paramdict['xc'], guessdict['xc'], 5)
             ycp = stats.norm.ppf(paramdict['yc'], guessdict['yc'], 5)
         else:
-            xcp = (2*paramdict['xc'] - 1) * bounddict['xc']
-            ycp = (2*paramdict['yc'] - 1) * bounddict['yc']
+            xcp = unifprior('xc', paramdict, bounddict)
+            ycp = unifprior('yc', paramdict, bounddict)
         repack += [xcp,ycp]
 
     #repack all the velocities

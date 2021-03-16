@@ -104,6 +104,11 @@ class Kinematics(FitArgs):
 
             where :math:`\sigma_{\rm obs}` is provided by ``sig``.
 
+        psf_name (:obj:`str`, optional):
+            Identifier for the psf used. For example, this can be the
+            wavelength band where the PSF was measured. If provided, this
+            identifier is only used for informational purposes in output
+            files.
         psf (`numpy.ndarray`_, optional):
             An image of the point-spread function of the
             observations. If ``aperture`` is not provided, this
@@ -132,6 +137,9 @@ class Kinematics(FitArgs):
             The on-sky Cartesian :math:`y` coordinates of *each*
             element in the data grid. See the description of
             ``grid_x``.
+        grid_wcs (`astropy.wcs.WCS`_, optional):
+            World coordinate system for the on-sky grid. Currently, this is
+            only used for output files.
         reff (:obj:`float`, optional):
             Effective radius in same units as :attr:`x` and :attr:`y`.
         fwhm (:obj:`float`, optional):
@@ -155,9 +163,10 @@ class Kinematics(FitArgs):
     """
     def __init__(self, vel, vel_ivar=None, vel_mask=None, vel_covar=None, x=None, y=None, sb=None,
                  sb_ivar=None, sb_mask=None, sb_covar=None, sb_anr=None, sig=None, sig_ivar=None,
-                 sig_mask=None, sig_covar=None, sig_corr=None, psf=None, aperture=None, binid=None,
-                 grid_x=None, grid_y=None, reff=None, fwhm=None, bordermask=None, image=None,
-                 phot_inc=None, maxr=None, positive_definite=False, quiet=False):
+                 sig_mask=None, sig_covar=None, sig_corr=None, psf_name=None, psf=None,
+                 aperture=None, binid=None, grid_x=None, grid_y=None, grid_wcs=None, reff=None,
+                 fwhm=None, bordermask=None, image=None, phot_inc=None, maxr=None,
+                 positive_definite=False, quiet=False):
 
         # Check shape of input arrays
         self.nimg = vel.shape[0]
@@ -181,6 +190,7 @@ class Kinematics(FitArgs):
 
         # Basic properties
         self.spatial_shape = vel.shape
+        self.psf_name = 'unknown' if psf_name is None else psf_name
         self._set_beam(psf, aperture)
         self.reff = reff
         self.fwhm = fwhm
@@ -220,7 +230,8 @@ class Kinematics(FitArgs):
         # data map.
         self.grid_x = grid_x
         self.grid_y = grid_y
-        self.binid, self.bin_indx, self.grid_indx, self.bin_inverse, self.bin_transform \
+        self.grid_wcs = grid_wcs
+        self.binid, self.nbin, self.bin_indx, self.grid_indx, self.bin_inverse, self.bin_transform \
                 = get_map_bin_transformations(spatial_shape=self.spatial_shape, binid=binid)
 
         # Unravel and select the valid values for all arrays
@@ -233,6 +244,8 @@ class Kinematics(FitArgs):
         # dispersion. This is just the square of the velocity
         # dispersion if no correction is provided. The error
         # calculation assumes there is no error on the correction.
+        # TODO: Change this to sig2 or sigsqr
+        # TODO: Need to keep track of mask...
         self.sig_phys2 = self.sig**2 if self.sig_corr is None else self.sig**2 - self.sig_corr**2
         self.sig_phys2_ivar = None if self.sig_ivar is None \
                                     else self.sig_ivar/(2*self.sig + (self.sig == 0.0))**2
@@ -402,7 +415,7 @@ class Kinematics(FitArgs):
         # - Force it to be positive definite if requested
         return impose_positive_definite(_covar) if positive_definite else _covar
 
-    def remap(self, data, mask=None, masked=True):
+    def remap(self, data, mask=None, masked=True, fill_value=0):
         """
         Remap the requested attribute to the full 2D array.
 
@@ -422,6 +435,11 @@ class Kinematics(FitArgs):
                 by the provided data. If ``data`` is a string selecting an
                 attribute and an associated mask exists for that attribute
                 (called "{data}_mask"), also include the mask in the output.
+            fill_value (scalar-like, optional):
+                Value used to fill the masked pixels, if a masked array is
+                *not* requested. Warning: The value is automatically
+                converted to be the same data type as the input array or
+                attribute.
 
         Returns:
             `numpy.ndarray`_, `numpy.ma.MaskedArray`_: 2D array with
@@ -478,7 +496,7 @@ class Kinematics(FitArgs):
         # Return a masked array if requested; otherwise, fill the masked values
         # with the equivalent of 0. WARNING: this will be False for a boolean
         # array...
-        return _data if masked else _data.filled(d.dtype.type(0))
+        return _data if masked else _data.filled(d.dtype.type(fill_value))
 
     def bin(self, data):
         """
@@ -502,6 +520,34 @@ class Kinematics(FitArgs):
             raise ValueError('Data to rebin has incorrect shape; expected {0}, found {1}.'.format(
                               self.spatial_shape, data.shape))
         return self.bin_transform.dot(data.ravel())
+
+    def unique(self, data):
+        """
+        Provided a set of binned and remapped data (i.e., each element in a
+        bin has the same value in the map), select the unique values from the
+        map.
+
+        This is the same operation performed on the input 2D maps of data to
+        extract the unique data vectors; e.g.,::
+
+            assert np.array_equal(self.vel, self.unique(self.remap('vel', masked=False)))
+
+        Args:
+            data (`numpy.ndarray`_):
+                The 2D data array from which to extract the unique data.
+                Shape must be :attr:`spatial_shape`.
+
+        Returns:
+            `numpy.ndarray`_: The 1D vector with the unique data.
+
+        Raises:
+            ValueError:
+                Raised if the spatial shape is wrong.
+        """
+        if data.shape != self.spatial_shape:
+            raise ValueError(f'Input has incorrect shape; found {data.shape}, '
+                             f'expected {self.spatial_shape}.')
+        return data.flat[self.bin_indx]
 
     def max_radius(self):
         """
@@ -640,6 +686,97 @@ class Kinematics(FitArgs):
         binid = np.arange(np.product(_vel.shape)).reshape(_vel.shape)
         return cls(_vel, x=_x, y=_y, grid_x=_x, grid_y=_y, reff=reff, binid=binid, sig=_sig, psf=_psf, sb=_sb, bordermask=bordermask)
 
+    def reject(self, vel_rej=None, sig_rej=None):
+        r"""
+        Reject/Mask data.
+
+        This is a simple wrapper that incorporates the provided vectors into
+        the kinematic masks.
+
+        Args:
+            vel_rej (`numpy.ndarray`_, optional):
+                Boolean vector selecting the velocity measurements to reject.
+                Shape must be :math:`N_{\rm bin}`. If None, no additional
+                data are rejected.
+            sig_rej (`numpy.ndarray`_, optional):
+                Boolean vector selecting the velocity dispersion measurements
+                to reject. Shape must be :math:`N_{\rm bin}`. If None, no
+                additional data are rejected. Ignored if :attr:`sig` is None.
+        """
+        if vel_rej is not None:
+            self.vel_mask |= vel_rej
+        if self.sig is not None and sig_rej is not None:
+            self.sig_mask |= sig_rej
+
+    def clip_err(self, max_vel_err=None, max_sig_err=None):
+        """
+        Reject data with large errors.
+
+        The rejection is directly incorporated into :attr:`vel_mask` and
+        :attr:`sig_mask`.
+
+        Args:
+            max_vel_err (:obj:`float`, optional):
+                Maximum allowed velocity error. If None, no additional
+                masking is performed.
+            max_sig_err (:obj:`float`, optional):
+                Maximum allowed *observed* velocity dispersion error. I.e.,
+                this is the measurement error before any velocity dispersion
+                correction.  If None, no additional masking is performed.
+
+        Returns:
+            :obj:`tuple`: Two objects are returned selecting the data that
+            were rejected. If :attr:`sig` is None, the returned object
+            selecting the velocity dispersion data that was rejected is also
+            None.
+        """
+        vel_rej = np.zeros(self.vel.size, dtype=bool) if max_vel_err is None else \
+                    self.vel_ivar < 1/max_vel_err**2
+        sig_rej = None if self.sig is None else \
+                    (np.zeros(self.sig.size, dtype=bool) if max_sig_err is None else
+                     self.sig_ivar < 1/max_sig_err**2)
+        self.reject(vel_rej=vel_rej, sig_rej=sig_rej)
+        return vel_rej, sig_rej
+
+    # TODO: Include a separate S/N measurement, like as done with A/N for the
+    # gas.
+    def clip_snr(self, min_vel_snr=None, min_sig_snr=None):
+        """
+        Reject data with low S/N.
+
+        The S/N of a given spaxel is given by the ratio of its surface
+        brightness to the error in the surface brightness. An exception is
+        raised if the surface-brightness or surface-brightness error are not
+        defined.
+
+        The rejection is directly incorporated into :attr:`vel_mask` and
+        :attr:`sig_mask`.
+
+        Args:
+            min_vel_snr (:obj:`float`, optional):
+                Minimum S/N for a spaxel to use for velocity measurements. If
+                None, no additional masking is performed.
+            min_sig_snr (:obj:`float`, optional):
+                Minimum S/N for a spaxel to use for dispersion measurements.
+                If None, no additional masking is performed.
+
+        Returns:
+            :obj:`tuple`: Two objects are returned selecting the data that
+            were rejected. If :attr:`sig` is None, the returned object
+            selecting the velocity dispersion data that was rejected is also
+            None.
+        """
+        if self.sb is None or self.sb_ivar is None:
+            raise ValueError('Cannot perform S/N rejection; no surface brightness and/or '
+                             'surface brightness error data.')
+        snr = self.sb * np.sqrt(self.sb_ivar)
+        vel_rej = np.zeros(self.vel.size, dtype=bool) if min_vel_snr is None else snr < min_vel_snr
+        sig_rej = None if self.sig is None else \
+                    (np.zeros(self.sig.size, dtype=bool) if min_sig_snr is None else
+                     snr < min_sig_snr)
+        self.reject(vel_rej=vel_rej, sig_rej=sig_rej)
+        return vel_rej, sig_rej
+
     def clip(self, sigma=10, sbf=.03, anr=5, maxiter=10, smear_dv=50, smear_dsig=50, clip_thresh=.95, verbose=False):
         '''
         Filter out bad spaxels in kinematic data.
@@ -678,8 +815,9 @@ class Kinematics(FitArgs):
         '''
 
         #count spaxels in each bin and make 2d maps excluding large bins
-        nspax = np.array([(self.remap('binid') == self.binid[i]).sum() for i in range(len(self.binid))])
-        binmask = self.remap(nspax) > 10
+#        nspax = np.array([(self.remap('binid') == self.binid[i]).sum() for i in range(len(self.binid))])
+#        binmask = self.remap(nspax) > 10
+        binmask = self.remap(self.nbin) > 10
         ngood = self.vel_mask.sum()
         nmasked0 = (~self.vel_mask).sum()
 

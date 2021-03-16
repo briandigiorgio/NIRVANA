@@ -49,9 +49,9 @@ class StepFunction(Func1D):
 
     Args:
         edges (array-like):
-            The *left* edges of each step. Samples to the left and
-            right, respectively, first and last edge are given the
-            same value as those edges.
+            The *left* edges of each step. Samples to the left and right,
+            respectively, of the first and last edge are given the same value
+            as those edges.
         par (array-like, optional):
             The values of the step function. Shape must be the same
             as ``edges``. If None, step levels set by
@@ -85,6 +85,14 @@ class StepFunction(Func1D):
             `numpy.ndarray`_: Guess parameters.
         """
         return np.ones(npar, dtype=float)
+
+    def par_names(self, short=False):
+        """
+        Return a list of strings with the parameter names.
+        """
+        if short:
+            return [f'v{i+1}' for i in range(self.np)]
+        return [f'Value at left edge of step {i+1}' for i in range(self.np)]
 
     def par_bounds(self, minv=None, maxv=None):
         """
@@ -210,6 +218,14 @@ class PiecewiseLinear(Func1D):
         """
         return np.ones(npar, dtype=float)
 
+    def par_names(self, short=False):
+        """
+        Return a list of strings with the parameter names.
+        """
+        if short:
+            return [f'v{i+1}' for i in range(self.np)]
+        return [f'Value at vertex {i+1}' for i in range(self.np)]
+
     def par_bounds(self, minv=None, maxv=None):
         """
         Function parameter boundaries.
@@ -331,6 +347,15 @@ class HyperbolicTangent(Func1D):
         return np.array([100., 10.])
 
     @staticmethod
+    def par_names(short=False):
+        """
+        Return a list of strings with the parameter names.
+        """
+        if short:
+            return ['asymp', 'scl']
+        return ['Asymptotic value', 'Scale']
+
+    @staticmethod
     def par_bounds():
         """
         Return default parameter boundaries.
@@ -425,6 +450,15 @@ class PolyEx(Func1D):
         return np.array([100., 10., 0.1])
 
     @staticmethod
+    def par_names(short=False):
+        """
+        Return a list of strings with the parameter names.
+        """
+        if short:
+            return ['asymp', 'scl', 'slp']
+        return ['Characteristic value', 'Inner scale', 'Outer slope']
+
+    @staticmethod
     def par_bounds():
         """
         Return default parameter boundaries.
@@ -511,6 +545,15 @@ class Exponential(Func1D):
         return np.array([100., 10.])
 
     @staticmethod
+    def par_names(short=False):
+        """
+        Return a list of strings with the parameter names.
+        """
+        if short:
+            return ['cen', 'h']
+        return ['Center value', 'e-folding length']
+
+    @staticmethod
     def par_bounds():
         """
         Return default parameter boundaries.
@@ -594,6 +637,15 @@ class ExpBase(Func1D):
         return np.array([100., 10., 0.])
 
     @staticmethod
+    def par_names(short=False):
+        """
+        Return a list of strings with the parameter names.
+        """
+        if short:
+            return ['cen', 'h', 'base']
+        return ['Center value', 'e-folding length', 'Baseline']
+
+    @staticmethod
     def par_bounds():
         """
         Return default parameter boundaries.
@@ -665,6 +717,15 @@ class Const(Func1D):
         return np.array([1.])
 
     @staticmethod
+    def par_names(short=False):
+        """
+        Return a list of strings with the parameter names.
+        """
+        if short:
+            return ['c']
+        return ['Constant']
+
+    @staticmethod
     def par_bounds():
         """
         Return default parameter boundaries.
@@ -713,7 +774,7 @@ class Sersic1D(Func1D):
     Instantiates a 1D Sersic profile.
 
     Parameters are (1) the surface brightness at 1 half-light radius,
-    (2) the half-life radius, and (3) the Sersic index.
+    (2) the half-light radius, and (3) the Sersic index.
 
     Args:
         par (array-like, optional):
@@ -745,6 +806,15 @@ class Sersic1D(Func1D):
     def guess_par():
         """Return default guess parameters."""
         return np.array([1., 10., 1.])
+
+    @staticmethod
+    def par_names(short=False):
+        """
+        Return a list of strings with the parameter names.
+        """
+        if short:
+            return ['norm', 'reff', 'n']
+        return ['Profile value at effective radius', 'Effective radius', 'Sersic Index']
 
     @staticmethod
     def par_bounds():
@@ -779,4 +849,6 @@ class Sersic1D(Func1D):
         if par is not None:
             self._set_par(par)
         return self.par[0]*np.exp(-self.bn * ((x/self.par[1])**(1/self.par[2]) - 1))
+
+
 

@@ -89,44 +89,87 @@ class AxisymmetricDisk:
         gp = np.concatenate(([0., 0., 45., 30., 0.], self.rc.guess_par()))
         return gp if self.dc is None else np.append(gp, self.dc.guess_par())
 
-    def base_par(self):
+    def par_names(self, short=False):
+        """
+        Return a list of strings with the parameter names.
+        """
+        if short:
+            base = ['x0', 'y0', 'pa', 'inc', 'vsys']
+            rc = [f'v_{p}' for p in self.rc.par_names(short=True)]
+            dc = [] if self.dc is None else [f's_{p}' for p in self.dc.par_names(short=True)]
+        else:
+            base = ['X center', 'Y center', 'Position Angle', 'Inclination', 'Systemic Velocity']
+            rc = [f'RC: {p}' for p in self.rc.par_names()]
+            dc = [] if self.dc is None else [f'Disp: {p}' for p in self.dc.par_names()]
+        return base + rc + dc
+
+    def base_par(self, err=False):
         """
         Return the base (largely geometric) parameters. Returns None if
         parameters are not defined yet.
         """
-        return None if self.par is None else self.par[:self.nbp]
+        p = self.par_err if err else self.par
+        return None if p is None else p[:self.nbp]
 
-    def rc_par(self):
+    def rc_par(self, err=False):
         """
         Return the rotation curve parameters. Returns None if parameters are
         not defined yet.
         """
-        return None if self.par is None else self.par[self.nbp:self.nbp+self.rc.np]
+        p = self.par_err if err else self.par
+        return None if p is None else p[self.nbp:self.nbp+self.rc.np]
 
-    def dc_par(self):
+    def dc_par(self, err=False):
         """
         Return the dispersion profile parameters. Returns None if parameters
         are not defined yet or if no dispersion profile has been defined.
         """
-        return None if self.par is None or self.dc is None \
-                else self.par[self.nbp+self.rc.np:]
+        p = self.par_err if err else self.par
+        return None if p is None or self.dc is None else p[self.nbp+self.rc.np:]
 
-    def par_bounds(self):
+    def par_bounds(self, base_lb=None, base_ub=None):
         """
         Return the lower and upper boundaries on the model parameters.
+
+        The default geometric bounds (see ``base_lb``, ``base_ub``) are set
+        by the minimum and maximum available x and y coordinates, -350 to 350
+        for the position angle, 0 to 89 for the inclination, and -300 to 300
+        for the systemic velocity.
 
         .. todo::
             Could enable this to base the bounds on the data to be fit, but
             at the moment these are hard-coded numbers.
+
+        Args:
+            base_lb (`numpy.ndarray`_, optional):
+                The lower bounds for the "base" parameters: x0, y0, pa, inc,
+                vsys. If None, the defaults are used (see above).
+            base_ub (`numpy.ndarray`_, optional):
+                The upper bounds for the "base" parameters: x0, y0, pa, inc,
+                vsys. If None, the defaults are used (see above).
         """
-        minx = np.amin(self.x)
-        maxx = np.amax(self.x)
-        miny = np.amin(self.y)
-        maxy = np.amax(self.y)
-        maxr = np.sqrt(max(abs(minx), maxx)**2 + max(abs(miny), maxy)**2)
+        if base_lb is not None and len(base_lb) != self.nbp:
+            raise ValueError('Incorrect number of lower bounds for the base '
+                             f'parameters; found {len(base_lb)}, expected {self.nbp}.')
+        if base_ub is not None and len(base_ub) != self.nbp:
+            raise ValueError('Incorrect number of upper bounds for the base '
+                             f'parameters; found {len(base_ub)}, expected {self.nbp}.')
+
+        if (base_lb is None or base_ub is None) and (self.x is None or self.y is None):
+            raise ValueError('Cannot define limits on center.  Provide base_lb,base_ub or set '
+                             'the evaluation grid coordinates (attributes x and y).')
+
+        if base_lb is None:
+            minx = np.amin(self.x)
+            miny = np.amin(self.y)
+            base_lb = np.array([minx, miny, -350., 0., -300.])
+        if base_ub is None:
+            maxx = np.amax(self.x)
+            maxy = np.amax(self.y)
+            base_ub = np.array([maxx, maxy, 350., 89., 300.])
         # Minimum and maximum allowed values for xc, yc, pa, inc, vsys, vrot, hrot
-        lb = np.concatenate(([minx, miny, -350., 0., -300.], self.rc.lb))
-        ub = np.concatenate(([maxx, maxy, 350., 89., 300.], self.rc.ub))
+        lb = np.concatenate((base_lb, self.rc.lb))
+        ub = np.concatenate((base_ub, self.rc.ub))
         return (lb, ub) if self.dc is None \
                     else (np.append(lb, self.dc.lb), np.append(ub, self.dc.ub))
 
@@ -295,7 +338,7 @@ class AxisymmetricDisk:
     def _s_chisqr_covar(self, model_sig):
         return np.dot(self._s_resid(model_sig), self._s_ucov)
 
-    def _resid(self, par):
+    def _resid(self, par, sep=False):
         """
         Calculate the residuals between the data and the current model.
 
@@ -304,6 +347,9 @@ class AxisymmetricDisk:
                 The list of parameters to use. Length should be either
                 :attr:`np` or :attr:`nfree`. If the latter, the values of the
                 fixed parameters in :attr:`par` are used.
+            sep (:obj:`bool`, optional):
+                Return separate vectors for the velocity and velocity
+                dispersion residuals, instead of appending them.
 
         Returns:
             `numpy.ndarray`_: Difference between the data and the model for
@@ -312,10 +358,11 @@ class AxisymmetricDisk:
         self._set_par(par)
         vel, sig = (self.kin.bin(self.model()), None) if self.dc is None \
                         else map(lambda x : self.kin.bin(x), self.model())
-        return self._v_resid(vel) if self.dc is None \
-                    else np.append(self._v_resid(vel), self._s_resid(sig))
+        vfom = self._v_resid(vel)
+        sfom = numpy.array([]) if self.dc is None else self._s_resid(sig)
+        return (vfom, sfom) if sep else np.append(vfom, sfom)
 
-    def _chisqr(self, par):
+    def _chisqr(self, par, sep=False):
         """
         Calculate the error-normalized residual (close to the signed
         chi-square metric) between the data and the current model.
@@ -325,6 +372,9 @@ class AxisymmetricDisk:
                 The list of parameters to use. Length should be either
                 :attr:`np` or :attr:`nfree`. If the latter, the values of the
                 fixed parameters in :attr:`par` are used.
+            sep (:obj:`bool`, optional):
+                Return separate vectors for the velocity and velocity
+                dispersion residuals, instead of appending them.
 
         Returns:
             `numpy.ndarray`_: Difference between the data and the model for
@@ -334,11 +384,12 @@ class AxisymmetricDisk:
         vel, sig = (self.kin.bin(self.model()), None) if self.dc is None \
                         else map(lambda x : self.kin.bin(x), self.model())
         if self.has_covar:
-            return self._v_chisqr_covar(vel) if self.dc is None \
-                    else np.append(self._v_chisqr_covar(vel), self._s_chisqr_covar(sig))
+            vfom = self._v_chisqr_covar(vel)
+            sfom = numpy.array([]) if self.dc is None else self._s_chisqr_covar(sig)
         else:
-            return self._v_chisqr(vel) if self.dc is None \
-                    else np.append(self._v_chisqr(vel), self._s_chisqr(sig))
+            vfom = self._v_chisqr(vel)
+            sfom = numpy.array([]) if self.dc is None else self._s_chisqr(sig)
+        return (vfom, sfom) if sep else np.append(vfom, sfom)
 
     def _fit_prep(self, kin, p0, fix, scatter, sb_wgt, assume_posdef_covar, ignore_covar):
         """
@@ -381,6 +432,10 @@ class AxisymmetricDisk:
         self.beam_fft = self.kin.beam_fft
         self.vel_gpm = np.logical_not(self.kin.vel_mask)
         self.sig_gpm = None if self.dc is None else np.logical_not(self.kin.sig_mask)
+
+#        print(f'N good vel: {np.sum(self.vel_gpm)}')
+#        if self.sig_gpm is not None:
+#            print(f'N good sig: {np.sum(self.sig_gpm)}')
 
         # Determine which errors were provided
         self.has_err = self.kin.vel_ivar is not None if self.dc is None \
@@ -465,10 +520,15 @@ class AxisymmetricDisk:
             self._v_ucov = None
             self._s_ucov = None
 
+    def _get_fom(self):
+        """
+        Return the figure-of-merit function to use given the availability of
+        errors.
+        """
         return self._chisqr if self.has_err or self.has_covar else self._resid
 
-    def lsq_fit(self, kin, sb_wgt=False, p0=None, fix=None, scatter=None, verbose=0,
-                assume_posdef_covar=False, ignore_covar=True):
+    def lsq_fit(self, kin, sb_wgt=False, p0=None, fix=None, lb=None, ub=None, scatter=None,
+                verbose=0, assume_posdef_covar=False, ignore_covar=True):
         """
         Use `scipy.optimize.least_squares`_ to fit the model to the provided
         kinematics.
@@ -490,6 +550,16 @@ class AxisymmetricDisk:
             fix (`numpy.ndarray`_, optional):
                 A boolean array selecting the parameters that should be fixed
                 during the model fit.
+            lb (`numpy.ndarray`_, optional):
+                The lower bounds for the parameters. If None, the defaults
+                are used (see :func:`par_bounds`). The length of the vector
+                must match the total number of parameters, even if some of
+                the parameters are fixed.
+            ub (`numpy.ndarray`_, optional):
+                The upper bounds for the parameters. If None, the defaults
+                are used (see :func:`par_bounds`). The length of the vector
+                must match the total number of parameters, even if some of
+                the parameters are fixed.
             scatter (:obj:`float`, `numpy.ndarray`_, optional):
                 Introduce a fixed intrinsic-scatter term into the model. This
                 single value per kinematic moment (v, sigma) is added in
@@ -508,11 +578,18 @@ class AxisymmetricDisk:
                 covariance matrices, ignore them and just use the inverse
                 variance.
         """
-        # Prepare to fit the data; the returned object is the callable function
-        # used to generate the figure-of-merit.
-        fom = self._fit_prep(kin, p0, fix, scatter, sb_wgt, assume_posdef_covar, ignore_covar)
+        # Prepare to fit the data.
+        self._fit_prep(kin, p0, fix, scatter, sb_wgt, assume_posdef_covar, ignore_covar)
+        # Get the method used to generate the figure-of-merit.
+        fom = self._get_fom()
         # Parameter boundaries
-        lb, ub = self.par_bounds()
+        _lb, _ub = self.par_bounds()
+        if lb is None:
+            lb = _lb
+        if ub is None:
+            ub = _ub
+        if len(lb) != self.np or len(ub) != self.np:
+            raise ValueError('Length of one or both of the bound vectors is incorrect.')
         # This means the derivative of the merit function wrt each parameter is
         # determined by a 1% change in each parameter.
         diff_step = np.full(self.np, 0.01, dtype=float)
@@ -530,5 +607,60 @@ class AxisymmetricDisk:
         except:
             warnings.warn('Unable to compute parameter errors from precision matrix.')
             self.par_err = None
+
+        # Always show the report, regardless of verbosity
+        self.report()
+
+    def report(self):
+        """
+        Report the current parameters of the model.
+        """
+        if self.par is None:
+            print('No parameters to report.')
+            return
+
+        vfom, sfom = self._get_fom()(self.par, sep=True)
+
+        print('-'*50)
+        print('-'*50)
+        print(f'Base parameters:')
+        print(f'                    x0: {self.par[0]:.1f}' 
+                + (f'' if self.par_err is None else f' +/- {self.par_err[0]:.1f}'))
+        print(f'                    y0: {self.par[1]:.1f}' 
+                + (f'' if self.par_err is None else f' +/- {self.par_err[1]:.1f}'))
+        print(f'        Position angle: {self.par[2]:.1f}' 
+                + (f'' if self.par_err is None else f' +/- {self.par_err[2]:.1f}'))
+        print(f'           Inclination: {self.par[3]:.1f}' 
+                + (f'' if self.par_err is None else f' +/- {self.par_err[3]:.1f}'))
+        print(f'     Systemic Velocity: {self.par[4]:.1f}' 
+                + (f'' if self.par_err is None else f' +/- {self.par_err[4]:.1f}'))
+        rcp = self.rc_par()
+        rcpe = self.rc_par(err=True)
+        print(f'Rotation curve parameters:')
+        for i in range(len(rcp)):
+            print(f'                Par {i+1:02}: {rcp[i]:.1f}'
+                  + (f'' if rcpe is None else f' +/- {rcpe[i]:.1f}'))
+        if self.scatter is not None:
+            print(f'Intrinsic Velocity Scatter: {self.scatter[0]:.1f}')
+        vchisqr = np.sum(vfom**2)
+        print(f'Velocity measurements: {len(vfom)}')
+        print(f'Velocity chi-square: {vchisqr}')
+        if self.dc is None:
+            print(f'Reduced chi-square: {vchisqr/(len(vfom)-self.nfree)}')
+            print('-'*50)
+            return
+        dcp = self.dc_par()
+        dcpe = self.dc_par(err=True)
+        print(f'Dispersion profile parameters:')
+        for i in range(len(dcp)):
+            print(f'                Par {i+1:02}: {dcp[i]:.1f}'
+                  + (f'' if dcpe is None else f' +/- {dcpe[i]:.1f}'))
+        if self.scatter is not None:
+            print(f'Intrinsic Dispersion**2 Scatter: {self.scatter[1]:.1f}')
+        schisqr = np.sum(sfom**2)
+        print(f'Dispersion measurements: {len(sfom)}')
+        print(f'Dispersion chi-square: {schisqr}')
+        print(f'Reduced chi-square: {(vchisqr + schisqr)/(len(vfom) + len(sfom) - self.nfree)}')
+        print('-'*50)
 
 

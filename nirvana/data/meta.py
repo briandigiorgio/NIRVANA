@@ -7,6 +7,7 @@ from IPython import embed
 import numpy as np
 
 import astropy.units
+from astropy.io import fits
 from astropy.cosmology import FlatLambdaCDM
 
 from ..models.geometry import projected_polar
@@ -236,6 +237,5 @@ class GlobalPar:
         H0 = 100 * astropy.units.km / astropy.units.s / astropy.units.Mpc
         cosmo = FlatLambdaCDM(H0=H0, Om0=0.3)
         return np.radians(1/3600) * 1e3 * cosmo.angular_diameter_distance(self.z).value
-
 
 

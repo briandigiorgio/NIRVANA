@@ -8,4 +8,7 @@ matplotlib>=3.2.1
 corner>=2.1
 dynesty>=1.0
 pydl>=0.7.0
+tqdm>=4.57
+requests>=2.25
+
 

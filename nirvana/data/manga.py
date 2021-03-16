@@ -22,6 +22,7 @@ from scipy import sparse
 import matplotlib.image as img
 
 from astropy.io import fits
+from astropy.wcs import WCS
 #try:
 #    from marvin.tools import Cube
 #    from marvin import config
@@ -616,6 +617,7 @@ class MaNGAGasKinematics(MaNGAKinematics):
         # Get the PSF, if possible
         psf, fwhm = (None, None) if cube_file is None \
                         else read_manga_psf(cube_file, psf_ext, fwhm=True)
+        psf_name = None if cube_file is None else psf_ext
         # Get the 3-color galaxy thumbnail image
         image = None if image_file is None else img.imread(image_file)
 
@@ -675,6 +677,9 @@ class MaNGAGasKinematics(MaNGAKinematics):
                 sig_mask = bitmask.flagged(hdu['EMLINE_GSIGMA_MASK'].data[eml[line]],
                                            flag=mask_flags)
 
+            # Get the WCS from a single-channel extension
+            wcs = WCS(header=hdu['SPX_MFLUX'].header)
+
         if not quiet:
             print('Done')
 
@@ -695,8 +700,8 @@ class MaNGAGasKinematics(MaNGAKinematics):
         super().__init__(vel, vel_ivar=vel_ivar, vel_mask=vel_mask, vel_covar=vel_covar, x=x, y=y, 
                          sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sb_covar=sb_covar, sb_anr=sb_anr,
                          sig=sig, sig_ivar=sig_ivar, sig_mask=sig_mask, sig_covar=sig_covar,
-                         sig_corr=sig_corr, psf=psf, binid=binid, grid_x=grid_x, 
-                         grid_y=grid_y, reff=reff , fwhm=fwhm, image=image, 
+                         sig_corr=sig_corr, psf_name=psf_name, psf=psf, binid=binid, grid_x=grid_x, 
+                         grid_y=grid_y, grid_wcs=wcs, reff=reff , fwhm=fwhm, image=image, 
                          phot_inc=phot_inc, maxr=maxr, positive_definite=positive_definite)
 
 
@@ -736,6 +741,7 @@ class MaNGAStellarKinematics(MaNGAKinematics):
         # Get the PSF, if possible
         psf, fwhm = (None,None) if cube_file is None \
                         else read_manga_psf(cube_file, psf_ext, fwhm=True)
+        psf_name = None if cube_file is None else psf_ext
         image = img.imread(image_file) if image_file else None
 
         # Establish whether or not the stellar kinematics were
@@ -785,6 +791,9 @@ class MaNGAStellarKinematics(MaNGAKinematics):
                 vel_mask = bitmask.flagged(hdu['STELLAR_VEL_MASK'].data, flag=mask_flags)
                 sig_mask = bitmask.flagged(hdu['STELLAR_SIGMA_MASK'].data, flag=mask_flags)
 
+            # Get the WCS from a single-channel extension
+            wcs = WCS(header=hdu['SPX_MFLUX'].header)
+
         if not quiet:
             print('Done')
 
@@ -805,8 +814,8 @@ class MaNGAStellarKinematics(MaNGAKinematics):
         super().__init__(vel, vel_ivar=vel_ivar, vel_mask=vel_mask, vel_covar=vel_covar, x=x, y=y,
                          sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sb_covar=sb_covar, sig=sig, 
                          sig_ivar=sig_ivar, sig_mask=sig_mask, sig_covar=sig_covar,
-                         sig_corr=sig_corr, psf=psf, binid=binid, grid_x=grid_x, 
-                         grid_y=grid_y, reff=reff, fwhm=fwhm, image=image,
+                         sig_corr=sig_corr, psf_name=psf_name, psf=psf, binid=binid, grid_x=grid_x, 
+                         grid_y=grid_y, grid_wcs=wcs, reff=reff, fwhm=fwhm, image=image,
                          phot_inc=phot_inc, maxr=maxr, positive_definite=positive_definite)
 
 
@@ -868,6 +877,7 @@ class MaNGAGlobalPar(GlobalPar):
                          sersic_n=drpall['nsa_sersic_n'][indx], **kwargs)
 
         # Save MaNGA-specific attributes
+        self.dr = 'unknown' if dr is None else dr
         self.mangaid = drpall['mangaid'][indx]
         self.plate = plate
         self.ifu = ifu

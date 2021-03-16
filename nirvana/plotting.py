@@ -27,7 +27,17 @@ from .models.beam import smear, ConvolveFFTW
 from .models.geometry import projected_polar
 
 
-logformatter = ticker.FuncFormatter(lambda y,pos: ('{{:.{:1d}f}}'.format(
+def get_logformatter():
+    """
+    Return a matplotlib label formatter that uses decimals instead of exponentials.
+
+    This is a hack that I pulled off of stackoverflow (since lost the url).
+    It breaks some imshow things, I think. Probably better to get this
+    functionality by subclassing from ticker.LogFormatter...
+    """
+    # TODO: Introduce an upper/lower limit to switch back to exponential form ;
+    # i.e., make label go something like 10^4, 1000, ..., 0.01, 0.001, 10^{-4}
+    return ticker.FuncFormatter(lambda y,pos: ('{{:.{:1d}f}}'.format(
                                         int(np.maximum(-np.log10(y),0)))).format(y))
 
 

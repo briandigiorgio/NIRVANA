@@ -59,7 +59,7 @@ class IntrinsicScatter:
             raise ValueError('Covariance array must have shape ({0},{0}).'.format(self.size))
         if isinstance(self.covar, sparse.csr_matrix):
             self.covar = self.covar.toarray()
-        self.gpm = np.ones(self.size, dtype=bool) if gpm is None else gpm
+        self.gpm = np.ones(self.size, dtype=bool) if gpm is None else gpm.copy()
         if self.gpm.size != self.size:
             raise ValueError('Size of the good-pixel mask must match the residual array.')
         self.inp_gpm = self.gpm.copy()
@@ -307,8 +307,7 @@ class IntrinsicScatter:
 #        pyplot.xscale('log')
 #        pyplot.show()
 
-
-    def show(self, sig=None, rej=None, gpm=None, ofile=None):
+    def show(self, sig=None, rej=None, gpm=None, ofile=None, title=None):
         """
         """
         # Save the current gpm so that the method doesn't change it.
@@ -338,16 +337,19 @@ class IntrinsicScatter:
         mean_enres = np.mean(enres)
         sigma_enres = np.std(enres)
         nrej = np.sum(_rej)
+        ntot = np.sum(self.inp_gpm)
+
+        logformatter = plotting.get_logformatter()
 
         w,h = pyplot.figaspect(1)
         fig = pyplot.figure(figsize=(2*w,h))
 
         ax = plotting.init_ax(fig, [0.03, 0.1, 0.45, 0.87])
         by, bx, _ = ax.hist(enres_def, bins=100, range=rng_def, density=True, color='k', lw=0,
-                            alpha=0.3, zorder=4)
+                            alpha=0.3, zorder=4, histtype='stepfilled')
         maxy = np.amax(by)
         by, bx, _ = ax.hist(enres, bins=100, range=rng_def, density=True, color='k', lw=0,
-                            alpha=0.6, zorder=5)
+                            alpha=0.6, zorder=5, histtype='stepfilled')
         maxy = max(maxy, np.amax(by))
         bc = bx[:-1]+np.diff(bx)/2
         ax.step(bc, util.pixelated_gaussian(bc, density=True), where='mid', color='C3',
@@ -358,11 +360,14 @@ class IntrinsicScatter:
         ax.text(0.5, -0.07, r'$\Delta/\epsilon$', ha='center', va='center',
                 transform=ax.transAxes)
 
+        if title is not None:
+            ax.text(0.02, 0.96, title, ha='left', va='center', transform=ax.transAxes, fontsize=12)
+
         ax = plotting.init_ax(fig, [0.54, 0.1, 0.45, 0.87])
         ax.set_xlim([0., rng[1]])
         ax.set_ylim([0.9*2*(1 - stats.norm.cdf(rng[1])), 1.05])
         ax.set_yscale('log')
-        ax.yaxis.set_major_formatter(plotting.logformatter)
+        ax.yaxis.set_major_formatter(logformatter)
         plotting.rotate_y_ticks(ax, 90., 'center')
         abs_enres_def = np.absolute(enres_def)
         srt = np.argsort(abs_enres_def)
@@ -384,10 +389,14 @@ class IntrinsicScatter:
         ax.axhline(y=1-0.9544, color='0.5', linestyle='--', zorder=3)
         ax.axhline(y=1-0.9973, color='0.5', linestyle='--', zorder=3)
 
-        ax.add_patch(patches.Rectangle((0.03,0.02), 0.29, 0.46, facecolor='w', lw=0,
+        ax.add_patch(patches.Rectangle((0.03,0.02), 0.29, 0.50, facecolor='w', lw=0,
                                        edgecolor='none', zorder=7, alpha=0.7,
                                        transform=ax.transAxes))
 
+        ax.text(0.04, 0.49, r'$N_{\rm tot}$:', ha='left', va='center',
+                transform=ax.transAxes, zorder=8)
+        ax.text(0.31, 0.49, f'{ntot}', ha='right',
+                va='center', transform=ax.transAxes, zorder=8)
         ax.text(0.04, 0.45, r'$N_{\rm rej}$:', ha='left', va='center',
                 transform=ax.transAxes, zorder=8)
         ax.text(0.31, 0.45, f'{nrej}', ha='right',
@@ -430,7 +439,6 @@ class IntrinsicScatter:
                 va='center', transform=ax.transAxes, zorder=8)
         ax.text(0.31, 0.05, '{0:.0f}'.format(fom(self._x)), ha='right',
                 va='center', transform=ax.transAxes, zorder=8)
-        
 
         if ofile is not None:
             fig.canvas.print_figure(ofile, bbox_inches='tight')

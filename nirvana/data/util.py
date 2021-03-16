@@ -57,6 +57,14 @@ def get_map_bin_transformations(spatial_shape=None, binid=None):
         :math:`(N_{\rm bin},)`. If ``binid`` is not provided, this is
         returned as None.
 
+    nbin : `numpy.ndarray`_
+        1D vector with the number of spaxels in each bin. Shape is
+        :math:`(N_{\rm bin},)`. If ``binid`` is not provided, this is just a
+        vector of ones. The number of bins can also be determined from the
+        returned ``bin_transform`` array::
+
+            assert np.array_equal(nbin, np.squeeze(np.asarray(np.sum(bin_transform > 0, axis=1)))))
+
     ubin_indx : `numpy.ndarray`_
         The index vector used to select the unique bin values from a
         flattened map of binned data, *excluding* any element with ``binid ==
@@ -98,13 +106,15 @@ def get_map_bin_transformations(spatial_shape=None, binid=None):
         raise ValueError('Must provide spatial_shape or binid')
     _spatial_shape = spatial_shape if binid is None else binid.shape
 
-    grid_indx = np.arange(np.prod(_spatial_shape), dtype=int)
+    nspax = np.prod(_spatial_shape)
+    grid_indx = np.arange(nspax, dtype=int)
     if binid is None:
         # All bins are valid and considered unique
         bin_transform = sparse.coo_matrix((np.ones(np.prod(spatial_shape), dtype=float),
                                            (grid_indx,grid_indx)),
                                           shape=(np.prod(spatial_shape),)*2).tocsr()
-        return None, grid_indx.copy(), grid_indx, grid_indx.copy(), bin_transform
+        return None, np.ones(nspax, dtype=int), grid_indx.copy(), grid_indx, grid_indx.copy(), \
+                bin_transform
 
     # Get the indices of measurements with unique bin IDs, ignoring any
     # IDs set to -1
@@ -129,7 +139,7 @@ def get_map_bin_transformations(spatial_shape=None, binid=None):
     bin_transform = sparse.coo_matrix((d,(i.astype(int),j.astype(int))),
                                       shape=(ubinid.size, np.prod(_spatial_shape))).tocsr()
 
-    return ubinid, ubin_indx, grid_indx, bin_inverse, bin_transform
+    return ubinid, nbin, ubin_indx, grid_indx, bin_inverse, bin_transform
 
 
 def impose_positive_definite(mat, min_eigenvalue=1e-10, renormalize=True):
@@ -726,7 +736,16 @@ def atleast_one_decade(lim):
     fd = np.ceil(lglim[1]) - lglim[1]
     w = lglim[1] - m
     dw = ld*1.01 if ld < fd else fd*1.01
-    return atleast_one_decade((10**np.array([m - w - dw, m + w + dw])).tolist())
+    _lglim = np.array([m - w - dw, m + w + dw])
+
+    # TODO: The next few lines are a hack to avoid making the upper limit to
+    # large. E.g., when lim = [ 74 146], the output is [11 1020]. This pushes
+    # the middle of the range to lower values.
+    dl = np.diff(_lglim)[0]
+    if dl > 1 and dl > 3*np.diff(lglim)[0]:
+        return atleast_one_decade([lim[0]/3,lim[1]])
+
+    return atleast_one_decade((10**_lglim).tolist())
     
 
 def pixelated_gaussian(x, c=0.0, s=1.0, density=False):

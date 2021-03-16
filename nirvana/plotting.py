@@ -248,14 +248,14 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
         raise ValueError('Dynesty output array has a bad shape.')
     else: nbins = int(nbins)
 
-    if 'bin_edges' in resdict: args.edges = resdict['bin_edges'][~resdict['velmask']]
-    else: args.setedges(nbins - 1 + args.fixcent, nbin=True, maxr=maxr)
-
     if not isfits:
+        args.setedges(nbins - 1 + args.fixcent, nbin=True, maxr=maxr)
         resdict = profs(chains, args, stds=True)
         resdict['plate'] = plate
         resdict['ifu'] = ifu
         resdict['type'] = 'Stars' if stellar else 'Gas'
+    else:
+        args.edges = resdict['bin_edges'][~resdict['velmask']]
 
     return args, resdict, chains, meds
 

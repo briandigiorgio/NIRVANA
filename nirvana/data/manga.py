@@ -658,8 +658,9 @@ class MaNGAGasKinematics(MaNGAKinematics):
             pri, sec, anc, oth = parse_manga_targeting_bits(hdu[0].header['MNGTARG1'], hdu[0].header['MNGTARG3'])
             maxr = 2.5 if sec else 1.5
 
-            vel_ivar = 1/(1/vel_ivar + 5**2)
-            sig_ivar = 1/(1/sig_ivar + 5**2)
+            # TODO: Need to make this an option
+            #vel_ivar = 1/(1/vel_ivar + 5**2)
+            #sig_ivar = 1/(1/sig_ivar + 5**2)
 
             # Get the masks
             if mask_flags is None:
@@ -780,8 +781,9 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             pri, sec, anc, oth = parse_manga_targeting_bits(hdu[0].header['MNGTARG1'], hdu[0].header['MNGTARG3'])
             maxr = 2.5 if sec else 1.5
 
-            vel_ivar = 1/(1/vel_ivar + 5**2)
-            sig_ivar = 1/(1/sig_ivar + 5**2)
+            # TODO: Need to make this an option
+            #vel_ivar = 1/(1/vel_ivar + 5**2)
+            #sig_ivar = 1/(1/sig_ivar + 5**2)
 
             # Get the masks
             if mask_flags is None:

@@ -1191,6 +1191,7 @@ def parse_args(options=None):
     parser.add_argument('--max_sig_err', default=None, type=float,
                         help='Maximum velocity dispersion error to include in fit '
                              '(ignored if dispersion not being fit).')
+    parser.add_argument('--screen', dest='screen', action='store_true', default=False) 
 
     # TODO: Other options:
     #   - Fit with least-squares vs. dynesty
@@ -1202,6 +1203,10 @@ def parse_args(options=None):
 
 
 def main(args):
+
+    # Running the script behind a screen, so switch the matplotlib backend
+    if args.screen:
+        pyplot.switch_backend('agg')
 
     #---------------------------------------------------------------------------
     # Setup
@@ -1482,6 +1487,7 @@ def main(args):
     axisym_fit_plot(galmeta, kin, disk, fix=fix, ofile=fit_plot)
 
     # Write the output file
-    axisym_fit_data(galmeta, kin, p0, disk, f'{oroot}-fit.fits.gz', vel_mask, sig_mask)
+    data_file = os.path.join(args.odir, f'{oroot}.fits.gz')
+    axisym_fit_data(galmeta, kin, p0, disk, data_file, vel_mask, sig_mask)
 
 

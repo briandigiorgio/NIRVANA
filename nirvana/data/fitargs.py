@@ -95,7 +95,7 @@ class FitArgs:
         #clip outer bins that have too many masked spaxels
         if clipmasked:
             guess = self.getguess(simple=True)
-            r,th = projected_polar(self.x, self.y, *np.radians(guess[2], inc))
+            r,th = projected_polar(self.x, self.y, *np.radians((guess[2], inc)))
             r /= self.reff
             mr = np.ma.array(r, mask=self.vel_mask)
 

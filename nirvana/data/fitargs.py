@@ -221,7 +221,8 @@ class FitArgs:
         #prior bounds defined based off of guess
         bounds = np.zeros((ndim, 2))
         bounds[0] = (max(inc - incpad, 5), min(inc + incpad, 85))
-        bounds[1] = (max(theta0[1] - papad, 0), min(theta0[1] + papad, 360))
+        bounds[1] = (theta0[1] - papad, theta0[1] + papad)
+        if bounds[1][0] < 0 or bounds[1][1] > 360: bounds[1] = (0,360)
         bounds[2] = (0, 180)
         bounds[3] = (theta0[3] - vsyspad, theta0[3] + vsyspad)
         if self.nglobs == 6:

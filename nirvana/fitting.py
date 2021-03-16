@@ -336,8 +336,8 @@ def ptform(params, args, bounds=None, gaussprior=False):
             xcp = stats.norm.ppf(paramdict['xc'], guessdict['xc'], 5)
             ycp = stats.norm.ppf(paramdict['yc'], guessdict['yc'], 5)
         else:
-            xcp = (2*paramdict['xc'] - 1) * 10
-            ycp = (2*paramdict['yc'] - 1) * 10
+            xcp = (2*paramdict['xc'] - 1) * bounddict['xc']
+            ycp = (2*paramdict['yc'] - 1) * bounddict['yc']
         repack += [xcp,ycp]
 
     #repack all the velocities
@@ -351,7 +351,8 @@ def loglike(params, args, squared=False):
     Log likelihood for :class:`dynesty.NestedSampler` fit. 
     
     Makes a model based on current parameters and computes a chi squared with
-    the original data.
+    tht
+    original data.
 
     Args:
         params (:obj:`tuple`):
@@ -407,8 +408,8 @@ def loglike(params, args, squared=False):
         if sigdataivar is not None: 
             siglike = siglike * sigdataivar - .5 * np.log(2*np.pi * sigdataivar)
         llike -= .5*np.ma.sum(siglike)
-        #if args.weight != -1:
-        #    llike -= smoothing(paramdict['sig'], args.weight)
+        if args.weight != -1:
+            llike -= smoothing(paramdict['sig'], args.weight*.1)
 
     return llike
 

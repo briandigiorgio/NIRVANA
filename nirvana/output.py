@@ -15,7 +15,7 @@ from .fitting import bisym_model
 from .models.axisym import AxisymmetricDisk
 from .models.geometry import projected_polar
 
-def extractfile(f, remotedir=None):
+def extractfile(f, remotedir=None, gal=None):
     try: 
         #get info out of each file and make bisym model
         args, resdict, chains, meds = fileprep(f, remotedir=remotedir)
@@ -137,7 +137,7 @@ def imagefits(f, gal=None, outfile=None, padding=20, remotedir=None, outdir=''):
     '''
 
     #get relevant data
-    args, arc, asymmap, resdict = extractfile(f, remotedir=remotedir)
+    args, arc, asymmap, resdict = extractfile(f, remotedir=remotedir, gal=gal)
     if gal is not None: args = gal
     resdict['bin_edges'] = np.array(args.edges)
     data = dictformatting(resdict, padding=padding)

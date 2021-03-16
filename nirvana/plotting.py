@@ -157,7 +157,7 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
 
     return paramdict
 
-def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, fixcent=True, clip=True, remotedir=None):
+def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, fixcent=True, clip=True, remotedir=None, gal=None):
 
     #unpack fits file
     if type(f) == str and '.fits' in f:
@@ -175,11 +175,13 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
         for s in ['sig','sigl','sigu']:
             resdict[s] = resdict[s][resdict['sigmask'] == 0]
 
-        if resdict['type'] == 'Stars':
-            args = MaNGAStellarKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir)
+        if gal is None:
+            if resdict['type'] == 'Stars':
+                args = MaNGAStellarKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir)
+            else:
+                args = MaNGAGasKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir)
         else:
-            args = MaNGAGasKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir)
-
+            args = gal
 
         chains = None
         fill = len(resdict['velmask'])
@@ -245,7 +247,9 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
     if not nbins.is_integer(): 
         raise ValueError('Dynesty output array has a bad shape.')
     else: nbins = int(nbins)
-    args.setedges(nbins - 1 + args.fixcent, nbin=True, maxr=maxr)
+
+    if 'bin_edges' in resdict: args.edges = resdict['bin_edges'][~resdict['velmask']]
+    else: args.setedges(nbins - 1 + args.fixcent, nbin=True, maxr=maxr)
 
     if not isfits:
         resdict = profs(chains, args, stds=True)

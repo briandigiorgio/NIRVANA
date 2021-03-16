@@ -11,6 +11,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable as mal
 import re
 import os
 import traceback
+import multiprocessing as mp
 
 import dynesty
 import dynesty.plotting
@@ -222,6 +223,9 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
             args.vel = args.bin(smeared[1])
             args.sig = args.bin(smeared[2])
             args.fwhm  = 2.44
+
+        elif gal is not None:
+            args = gal
 
         #load in MaNGA data
         else:
@@ -661,6 +665,14 @@ def sinewave(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
         plt.xlabel('Azimuth (deg)')
         plt.tight_layout()
 
+def saferun(func):
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception:
+            print(traceback.format_exc())
+
+
 def plotdir(directory=None, fname=None, **kwargs):
     '''
     Make summaryplots of an entire directory of output files.
@@ -682,9 +694,11 @@ def plotdir(directory=None, fname=None, **kwargs):
     fs = glob(directory+fname)
     if len(fs) == 0: raise FileNotFoundError('No files found')
     else: print(len(fs), 'files found')
-    for i in tqdm(range(len(fs))):
-        try:
-            summaryplot(fs[i], save=True, **kwargs)
-        except Exception:
-            print(fs[i], 'failed')
-            print(traceback.format_exc())
+    with mp.Pool(cores) as p:
+        p.map(saferun(summaryplot, save=True, **kwargs), fs)
+    #for i in tqdm(range(len(fs))):
+        #try:
+        #    summaryplot(fs[i], save=True, **kwargs)
+        #except Exception:
+        #    print(fs[i], 'failed')
+        #    print(traceback.format_exc())

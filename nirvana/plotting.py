@@ -12,6 +12,7 @@ import re
 import os
 import traceback
 import multiprocessing as mp
+from functools import partial
 
 import dynesty
 import dynesty.plotting
@@ -665,15 +666,14 @@ def sinewave(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
         plt.xlabel('Azimuth (deg)')
         plt.tight_layout()
 
-def saferun(func):
-    def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except Exception:
-            print(traceback.format_exc())
+def safeplot(f, **kwargs):
+    try:
+        summaryplot(f, save=True, **kwargs)
+    except Exception:
+        print(f, 'failed')
+        print(traceback.format_exc())
 
-
-def plotdir(directory=None, fname=None, **kwargs):
+def plotdir(directory=None, fname=None, cores=20, **kwargs):
     '''
     Make summaryplots of an entire directory of output files.
 
@@ -695,10 +695,4 @@ def plotdir(directory=None, fname=None, **kwargs):
     if len(fs) == 0: raise FileNotFoundError('No files found')
     else: print(len(fs), 'files found')
     with mp.Pool(cores) as p:
-        p.map(saferun(summaryplot, save=True, **kwargs), fs)
-    #for i in tqdm(range(len(fs))):
-        #try:
-        #    summaryplot(fs[i], save=True, **kwargs)
-        #except Exception:
-        #    print(fs[i], 'failed')
-        #    print(traceback.format_exc())
+        p.map(safeplot, fs)

@@ -123,10 +123,4 @@ def test_meta():
     drpall_file = remote_data_file(f'drpall-{drp_test_version}.fits')
     meta = data.manga.MaNGAGlobalPar(8138, 12704, drpall_file=drpall_file)
 
-#    embed()
-#    exit()
-#
-#if __name__ == '__main__':
-#    test_meta()
-
 

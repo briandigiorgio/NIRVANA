@@ -1,5 +1,5 @@
 """
-Plotting for nirvana outputs.
+Plotting utilities.
 
 .. include:: ../include/links.rst
 """

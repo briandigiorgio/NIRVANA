@@ -346,6 +346,11 @@ def ptform(params, args, bounds=None, gaussprior=False):
     if args.mix:  repack += [Qp, Mp, lnVp]
     return repack
 
+# TODO: I would add the scatter terms to `args` and either define a new
+# attribute in `args` that includes the inflatted errors, or just inflate the
+# errors in the calculation of the likelihood. It's not a bad idea to the
+# latter, because ideally we would be fitting the scatter as a model
+# parameter, and doing the calculation here is a step in that direction.
 def loglike(params, args, squared=False):
     '''
     Log likelihood for :class:`dynesty.NestedSampler` fit. 

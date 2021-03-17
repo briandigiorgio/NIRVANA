@@ -27,6 +27,7 @@ from .data.kinematics import Kinematics
 from .models.beam import smear, ConvolveFFTW
 from .models.geometry import projected_polar
 
+
 def dynmeds(samp, stds=False, fixcent=True):
     """
     Get median values for each variable's posterior in a

@@ -68,7 +68,7 @@ def projected_polar(x, y, pa, inc):
         :obj:`tuple`: Returns two arrays with the projected radius
         and in-plane azimuth. The radius units are identical to the
         provided cartesian coordinates. The azimuth is in radians
-        over the range :math:`[0,2\pi]`.
+        over the range :math:`[0,2\pi)`.
     """
     xd, yd = rotate(x, y, np.pi/2-pa, clockwise=True)
     yd /= np.cos(inc)

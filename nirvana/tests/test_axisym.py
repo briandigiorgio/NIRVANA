@@ -9,7 +9,6 @@ from nirvana.tests.util import remote_data_file, requires_remote
 from nirvana.models.oned import HyperbolicTangent, Exponential
 from nirvana.models.axisym import AxisymmetricDisk
 from nirvana.models.beam import gauss2d_kernel
-from nirvana.data.scatter import IntrinsicScatter
 
 
 def test_disk():
@@ -45,9 +44,8 @@ def test_lsq_nopsf():
 
     assert numpy.all(numpy.absolute(disk.par[:2]) < 0.1), 'Center changed'
     assert 165. < disk.par[2] < 167., 'PA changed'
-    assert 53. < disk.par[3] < 54., 'Inclination changed'
-    assert 242. < disk.par[5] < 244., 'Projected rotation changed'
-
+    assert 53. < disk.par[3] < 55., 'Inclination changed'
+    assert 243. < disk.par[5] < 245., 'Projected rotation changed'
 
 @requires_remote
 def test_lsq_psf():
@@ -65,8 +63,8 @@ def test_lsq_psf():
 
     assert numpy.all(numpy.absolute(disk.par[:2]) < 0.1), 'Center changed'
     assert 165. < disk.par[2] < 167., 'PA changed'
-    assert 56. < disk.par[3] < 57., 'Inclination changed'
-    assert 251. < disk.par[5] < 254., 'Projected rotation changed'
+    assert 55. < disk.par[3] < 59., 'Inclination changed'
+    assert 252. < disk.par[5] < 255., 'Projected rotation changed'
 
 
 @requires_remote
@@ -87,9 +85,9 @@ def test_lsq_with_sig():
 
     assert numpy.all(numpy.absolute(disk.par[:2]) < 0.1), 'Center changed'
     assert 165. < disk.par[2] < 167., 'PA changed'
-    assert 56. < disk.par[3] < 58., 'Inclination changed'
+    assert 56. < disk.par[3] < 60., 'Inclination changed'
     assert 250. < disk.par[5] < 253., 'Projected rotation changed'
-    assert 28. < disk.par[7] < 30., 'Central velocity dispersion changed'
+    assert 27. < disk.par[7] < 37., 'Central velocity dispersion changed'
 
 
 @requires_remote
@@ -112,7 +110,7 @@ def test_lsq_with_covar():
     # Rejected based on error-weighted residuals, accounting for intrinsic scatter
     resid = kin.vel - kin.bin(disk.model())
     err = 1/numpy.sqrt(kin.vel_ivar)
-    scat = IntrinsicScatter(resid, err=err, gpm=disk.vel_gpm)
+    scat = data.scatter.IntrinsicScatter(resid, err=err, gpm=disk.vel_gpm)
     sig, rej, gpm = scat.iter_fit(fititer=5) #, verbose=2)
     # Check
     assert sig > 8., 'Different intrinsic scatter'
@@ -125,8 +123,8 @@ def test_lsq_with_covar():
                  assume_posdef_covar=True) #, verbose=2)
     # Reject
     resid = kin.vel - kin.bin(disk.model())
-    scat = IntrinsicScatter(resid, covar=kin.vel_covar, gpm=disk.vel_gpm,
-                            assume_posdef_covar=True)
+    scat = data.scatter.IntrinsicScatter(resid, covar=kin.vel_covar, gpm=disk.vel_gpm,
+                                         assume_posdef_covar=True)
     sig, rej, gpm = scat.iter_fit(fititer=5) #, verbose=2)
     # Check
     assert sig > 5., 'Different intrinsic scatter'

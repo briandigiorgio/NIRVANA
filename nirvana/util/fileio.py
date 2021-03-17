@@ -10,21 +10,15 @@ import sys
 import os
 import gzip
 import shutil
-import logging
-import warnings
 
 import numpy
 
-from scipy import sparse
-
-from astropy.wcs import WCS
 from astropy.io import fits
-import astropy.constants
 
+# For versioning
+import scipy
+import astropy
 from .. import __version__
-
-from .bitmask import BitMask
-
 
 def init_record_array(shape, dtype):
     r"""
@@ -113,8 +107,7 @@ def compress_file(ifile, overwrite=False):
             shutil.copyfileobj(f_in, f_out)
 
 
-def create_symlink(ofile, symlink_dir, relative_symlink=True, clobber=False, loggers=None,
-                   quiet=False):
+def create_symlink(ofile, symlink_dir, relative_symlink=True, clobber=False, quiet=False):
     """
     Create a symlink to the input file in the provided directory.  If
     relative_symlink is True (default), the path to the file is relative
@@ -135,11 +128,98 @@ def create_symlink(ofile, symlink_dir, relative_symlink=True, clobber=False, log
     # Set the relative path for the symlink, if requested
     olink_src = os.path.relpath(ofile, start=os.path.dirname(olink_dest)) \
                     if relative_symlink else ofile
-    if not quiet:
-        log_output(loggers, 1, logging.INFO, 'Creating symlink: {0}'.format(olink_dest))
 
     # Create the symlink
     os.symlink(olink_src, olink_dest)
+
+
+def initialize_primary_header(galmeta):
+    hdr = fits.Header()
+
+    hdr['MANGADR'] = (galmeta.dr, 'MaNGA Data Release')
+    hdr['MANGAID'] = (galmeta.mangaid, 'MaNGA ID number')
+    hdr['PLATEIFU'] = (f'{galmeta.plate}-{galmeta.ifu}', 'MaNGA observation plate and IFU')
+
+    # Add versioning
+    hdr['VERSPY'] = ('.'.join([ str(v) for v in sys.version_info[:3]]), 'Python version')
+    hdr['VERSNP'] = (numpy.__version__, 'Numpy version')
+    hdr['VERSSCI'] = (scipy.__version__, 'Scipy version')
+    hdr['VERSAST'] = (astropy.__version__, 'Astropy version')
+    hdr['VERSNIRV'] = (__version__, 'NIRVANA version')
+
+    return hdr
+
+
+def add_wcs(hdr, kin):
+    if kin.grid_wcs is None:
+        return hdr
+    return hdr + kin.grid_wcs.to_header()
+
+
+def finalize_header(hdr, ext, bunit=None, hduclas2='DATA', err=False, qual=False, bm=None,
+                    bit_type=None, prepend=True):
+
+    # Don't change the input header
+    _hdr = hdr.copy()
+
+    # Add the units
+    if bunit is not None:
+        _hdr['BUNIT'] = (bunit, 'Unit of pixel value')
+
+    # Add the common HDUCLASS keys
+    _hdr['HDUCLASS'] = ('SDSS', 'SDSS format class')
+    _hdr['HDUCLAS1'] = ('IMAGE', 'Data format')
+    if hduclas2 == 'DATA':
+        _hdr['HDUCLAS2'] = 'DATA'
+        if err:
+            _hdr['ERRDATA'] = (ext+'_IVAR' if prepend else 'IVAR',
+                                'Associated inv. variance extension')
+        if qual:
+            _hdr['QUALDATA'] = (ext+'_MASK' if prepend else 'MASK',
+                                'Associated quality extension')
+        return _hdr
+
+    if hduclas2 == 'ERROR':
+        _hdr['HDUCLAS2'] = 'ERROR'
+        _hdr['HDUCLAS3'] = ('INVMSE', 'Value is inverse mean-square error')
+        _hdr['SCIDATA'] = (ext, 'Associated data extension')
+        if qual:
+            _hdr['QUALDATA'] = (ext+'_MASK' if prepend else 'MASK',
+                                'Associated quality extension')
+        return _hdr
+
+    if hduclas2 == 'QUALITY':
+        _hdr['HDUCLAS2'] = 'QUALITY'
+        if bit_type is None:
+            if bm is None:
+                raise ValueError('Must provide the bit type or the bitmask object.')
+            else:
+                bit_type = bm.minimum_dtype()
+        _hdr['HDUCLAS3'] = mask_data_type(bit_type)
+        _hdr['SCIDATA'] = (ext, 'Associated data extension')
+        if err:
+            _hdr['ERRDATA'] = (ext+'_IVAR' if prepend else 'IVAR',
+                                'Associated inv. variance extension')
+        if bm is not None:
+            # Add the bit values
+            bm.to_header(_hdr)
+        return _hdr
+            
+    raise ValueError('HDUCLAS2 must be DATA, ERROR, or QUALITY.')
+
+
+def mask_data_type(bit_type):
+    if bit_type in [numpy.uint64, numpy.int64]:
+        return ('FLAG64BIT', '64-bit mask')
+    if bit_type in [numpy.uint32, numpy.int32]:
+        return ('FLAG32BIT', '32-bit mask')
+    if bit_type in [numpy.uint16, numpy.int16]:
+        return ('FLAG16BIT', '16-bit mask')
+    if bit_type in [numpy.uint8, numpy.int8]:
+        return ('FLAG8BIT', '8-bit mask')
+    if bit_type == numpy.bool:
+        return ('MASKZERO', 'Binary mask; zero values are good/unmasked')
+    raise ValueError('Invalid bit_type: {0}!'.format(str(bit_type)))
 
 
 

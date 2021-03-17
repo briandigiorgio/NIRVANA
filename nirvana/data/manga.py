@@ -22,9 +22,17 @@ from scipy import sparse
 import matplotlib.image as img
 
 from astropy.io import fits
+from astropy.wcs import WCS
+#try:
+#    from marvin.tools import Cube
+#    from marvin import config
+#except:
+#    Cube = None
+#    config = None
 
 from .util import get_map_bin_transformations, impose_positive_definite
 from .kinematics import Kinematics
+from .meta import GlobalPar
 from ..util.bitmask import BitMask
 from ..util.download import download_plateifu
 
@@ -63,7 +71,7 @@ def channel_dictionary(hdu, ext, prefix='C'):
     return channel_dict
 
 
-def read_manga_psf(cube_file, psf_ext, fwhm=False, quiet=True):
+def read_manga_psf(cube_file, psf_ext, fwhm=False, quiet=False):
     """
     Read the image of the reconstructed datacube point-spread
     function from the MaNGA DRP CUBE file.
@@ -172,6 +180,26 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
             Raised if the directory where the datacube should exist can be
             defined but does not exist.
     """
+#        use_marvin (:obj:`bool`, optional):
+#            Use `Marvin`_ to both download the data and return the relevant
+#            file paths. If True, all other keyword arguments are ignored.
+#    #download using marvin instead of looking locally
+#    if use_marvin and (Cube is None or config is None):
+#        raise ImportError('Could not use marvin because marvin Cube could not be imported.')
+#    if use_marvin:
+#        #get files
+#        config.setMPL(dr)
+#        cube = Cube(f'{plate}-{ifu}')
+#        maps = cube.getMaps()
+#        image = cube.getImage()
+#        
+#        #download to local sas directory (see marvin documentation)
+#        cube.download()
+#        maps.download()
+#        image.download()
+#
+#        return maps.filename, cube.filename, image.filename
+
     #download from sas instead of looking locally
     if remotedir is not None:
         return download_plateifu(plate, ifu, remotedir, dr, daptype, clobber=False)
@@ -213,7 +241,7 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
     return maps_file, cube_file, image_file
 
 
-def read_drpall(plate, ifu, redux_path, dr, ext='elpetro', quiet=True):
+def read_drpall(plate, ifu, redux_path, dr, ext='elpetro', quiet=False):
     """
     Read the NASA Sloan Atlas data from the DRPall file for the
     appropriate data release.
@@ -581,7 +609,7 @@ class MaNGAGasKinematics(MaNGAKinematics):
             Suppress printed output.
     """
     def __init__(self, maps_file, cube_file=None, image_file=None, psf_ext='RPSF', line='Ha-6564',
-                 mask_flags='any', covar=False, positive_definite=False, quiet=True):
+                 mask_flags='any', covar=False, positive_definite=False, quiet=False):
 
         if not os.path.isfile(maps_file):
             raise FileNotFoundError(f'File does not exist: {maps_file}')
@@ -589,6 +617,7 @@ class MaNGAGasKinematics(MaNGAKinematics):
         # Get the PSF, if possible
         psf, fwhm = (None, None) if cube_file is None \
                         else read_manga_psf(cube_file, psf_ext, fwhm=True)
+        psf_name = None if cube_file is None else psf_ext
         # Get the 3-color galaxy thumbnail image
         image = None if image_file is None else img.imread(image_file)
 
@@ -629,8 +658,9 @@ class MaNGAGasKinematics(MaNGAKinematics):
             pri, sec, anc, oth = parse_manga_targeting_bits(hdu[0].header['MNGTARG1'], hdu[0].header['MNGTARG3'])
             maxr = 2.5 if sec else 1.5
 
-            vel_ivar = 1/(1/vel_ivar + 5**2)
-            sig_ivar = 1/(1/sig_ivar + 5**2)
+            # TODO: See my note just above nirvana.fitting.loglike
+            #vel_ivar = 1/(1/vel_ivar + 5**2)
+            #sig_ivar = 1/(1/sig_ivar + 5**2)
 
             # Get the masks
             if mask_flags is None:
@@ -649,6 +679,9 @@ class MaNGAGasKinematics(MaNGAKinematics):
                                            flag=mask_flags)
                 sig_mask = bitmask.flagged(hdu['EMLINE_GSIGMA_MASK'].data[eml[line]],
                                            flag=mask_flags)
+
+            # Get the WCS from a single-channel extension
+            wcs = WCS(header=hdu['SPX_MFLUX'].header)
 
         if not quiet:
             print('Done')
@@ -670,8 +703,8 @@ class MaNGAGasKinematics(MaNGAKinematics):
         super().__init__(vel, vel_ivar=vel_ivar, vel_mask=vel_mask, vel_covar=vel_covar, x=x, y=y, 
                          sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sb_covar=sb_covar, sb_anr=sb_anr,
                          sig=sig, sig_ivar=sig_ivar, sig_mask=sig_mask, sig_covar=sig_covar,
-                         sig_corr=sig_corr, psf=psf, binid=binid, grid_x=grid_x, 
-                         grid_y=grid_y, reff=reff , fwhm=fwhm, image=image, 
+                         sig_corr=sig_corr, psf_name=psf_name, psf=psf, binid=binid, grid_x=grid_x, 
+                         grid_y=grid_y, grid_wcs=wcs, reff=reff , fwhm=fwhm, image=image, 
                          phot_inc=phot_inc, maxr=maxr, positive_definite=positive_definite)
 
 
@@ -703,7 +736,7 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             Suppress printed output.
     """
     def __init__(self, maps_file, cube_file=None, image_file=None, psf_ext='GPSF',
-                 mask_flags='any', covar=False, positive_definite=False, quiet=True):
+                 mask_flags='any', covar=False, positive_definite=False, quiet=False):
 
         if not os.path.isfile(maps_file):
             raise FileNotFoundError(f'File does not exist: {maps_file}')
@@ -711,6 +744,7 @@ class MaNGAStellarKinematics(MaNGAKinematics):
         # Get the PSF, if possible
         psf, fwhm = (None,None) if cube_file is None \
                         else read_manga_psf(cube_file, psf_ext, fwhm=True)
+        psf_name = None if cube_file is None else psf_ext
         image = img.imread(image_file) if image_file else None
 
         # Establish whether or not the stellar kinematics were
@@ -747,8 +781,9 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             pri, sec, anc, oth = parse_manga_targeting_bits(hdu[0].header['MNGTARG1'], hdu[0].header['MNGTARG3'])
             maxr = 2.5 if sec else 1.5
 
-            vel_ivar = 1/(1/vel_ivar + 5**2)
-            sig_ivar = 1/(1/sig_ivar + 5**2)
+            # TODO: See my note just above nirvana.fitting.loglike
+            #vel_ivar = 1/(1/vel_ivar + 5**2)
+            #sig_ivar = 1/(1/sig_ivar + 5**2)
 
             # Get the masks
             if mask_flags is None:
@@ -761,6 +796,9 @@ class MaNGAStellarKinematics(MaNGAKinematics):
                 bitmask = sdss_bitmask('MANGA_DAPPIXMASK')
                 vel_mask = bitmask.flagged(hdu['STELLAR_VEL_MASK'].data, flag=mask_flags)
                 sig_mask = bitmask.flagged(hdu['STELLAR_SIGMA_MASK'].data, flag=mask_flags)
+
+            # Get the WCS from a single-channel extension
+            wcs = WCS(header=hdu['SPX_MFLUX'].header)
 
         if not quiet:
             print('Done')
@@ -782,9 +820,84 @@ class MaNGAStellarKinematics(MaNGAKinematics):
         super().__init__(vel, vel_ivar=vel_ivar, vel_mask=vel_mask, vel_covar=vel_covar, x=x, y=y,
                          sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sb_covar=sb_covar, sig=sig, 
                          sig_ivar=sig_ivar, sig_mask=sig_mask, sig_covar=sig_covar,
-                         sig_corr=sig_corr, psf=psf, binid=binid, grid_x=grid_x, 
-                         grid_y=grid_y, reff=reff, fwhm=fwhm, image=image,
+                         sig_corr=sig_corr, psf_name=psf_name, psf=psf, binid=binid, grid_x=grid_x, 
+                         grid_y=grid_y, grid_wcs=wcs, reff=reff, fwhm=fwhm, image=image,
                          phot_inc=phot_inc, maxr=maxr, positive_definite=positive_definite)
 
+
+class MaNGAGlobalPar(GlobalPar):
+    """
+    Provides MaNGA-specific implementation of global parameters.
+
+    Args:
+        plate (:obj:`int`):
+            Plate identifier
+        ifu (:obj:`int`):
+            IFU identifier
+        redux_path (:obj:`str`, optional):
+            The top-level directory with all DRP output. If None,
+            this will be set to the ``MANGA_SPECTRO_REDUX``
+            environmental variable, if it is defined.
+        dr (:obj:`str`, optional):
+            Data release identifier that matches the directory with
+            the data.
+        drpall_file (:obj:`str`, optional):
+            DRPall filename. If None, the filename is assumed to be
+            ``drpall*.fits`` and the path is constructed from other
+            parameters.
+        drpall_path (:obj:`str`, optional):
+            This provides the *direct* path to the drpall file,
+            circumventing the use of ``dr`` and ``redux_path``.
+    """
+    def __init__(self, plate, ifu, redux_path=None, dr=None, drpall_file=None, drpall_path=None, 
+                 **kwargs):
+
+        if drpall_file is None:
+            # Set the path to the DRPall file
+            if drpall_path is None:
+                _redux_path = os.getenv('MANGA_SPECTRO_REDUX') \
+                                if redux_path is None else redux_path
+                if _redux_path is None:
+                    raise ValueError('Could not define top-level root for DRP output.')
+                drpall_path = os.path.join(_redux_path, dr)
+            drpall_file = glob.glob(os.path.join(drpall_path, 'drpall*.fits'))[0]
+
+        # Read the table
+        plateifu = f'{plate}-{ifu}'
+        print('Reading DRPall file...')
+        with fits.open(drpall_file) as hdu:
+            drpall = hdu['MANGA'].data
+        print('    DONE')
+
+        # Find the relevant row
+        indx = np.where(drpall['PLATEIFU'] == plateifu)[0]
+        if len(indx) != 1:
+            raise ValueError(f'Could not find {plateifu} in {drpall_file}.')
+
+        # Instantiate the object
+        indx = indx[0]
+        super().__init__(ra=drpall['objra'][indx], dec=drpall['objdec'][indx],
+                         mass=drpall['nsa_sersic_mass'][indx], z=drpall['z'][indx],
+                         pa=drpall['nsa_elpetro_phi'][indx], ell=1.-drpall['nsa_elpetro_ba'][indx],
+                         reff=drpall['nsa_elpetro_th50_r'][indx],
+                         sersic_n=drpall['nsa_sersic_n'][indx], **kwargs)
+
+        # Save MaNGA-specific attributes
+        self.dr = 'unknown' if dr is None else dr
+        self.mangaid = drpall['mangaid'][indx]
+        self.plate = plate
+        self.ifu = ifu
+        self.drpall_file = drpall_file
+        self.primaryplus, self.secondary, self.ancillary, self.other \
+                = parse_manga_targeting_bits(drpall['mngtarg1'][indx],
+                                             mngtarg3=drpall['mngtarg3'][indx])
+        self.psf_band = np.array(['g', 'r', 'i', 'z'])
+        self.psf_fwhm = np.array([drpall['gfwhm'][indx], drpall['rfwhm'][indx],
+                                  drpall['ifwhm'][indx], drpall['zfwhm'][indx]])
+
+        self.mag_band = np.array(['NUV', 'r', 'i'])
+        self.mag = np.array([drpall['nsa_elpetro_absmag'][indx][1],
+                             drpall['nsa_elpetro_absmag'][indx][4],
+                             drpall['nsa_elpetro_absmag'][indx][5]])
 
 

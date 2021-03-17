@@ -9,10 +9,6 @@ try:
 except:
     tqdm = None
 
-try:
-    NETRC = netrc.netrc()
-except Exception as e:
-    raise FileNotFoundError('Could not load ~/.netrc file.') from e
 
 def download_file(url, user, password, outfile, clobber=True):
     """
@@ -44,7 +40,15 @@ def download_file(url, user, password, outfile, clobber=True):
     if total_size != 0 and t.n != total_size:
         raise ValueError('Downloaded file may be corrupted.')
 
-def download_plateifu(plate, ifu, outdir, dr='MPL-11', daptype='HYB10-MILESHC-MASTARHC2', basedir='https://data.sdss.org/sas/mangawork/manga/spectro', clobber=True):
+
+def download_plateifu(plate, ifu, outdir, dr='MPL-11', daptype='HYB10-MILESHC-MASTARHC2',
+                      basedir='https://data.sdss.org/sas/mangawork/manga/spectro', clobber=True):
+    
+    try:
+        NETRC = netrc.netrc()
+    except Exception as e:
+        raise FileNotFoundError('Could not load ~/.netrc file.') from e
+
     user, acc, password = NETRC.authenticators('data.sdss.org')
     outpath = f'{outdir}/{plate}/{ifu}'
     if not os.path.isdir(outpath):
@@ -72,3 +76,5 @@ def download_plateifu(plate, ifu, outdir, dr='MPL-11', daptype='HYB10-MILESHC-MA
     download_file(url, user, password, imfile, clobber)
 
     return mapsfile, cubefile, imfile
+
+

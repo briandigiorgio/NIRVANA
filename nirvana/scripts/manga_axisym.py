@@ -19,7 +19,7 @@ import astropy
 from .. import __version__
 
 from .. import data
-from .. import plotting
+from ..util import plot
 from ..util.bitmask import BitMask
 from ..util import fileio
 from ..models.geometry import projected_polar
@@ -554,7 +554,7 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
     :class:`~nirvana.model.axisym.AxisymmetricDisk` model to a galaxy.
 
     """
-    logformatter = plotting.get_logformatter()
+    logformatter = plot.get_logformatter()
 
     # Change the style
     rc('font', size=8)
@@ -676,12 +676,12 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
     sb_lim = np.power(10.0, data.util.growth_lim(np.ma.log10(sb_map), 0.90, 1.05))
     sb_lim = data.util.atleast_one_decade(sb_lim)
     
-    ax = plotting.init_ax(fig, [0.02, 0.775, 0.19, 0.19])
+    ax = plot.init_ax(fig, [0.02, 0.775, 0.19, 0.19])
     cax = fig.add_axes([0.05, 0.97, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
     ax.set_ylim(skylim)
-    plotting.rotate_y_ticks(ax, 90, 'center')
+    plot.rotate_y_ticks(ax, 90, 'center')
     ax.xaxis.set_major_formatter(ticker.NullFormatter())
     ax.add_patch(patches.Circle((0.1, 0.1), fwhm/np.diff(skylim)[0]/2, transform=ax.transAxes,
                                 facecolor='0.7', edgecolor='k', zorder=4))
@@ -701,12 +701,12 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
     snr_lim = np.power(10.0, data.util.growth_lim(np.ma.log10(snr_map), 0.90, 1.05))
     snr_lim = data.util.atleast_one_decade(snr_lim)
 
-    ax = plotting.init_ax(fig, [0.02, 0.580, 0.19, 0.19])
+    ax = plot.init_ax(fig, [0.02, 0.580, 0.19, 0.19])
     cax = fig.add_axes([0.05, 0.57, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
     ax.set_ylim(skylim)
-    plotting.rotate_y_ticks(ax, 90, 'center')
+    plot.rotate_y_ticks(ax, 90, 'center')
     ax.xaxis.set_major_formatter(ticker.NullFormatter())
     ax.add_patch(patches.Circle((0.1, 0.1), fwhm/np.diff(skylim)[0]/2, transform=ax.transAxes,
                                 facecolor='0.7', edgecolor='k', zorder=4))
@@ -719,7 +719,7 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
     # Velocity
     vel_lim = data.util.growth_lim(np.ma.append(v_map, vmod_map), 0.90, 1.05,
                                    midpoint=disk.par[4])
-    ax = plotting.init_ax(fig, [0.215, 0.775, 0.19, 0.19])
+    ax = plot.init_ax(fig, [0.215, 0.775, 0.19, 0.19])
     cax = fig.add_axes([0.245, 0.97, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
@@ -741,7 +741,7 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
                                                   0.80, 1.05))
     sig_lim = data.util.atleast_one_decade(sig_lim)
 
-    ax = plotting.init_ax(fig, [0.215, 0.580, 0.19, 0.19])
+    ax = plot.init_ax(fig, [0.215, 0.580, 0.19, 0.19])
     cax = fig.add_axes([0.245, 0.57, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
@@ -757,7 +757,7 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
 
     #-------------------------------------------------------------------
     # Velocity Model
-    ax = plotting.init_ax(fig, [0.410, 0.775, 0.19, 0.19])
+    ax = plot.init_ax(fig, [0.410, 0.775, 0.19, 0.19])
     cax = fig.add_axes([0.440, 0.97, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
@@ -779,7 +779,7 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
                                                   0.80, 1.05))
     sig_lim = data.util.atleast_one_decade(sig_lim)
 
-    ax = plotting.init_ax(fig, [0.410, 0.580, 0.19, 0.19])
+    ax = plot.init_ax(fig, [0.410, 0.580, 0.19, 0.19])
     cax = fig.add_axes([0.440, 0.57, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
@@ -798,7 +798,7 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
     v_resid = v_map - vmod_map
     v_res_lim = data.util.growth_lim(v_resid, 0.80, 1.15, midpoint=0.0)
 
-    ax = plotting.init_ax(fig, [0.605, 0.775, 0.19, 0.19])
+    ax = plot.init_ax(fig, [0.605, 0.775, 0.19, 0.19])
     cax = fig.add_axes([0.635, 0.97, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
@@ -819,7 +819,7 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
     s_resid = s_map - smod_map
     s_res_lim = data.util.growth_lim(s_resid, 0.80, 1.15, midpoint=0.0)
 
-    ax = plotting.init_ax(fig, [0.605, 0.580, 0.19, 0.19])
+    ax = plot.init_ax(fig, [0.605, 0.580, 0.19, 0.19])
     cax = fig.add_axes([0.635, 0.57, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
@@ -839,7 +839,7 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
     v_chi_lim = np.power(10.0, data.util.growth_lim(np.ma.log10(v_chi), 0.90, 1.15))
     v_chi_lim = data.util.atleast_one_decade(v_chi_lim)
 
-    ax = plotting.init_ax(fig, [0.800, 0.775, 0.19, 0.19])
+    ax = plot.init_ax(fig, [0.800, 0.775, 0.19, 0.19])
     cax = fig.add_axes([0.830, 0.97, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
@@ -863,7 +863,7 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
     s_chi_lim = np.power(10.0, data.util.growth_lim(np.ma.log10(s_chi), 0.90, 1.15))
     s_chi_lim = data.util.atleast_one_decade(s_chi_lim)
 
-    ax = plotting.init_ax(fig, [0.800, 0.580, 0.19, 0.19])
+    ax = plot.init_ax(fig, [0.800, 0.580, 0.19, 0.19])
     cax = fig.add_axes([0.830, 0.57, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
@@ -881,7 +881,7 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
 
     #-------------------------------------------------------------------
     # Intrinsic Velocity Model
-    ax = plotting.init_ax(fig, [0.800, 0.305, 0.19, 0.19])
+    ax = plot.init_ax(fig, [0.800, 0.305, 0.19, 0.19])
     cax = fig.add_axes([0.830, 0.50, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
@@ -904,7 +904,7 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
                                                   0.80, 1.05))
     sig_lim = data.util.atleast_one_decade(sig_lim)
 
-    ax = plotting.init_ax(fig, [0.800, 0.110, 0.19, 0.19])
+    ax = plot.init_ax(fig, [0.800, 0.110, 0.19, 0.19])
     cax = fig.add_axes([0.830, 0.10, 0.15, 0.005])
     cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
@@ -933,10 +933,10 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
 
     reff_lines = np.arange(galmeta.reff, r_lim[1], galmeta.reff)
 
-    ax = plotting.init_ax(fig, [0.27, 0.27, 0.51, 0.23], facecolor='0.9', top=False, right=False)
+    ax = plot.init_ax(fig, [0.27, 0.27, 0.51, 0.23], facecolor='0.9', top=False, right=False)
     ax.set_xlim(r_lim)
     ax.set_ylim(rc_lim)
-    plotting.rotate_y_ticks(ax, 90, 'center')
+    plot.rotate_y_ticks(ax, 90, 'center')
     if smod is None:
         ax.text(0.5, -0.13, r'$R$ [arcsec]', ha='center', va='center', transform=ax.transAxes,
                 fontsize=10)
@@ -955,17 +955,17 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
     for l in reff_lines:
         ax.axvline(x=l, linestyle='--', lw=0.5, zorder=2, color='k')
 
-    axt = plotting.get_twin(ax, 'x')
+    axt = plot.get_twin(ax, 'x')
     axt.set_xlim(np.array(r_lim) * galmeta.kpc_per_arcsec())
     axt.set_ylim(rc_lim)
     ax.text(0.5, 1.14, r'$R$ [$h^{-1}$ kpc]', ha='center', va='center', transform=ax.transAxes,
             fontsize=10)
 
     kin_inc = disk.par[3]
-    axt = plotting.get_twin(ax, 'y')
+    axt = plot.get_twin(ax, 'y')
     axt.set_xlim(r_lim)
     axt.set_ylim(np.array(rc_lim)/np.sin(np.radians(kin_inc)))
-    plotting.rotate_y_ticks(axt, 90, 'center')
+    plot.rotate_y_ticks(axt, 90, 'center')
     axt.spines['right'].set_color('0.4')
     axt.tick_params(which='both', axis='y', colors='0.4')
     axt.yaxis.label.set_color('0.4')
@@ -984,12 +984,12 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
                                                         0.9, 1.5))
         sprof_lim = data.util.atleast_one_decade(sprof_lim)
 
-        ax = plotting.init_ax(fig, [0.27, 0.04, 0.51, 0.23], facecolor='0.9')
+        ax = plot.init_ax(fig, [0.27, 0.04, 0.51, 0.23], facecolor='0.9')
         ax.set_xlim(r_lim)
         ax.set_ylim(sprof_lim)#[10,275])
         ax.set_yscale('log')
         ax.yaxis.set_major_formatter(logformatter)
-        plotting.rotate_y_ticks(ax, 90, 'center')
+        plot.rotate_y_ticks(ax, 90, 'center')
 
         indx = sprof_nbin > 0
         ax.scatter(sprof_r, sprof, marker='.', color='k', s=30, lw=0, alpha=0.6, zorder=1)

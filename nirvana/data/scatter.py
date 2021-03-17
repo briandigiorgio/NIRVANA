@@ -14,7 +14,7 @@ from matplotlib import pyplot, patches
 from astropy.stats import sigma_clip
 
 from . import util
-from .. import plotting
+from ..util import plot
 
 
 class IntrinsicScatter:
@@ -339,12 +339,12 @@ class IntrinsicScatter:
         nrej = np.sum(_rej)
         ntot = np.sum(self.inp_gpm)
 
-        logformatter = plotting.get_logformatter()
+        logformatter = plot.get_logformatter()
 
         w,h = pyplot.figaspect(1)
         fig = pyplot.figure(figsize=(2*w,h))
 
-        ax = plotting.init_ax(fig, [0.03, 0.1, 0.45, 0.87])
+        ax = plot.init_ax(fig, [0.03, 0.1, 0.45, 0.87])
         by, bx, _ = ax.hist(enres_def, bins=100, range=rng_def, density=True, color='k', lw=0,
                             alpha=0.3, zorder=4, histtype='stepfilled')
         maxy = np.amax(by)
@@ -356,19 +356,19 @@ class IntrinsicScatter:
                 zorder=6)
         ax.set_xlim(rng_def)
         ax.set_ylim([0, 1.05*maxy])
-        plotting.rotate_y_ticks(ax, 90., 'center')
+        plot.rotate_y_ticks(ax, 90., 'center')
         ax.text(0.5, -0.07, r'$\Delta/\epsilon$', ha='center', va='center',
                 transform=ax.transAxes)
 
         if title is not None:
             ax.text(0.02, 0.96, title, ha='left', va='center', transform=ax.transAxes, fontsize=12)
 
-        ax = plotting.init_ax(fig, [0.54, 0.1, 0.45, 0.87])
+        ax = plot.init_ax(fig, [0.54, 0.1, 0.45, 0.87])
         ax.set_xlim([0., rng[1]])
         ax.set_ylim([0.9*2*(1 - stats.norm.cdf(rng[1])), 1.05])
         ax.set_yscale('log')
         ax.yaxis.set_major_formatter(logformatter)
-        plotting.rotate_y_ticks(ax, 90., 'center')
+        plot.rotate_y_ticks(ax, 90., 'center')
         abs_enres_def = np.absolute(enres_def)
         srt = np.argsort(abs_enres_def)
         ax.step(abs_enres_def[srt], 1-np.arange(srt.size)/srt.size, where='post', color='0.6',

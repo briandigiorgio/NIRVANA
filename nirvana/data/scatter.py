@@ -9,28 +9,12 @@ from IPython import embed
 
 import numpy as np
 from scipy import sparse, stats, optimize
+from matplotlib import pyplot, patches
 
 from astropy.stats import sigma_clip
 
-from .util import cinv, impose_positive_definite
-
-
-def sigma_clip_stdfunc_mad(data, **kwargs):
-    """
-    A simple wrapper for `scipy.stats.median_abs_deviation`_ that omits NaN
-    values and rescales the output to match a normal distribution for use in
-    `astropy.stats.sigma_clip`_.
-
-    Args:
-        data (`numpy.ndarray`_):
-            Data to clip.
-        **kwargs:
-            Passed directly to `scipy.stats.median_abs_deviation`_.
-
-    Returns:
-        scalar-like, `numpy.ndarray`_: See `scipy.stats.median_abs_deviation`_.
-    """
-    return stats.median_abs_deviation(data, **kwargs, nan_policy='omit', scale='normal')
+from . import util
+from ..util import plot
 
 
 class IntrinsicScatter:
@@ -70,12 +54,12 @@ class IntrinsicScatter:
         if self.err is not None and self.err.size != self.size:
             raise ValueError('Size of the error array must match the residual array.')
         self.covar = covar if covar is None or assume_posdef_covar \
-                        else impose_positive_definite(sparse.csr_matrix(covar))
+                        else util.impose_positive_definite(sparse.csr_matrix(covar))
         if self.covar is not None and self.covar.shape != (self.size,self.size):
             raise ValueError('Covariance array must have shape ({0},{0}).'.format(self.size))
         if isinstance(self.covar, sparse.csr_matrix):
             self.covar = self.covar.toarray()
-        self.gpm = np.ones(self.size, dtype=bool) if gpm is None else gpm
+        self.gpm = np.ones(self.size, dtype=bool) if gpm is None else gpm.copy()
         if self.gpm.size != self.size:
             raise ValueError('Size of the good-pixel mask must match the residual array.')
         self.inp_gpm = self.gpm.copy()
@@ -91,6 +75,9 @@ class IntrinsicScatter:
         self.fixed_rho = False
         self.debug = False
 
+    def _merit_vec_err(self, x):
+        return self._res / np.sqrt(self._var + x[0]**2)
+
     def _merit_err(self, x):
         """
         Calculate the merit function without covariance.
@@ -100,16 +87,20 @@ class IntrinsicScatter:
             print('Par={0:7.3f}, Merit={1:9.3e}'.format(x[0], merit))
         return merit
         
+    def _adj_covar(self, x):
+        if self.fixed_rho:
+            _var = self._var + x[0]**2
+            return self._rho*np.sqrt(_var[:,None]*_var[None,:])
+        return self._cov + self._rho * x[0]**2
+
+    def _merit_vec_covar(self, x):
+        return np.dot(self._res, util.cinv(self._adj_covar(x), upper=True))
+
     def _merit_covar(self, x):
         """
         Calculate the merit function with covariance.
         """
-        if self.fixed_rho:
-            _var = self._var + x[0]**2
-            _covar = self._rho*np.sqrt(_var[:,None]*_var[None,:])
-        else:
-            _covar = self._cov + self._rho * x[0]**2
-        merit = abs(np.dot(self._res, np.dot(cinv(_covar), self._res)) - self._dof)
+        merit = abs(np.dot(self._res, np.dot(util.cinv(self._adj_covar(x)), self._res)) - self._dof)
         if self.debug:
             print('Par={0:7.3f}, Merit={1:9.3e}'.format(x[0], merit))
         return merit
@@ -132,7 +123,7 @@ class IntrinsicScatter:
             self._var = np.diag(self._cov)
             self._rho = self._cov / np.sqrt(self._var[:,None]*self._var[None,:]) \
                             if self.fixed_rho else np.identity(np.sum(self.gpm), dtype=float)
-        self._x = np.array([sigma_clip_stdfunc_mad(self._res/np.sqrt(self._var))
+        self._x = np.array([util.sigma_clip_stdfunc_mad(self._res/np.sqrt(self._var))
                                 if sig0 is None else sig0])
 
     def fit(self, sig0=None, sigma_rej=5, rejiter=None, fixed_rho=False, verbose=0):
@@ -144,8 +135,8 @@ class IntrinsicScatter:
         clipped standard deviation.
 
         Rejections use `astropy.stats.sigma_clip` with
-        :func:`sigma_clip_stdfunc_mad` as the method used to compute the
-        standard deviation.
+        :func:`~nirvana.data.util.sigma_clip_stdfunc_mad` as the method used
+        to compute the standard deviation.
 
         Algorithm is:
             - Perform an iterative sigma-clipping of the error-weighted
@@ -180,9 +171,9 @@ class IntrinsicScatter:
         Returns:
             :obj:`tuple`: Returns the value of the intrinsic scatter, a
             `numpy.ndarray`_ selecting the rejected data points, and a
-            `numpy.ndarray`_ selecting all good data points; the latter the
-            intersection of the input good-pixel mask and those data *not*
-            rejected by the function.
+            `numpy.ndarray`_ selecting all good data points; the latter is
+            the intersection of the input good-pixel mask and those data
+            *not* rejected by the function.
         """
         if sig0 is not None and not sig0 > 0:
             warnings.warn('Initial guess for sigma must be greater than 0.  Ignoring input.')
@@ -202,7 +193,7 @@ class IntrinsicScatter:
         elif self.err is not None:
             _chi[self.gpm] /= self.err[self.gpm]
         clip = sigma_clip(np.ma.MaskedArray(_chi, mask=np.logical_not(self.gpm)),
-                          sigma=_sigma_rej, stdfunc=sigma_clip_stdfunc_mad, maxiters=rejiter)
+                          sigma=_sigma_rej, stdfunc=util.sigma_clip_stdfunc_mad, maxiters=rejiter)
         clipped = np.ma.getmaskarray(clip)
         self.rej = self.inp_gpm & clipped
         self.gpm = np.logical_not(clipped)
@@ -266,11 +257,13 @@ class IntrinsicScatter:
                 iterations.
 
         Returns:
+
             :obj:`tuple`: Returns the value of the intrinsic scatter, a
             `numpy.ndarray`_ selecting the rejected data points, and a
-            `numpy.ndarray`_ selecting all good data points; the latter the
-            intersection of the input good-pixel mask and those data *not*
-            rejected by the function.
+            `numpy.ndarray`_ selecting all good data points; the latter is
+            the intersection of the input good-pixel mask and those data
+            *not* rejected by the function.
+        
         """
         # In debug mode?
         self.debug = verbose > 0
@@ -314,4 +307,146 @@ class IntrinsicScatter:
 #        pyplot.xscale('log')
 #        pyplot.show()
 
+    def show(self, sig=None, rej=None, gpm=None, ofile=None, title=None):
+        """
+        """
+        # Save the current gpm so that the method doesn't change it.
+        sv_gpm = self.gpm.copy()
+        if gpm is not None:
+            self.gpm = gpm
+
+        # Initialize the fit workspace objects
+        _rej = self.rej if rej is None else rej
+        self.gpm &= np.logical_not(_rej)
+        self._fit_init(sig0=self.sig if sig is None else sig, fixed_rho=self.fixed_rho)
+
+        # Assign the merit function to use based on the availability of the
+        # covariance
+        fom_vec = self._merit_vec_err if self.covar is None else self._merit_vec_covar
+        fom = self._merit_err if self.covar is None else self._merit_covar
+
+        mean_eps = np.mean(np.sqrt(self._var))
+
+        enres_def = fom_vec(np.array([1.]))
+        rng_def = util.growth_lim(enres_def, 0.95, 1.1, midpoint=0.0)
+        mean_enres_def = np.mean(enres_def)
+        sigma_enres_def = np.std(enres_def)
+
+        enres = fom_vec(self._x)
+        rng = util.growth_lim(enres, 0.99, 1.3, midpoint=0.0)
+        mean_enres = np.mean(enres)
+        sigma_enres = np.std(enres)
+        nrej = np.sum(_rej)
+        ntot = np.sum(self.inp_gpm)
+
+        logformatter = plot.get_logformatter()
+
+        w,h = pyplot.figaspect(1)
+        fig = pyplot.figure(figsize=(2*w,h))
+
+        ax = plot.init_ax(fig, [0.03, 0.1, 0.45, 0.87])
+        by, bx, _ = ax.hist(enres_def, bins=100, range=rng_def, density=True, color='k', lw=0,
+                            alpha=0.3, zorder=4, histtype='stepfilled')
+        maxy = np.amax(by)
+        by, bx, _ = ax.hist(enres, bins=100, range=rng_def, density=True, color='k', lw=0,
+                            alpha=0.6, zorder=5, histtype='stepfilled')
+        maxy = max(maxy, np.amax(by))
+        bc = bx[:-1]+np.diff(bx)/2
+        ax.step(bc, util.pixelated_gaussian(bc, density=True), where='mid', color='C3',
+                zorder=6)
+        ax.set_xlim(rng_def)
+        ax.set_ylim([0, 1.05*maxy])
+        plot.rotate_y_ticks(ax, 90., 'center')
+        ax.text(0.5, -0.07, r'$\Delta/\epsilon$', ha='center', va='center',
+                transform=ax.transAxes)
+
+        if title is not None:
+            ax.text(0.02, 0.96, title, ha='left', va='center', transform=ax.transAxes, fontsize=12)
+
+        ax = plot.init_ax(fig, [0.54, 0.1, 0.45, 0.87])
+        ax.set_xlim([0., rng[1]])
+        ax.set_ylim([0.9*2*(1 - stats.norm.cdf(rng[1])), 1.05])
+        ax.set_yscale('log')
+        ax.yaxis.set_major_formatter(logformatter)
+        plot.rotate_y_ticks(ax, 90., 'center')
+        abs_enres_def = np.absolute(enres_def)
+        srt = np.argsort(abs_enres_def)
+        ax.step(abs_enres_def[srt], 1-np.arange(srt.size)/srt.size, where='post', color='0.6',
+                zorder=5)
+        abs_enres = np.absolute(enres)
+        srt = np.argsort(abs_enres)
+        ax.step(abs_enres[srt], 1-np.arange(srt.size)/srt.size, where='post', color='0.3',
+                zorder=6)
+
+        ax.plot(abs_enres[srt], 2 - stats.norm.cdf(abs_enres[srt])*2, color='C3',
+                zorder=4)
+
+        ax.text(-0.07, 0.5, '1-Growth', ha='center', va='center', rotation='vertical',
+                transform=ax.transAxes)
+        ax.text(0.5, -0.07, r'$|\Delta|/\epsilon$', ha='center', va='center',
+                transform=ax.transAxes)
+        ax.axhline(y=1-0.6826, color='0.5', linestyle='--', zorder=3)
+        ax.axhline(y=1-0.9544, color='0.5', linestyle='--', zorder=3)
+        ax.axhline(y=1-0.9973, color='0.5', linestyle='--', zorder=3)
+
+        ax.add_patch(patches.Rectangle((0.03,0.02), 0.29, 0.50, facecolor='w', lw=0,
+                                       edgecolor='none', zorder=7, alpha=0.7,
+                                       transform=ax.transAxes))
+
+        ax.text(0.04, 0.49, r'$N_{\rm tot}$:', ha='left', va='center',
+                transform=ax.transAxes, zorder=8)
+        ax.text(0.31, 0.49, f'{ntot}', ha='right',
+                va='center', transform=ax.transAxes, zorder=8)
+        ax.text(0.04, 0.45, r'$N_{\rm rej}$:', ha='left', va='center',
+                transform=ax.transAxes, zorder=8)
+        ax.text(0.31, 0.45, f'{nrej}', ha='right',
+                va='center', transform=ax.transAxes, zorder=8)
+        ax.text(0.04, 0.41, r'$\nu$:', ha='left', va='center',
+                transform=ax.transAxes, zorder=8)
+        ax.text(0.31, 0.41, f'{self._dof}', ha='right',
+                va='center', transform=ax.transAxes, zorder=8)
+        ax.text(0.04, 0.37, r'$\langle\epsilon\rangle$:', ha='left',
+                va='center', transform=ax.transAxes, zorder=8)
+        ax.text(0.31, 0.37, '{0:.2f}'.format(mean_eps), ha='right',
+                va='center', transform=ax.transAxes, zorder=8)
+
+        ax.text(0.04, 0.31, r'$\langle\Delta/\epsilon\rangle_0$:', ha='left',
+                va='center', transform=ax.transAxes, zorder=8)
+        ax.text(0.31, 0.31, '{0:.2f}'.format(mean_enres_def), ha='right',
+                va='center', transform=ax.transAxes, zorder=8)
+        ax.text(0.04, 0.27, r'$\sigma_0$:', ha='left',
+                va='center', transform=ax.transAxes, zorder=8)
+        ax.text(0.31, 0.27, '{0:.2f}'.format(sigma_enres_def), ha='right',
+                va='center', transform=ax.transAxes, zorder=8)
+        ax.text(0.04, 0.23, r'$|\chi_0^2-\nu|$:', ha='left',
+                va='center', transform=ax.transAxes, zorder=8)
+        ax.text(0.31, 0.23, '{0:.0f}'.format(fom(np.array([0]))), ha='right',
+                va='center', transform=ax.transAxes, zorder=8)
+
+        ax.text(0.04, 0.17, r'$\epsilon_i$:', ha='left',
+                va='center', transform=ax.transAxes, zorder=8)
+        ax.text(0.31, 0.17, '{0:.2f}'.format(self._x[0]), ha='right',
+                va='center', transform=ax.transAxes, zorder=8)
+        ax.text(0.04, 0.13, r'$\langle\Delta/\epsilon\rangle_i$:', ha='left',
+                va='center', transform=ax.transAxes, zorder=8)
+        ax.text(0.31, 0.13, '{0:.2f}'.format(mean_enres), ha='right',
+                va='center', transform=ax.transAxes, zorder=8)
+        ax.text(0.04, 0.09, r'$\sigma_i$:', ha='left',
+                va='center', transform=ax.transAxes, zorder=8)
+        ax.text(0.31, 0.09, '{0:.2f}'.format(sigma_enres), ha='right',
+                va='center', transform=ax.transAxes, zorder=8)
+        ax.text(0.04, 0.05, r'$|\chi_i^2-\nu|$:', ha='left',
+                va='center', transform=ax.transAxes, zorder=8)
+        ax.text(0.31, 0.05, '{0:.0f}'.format(fom(self._x)), ha='right',
+                va='center', transform=ax.transAxes, zorder=8)
+
+        if ofile is not None:
+            fig.canvas.print_figure(ofile, bbox_inches='tight')
+        else:
+            pyplot.show()
+        fig.clear()
+        pyplot.close(fig)
+
+        # Revert to original gpm
+        self.gpm = sv_gpm
 

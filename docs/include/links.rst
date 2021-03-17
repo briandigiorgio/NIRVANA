@@ -52,6 +52,9 @@
 .. matplotlib
 
 .. _pyplot.imshow: http://matplotlib.org/api/pyplot_api.html#matplotlib.pyplot.imshow
+.. _matplotlib.axes.Axes: https://matplotlib.org/stable/api/axes_api.html
+.. _matplotlib.figure.Figure: https://matplotlib.org/stable/api/_as_gen/matplotlib.figure.Figure.html#matplotlib.figure.Figure
+.. _matplotlib.figure.Figure.add_axes: https://matplotlib.org/stable/api/_as_gen/matplotlib.figure.Figure.html#matplotlib.figure.Figure.add_axes
 
 .. astropy
 

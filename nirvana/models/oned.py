@@ -49,9 +49,9 @@ class StepFunction(Func1D):
 
     Args:
         edges (array-like):
-            The *left* edges of each step. Samples to the left and
-            right, respectively, first and last edge are given the
-            same value as those edges.
+            The *left* edges of each step. Samples to the left and right,
+            respectively, of the first and last edge are given the same value
+            as those edges.
         par (array-like, optional):
             The values of the step function. Shape must be the same
             as ``edges``. If None, step levels set by
@@ -85,6 +85,14 @@ class StepFunction(Func1D):
             `numpy.ndarray`_: Guess parameters.
         """
         return np.ones(npar, dtype=float)
+
+    def par_names(self, short=False):
+        """
+        Return a list of strings with the parameter names.
+        """
+        if short:
+            return [f'v{i+1}' for i in range(self.np)]
+        return [f'Value at left edge of step {i+1}' for i in range(self.np)]
 
     def par_bounds(self, minv=None, maxv=None):
         """
@@ -210,6 +218,14 @@ class PiecewiseLinear(Func1D):
         """
         return np.ones(npar, dtype=float)
 
+    def par_names(self, short=False):
+        """
+        Return a list of strings with the parameter names.
+        """
+        if short:
+            return [f'v{i+1}' for i in range(self.np)]
+        return [f'Value at vertex {i+1}' for i in range(self.np)]
+
     def par_bounds(self, minv=None, maxv=None):
         """
         Function parameter boundaries.
@@ -331,6 +347,15 @@ class HyperbolicTangent(Func1D):
         return np.array([100., 10.])
 
     @staticmethod
+    def par_names(short=False):
+        """
+        Return a list of strings with the parameter names.
+        """
+        if short:
+            return ['asymp', 'scl']
+        return ['Asymptotic value', 'Scale']
+
+    @staticmethod
     def par_bounds():
         """
         Return default parameter boundaries.
@@ -386,6 +411,109 @@ class HyperbolicTangent(Func1D):
         return -2. * self.par[0] * sech2 * np.tanh(xh) / self.par[1]**2 
 
 
+class PolyEx(Func1D):
+    r"""
+    Instantiates a "PolyEx" rotation curve function.
+
+    The three-parameter functional form is:
+
+    .. math::
+
+        V(r) = V_0 (1 - e^{-r/h}) (1 + \alpha \frac{r}{h})
+
+    The parameter vector is ordered: :math:`V_0, h, \alpha`.
+
+    Args:
+        par (array-like, optional):
+            The three model parameters. If None, set by
+            :func:`guess_par`.
+        lb (array-like, optional):
+            Lower bounds for the model parameters. If None, set by
+            :func:`par_bounds`.
+        ub (:obj:`float`, optional):
+            Upper bounds for the model parameters. If None, set by
+            :func:`par_bounds`.
+    """
+    def __init__(self, par=None, lb=None, ub=None):
+        super().__init__(self.guess_par() if par is None else par)
+        if lb is not None and len(lb) != self.np:
+            raise ValueError('Number of lower bounds does not match the number of parameters.')
+        if ub is not None and len(ub) != self.np:
+            raise ValueError('Number of upper bounds does not match the number of parameters.')
+        _lb, _ub = self.par_bounds()
+        self.lb = _lb if lb is None else np.atleast_1d(lb)
+        self.ub = _ub if ub is None else np.atleast_1d(ub)
+
+    @staticmethod
+    def guess_par():
+        """Return default guess parameters."""
+        return np.array([100., 10., 0.1])
+
+    @staticmethod
+    def par_names(short=False):
+        """
+        Return a list of strings with the parameter names.
+        """
+        if short:
+            return ['asymp', 'scl', 'slp']
+        return ['Characteristic value', 'Inner scale', 'Outer slope']
+
+    @staticmethod
+    def par_bounds():
+        """
+        Return default parameter boundaries.
+
+        Returns:
+            :obj:`tuple`: Two `numpy.ndarray`_ objects with,
+            respectively, the lower and upper bounds for the
+            parameters.
+        """
+        return np.array([0., 1e-3, -1.]), np.array([500., 100., 1.])
+
+    def sample(self, x, par=None, check=False):
+        """
+        Sample the function.
+
+        Args:
+            x (array-like):
+                Locations at which to sample the function.
+            par (array-like, optional):
+                The function parameters. If None, the current values
+                of :attr:`par` are used. Must have a length of
+                :attr:`np`.
+            check (:obj:`bool`, optional):
+                Ignored. Only included for a uniform interface with
+                other subclasses of :class:`Func1D`.
+
+        Returns:
+            `numpy.ndarray`_: Function evaluated at each ``x`` value.
+        """
+        if par is not None:
+            self._set_par(par)
+        s = np.asarray(x)/self.par[1]
+        return self.par[0] * (1 - np.exp(-s)) * (1 + self.par[2] * s)
+
+    def ddx(self, x, par=None):
+        """
+        Sample the derivative of the function. See :func:`sample` for
+        the argument descriptions.
+        """
+        if par is not None:
+            self._set_par(par)
+        s = np.asarray(x)/self.par[1]
+        return self.par[0] * (np.exp(-s) * (1 + self.par[2]*(s-1)) + self.par[2]) / self.par[1]
+
+    def d2dx2(self, x, par=None):
+        """
+        Sample the second derivative of the function. See
+        :func:`sample` for the argument descriptions.
+        """
+        if par is not None:
+            self._set_par(par)
+        s = np.asarray(x)/self.par[1]
+        return -self.par[0] * np.exp(-s) * (1+ self.par[2]*(s-2)) / self.par[1]**2 
+
+
 class Exponential(Func1D):
     """
     Instantiates an exponential function.
@@ -415,6 +543,15 @@ class Exponential(Func1D):
     def guess_par():
         """Return default guess parameters."""
         return np.array([100., 10.])
+
+    @staticmethod
+    def par_names(short=False):
+        """
+        Return a list of strings with the parameter names.
+        """
+        if short:
+            return ['cen', 'h']
+        return ['Center value', 'e-folding length']
 
     @staticmethod
     def par_bounds():
@@ -460,12 +597,184 @@ class Exponential(Func1D):
         return -self.sample(x)/self.par[1]
 
 
+class ExpBase(Func1D):
+    r"""
+    Instantiates an exponential function with an additional parameter for a
+    constant baseline.
+
+    Functional form is
+
+    .. math::
+
+        F(x) = a*e^{-x/b} + c,
+
+    where :math:`a,b,c` are the three parameters (in that order).
+
+    Args:
+        par (array-like, optional):
+            The three model parameters. If None, set by
+            :func:`guess_par`.
+        lb (array-like, optional):
+            Lower bounds for the model parameters. If None, set by
+            :func:`par_bounds`.
+        ub (:obj:`float`, optional):
+            Upper bounds for the model parameters. If None, set by
+            :func:`par_bounds`.
+    """
+    def __init__(self, par=None, lb=None, ub=None):
+        super().__init__(self.guess_par() if par is None else par)
+        if lb is not None and len(lb) != self.np:
+            raise ValueError('Number of lower bounds does not match the number of parameters.')
+        if lb is not None and len(ub) != self.np:
+            raise ValueError('Number of upper bounds does not match the number of parameters.')
+        _lb, _ub = self.par_bounds()
+        self.lb = _lb if lb is None else np.atleast_1d(lb)
+        self.ub = _ub if ub is None else np.atleast_1d(ub)
+
+    @staticmethod
+    def guess_par():
+        """Return default guess parameters."""
+        return np.array([100., 10., 0.])
+
+    @staticmethod
+    def par_names(short=False):
+        """
+        Return a list of strings with the parameter names.
+        """
+        if short:
+            return ['cen', 'h', 'base']
+        return ['Center value', 'e-folding length', 'Baseline']
+
+    @staticmethod
+    def par_bounds():
+        """
+        Return default parameter boundaries.
+
+        Returns:
+            :obj:`tuple`: Two `numpy.ndarray`_ objects with,
+            respectively, the lower and upper bounds for the
+            parameters.
+        """
+        return np.array([0., 1e-3, -250.]), np.array([500., 100., 250.])
+
+    def sample(self, x, par=None, check=False):
+        """
+        Sample the function.
+
+        Args:
+            x (array-like):
+                Locations at which to sample the function.
+            par (array-like, optional):
+                The function parameters. If None, the current values
+                of :attr:`par` are used. Must have a length of
+                :attr:`np`.
+            check (:obj:`bool`, optional):
+                Ignored. Only included for a uniform interface with
+                other subclasses of :class:`Func1D`.
+
+        Returns:
+            `numpy.ndarray`_: Function evaluated at each ``x`` value.
+        """
+        if par is not None:
+            self._set_par(par)
+        return self.par[0]*np.exp(-np.asarray(x)/self.par[1]) + self.par[2]
+
+    def ddx(self, x, par=None, check=False):
+        """
+        Sample the derivative of the function. See :func:`sample` for
+        the argument descriptions.
+        """
+        if par is not None:
+            self._set_par(par)
+        return -self.sample(x)/self.par[1]
+
+
+class Const(Func1D):
+    r"""
+    A function that always returns the same constant.
+
+    Args:
+        par (array-like, optional):
+            Constant value. If None, set by :func:`guess_par`.
+        lb (array-like, optional):
+            Lower bound. If None, set by :func:`par_bounds`.
+        ub (:obj:`float`, optional):
+            Upper bound. If None, set by :func:`par_bounds`.
+    """
+    def __init__(self, par=None, lb=None, ub=None):
+        super().__init__(self.guess_par() if par is None else par)
+        if lb is not None and len(lb) != self.np:
+            raise ValueError('Number of lower bounds does not match the number of parameters.')
+        if lb is not None and len(ub) != self.np:
+            raise ValueError('Number of upper bounds does not match the number of parameters.')
+        _lb, _ub = self.par_bounds()
+        self.lb = _lb if lb is None else np.atleast_1d(lb)
+        self.ub = _ub if ub is None else np.atleast_1d(ub)
+
+    @staticmethod
+    def guess_par():
+        """Return default guess parameters."""
+        return np.array([1.])
+
+    @staticmethod
+    def par_names(short=False):
+        """
+        Return a list of strings with the parameter names.
+        """
+        if short:
+            return ['c']
+        return ['Constant']
+
+    @staticmethod
+    def par_bounds():
+        """
+        Return default parameter boundaries.
+
+        Returns:
+            :obj:`tuple`: Two `numpy.ndarray`_ objects with,
+            respectively, the lower and upper bounds for the
+            parameters.
+        """
+        return np.array([-250.]), np.array([250.])
+
+    def sample(self, x, par=None, check=False):
+        """
+        Sample the function.
+
+        Args:
+            x (array-like):
+                Locations at which to sample the function.
+            par (array-like, optional):
+                The function parameters. If None, the current values
+                of :attr:`par` are used. Must have a length of
+                :attr:`np`.
+            check (:obj:`bool`, optional):
+                Ignored. Only included for a uniform interface with
+                other subclasses of :class:`Func1D`.
+
+        Returns:
+            `numpy.ndarray`_: Function evaluated at each ``x`` value.
+        """
+        if par is not None:
+            self._set_par(par)
+        return np.full(x.shape, self.par[0], dtype=float)
+
+    def ddx(self, x, par=None, check=False):
+        """
+        Sample the derivative of the function. See :func:`sample` for
+        the argument descriptions.
+        """
+        if par is not None:
+            self._set_par(par)
+        return np.zeros(x.shape, dtype=float)
+
+
 class Sersic1D(Func1D):
     """
     Instantiates a 1D Sersic profile.
 
     Parameters are (1) the surface brightness at 1 half-light radius,
-    (2) the half-life radius, and (3) the Sersic index.
+    (2) the half-light radius, and (3) the Sersic index.
 
     Args:
         par (array-like, optional):
@@ -497,6 +806,15 @@ class Sersic1D(Func1D):
     def guess_par():
         """Return default guess parameters."""
         return np.array([1., 10., 1.])
+
+    @staticmethod
+    def par_names(short=False):
+        """
+        Return a list of strings with the parameter names.
+        """
+        if short:
+            return ['norm', 'reff', 'n']
+        return ['Profile value at effective radius', 'Effective radius', 'Sersic Index']
 
     @staticmethod
     def par_bounds():
@@ -531,4 +849,6 @@ class Sersic1D(Func1D):
         if par is not None:
             self._set_par(par)
         return self.par[0]*np.exp(-self.bn * ((x/self.par[1])**(1/self.par[2]) - 1))
+
+
 

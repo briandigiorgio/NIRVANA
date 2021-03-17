@@ -40,4 +40,9 @@
  - Added handling of covariance matrices in `AxisymmetricDisk`.
  - Added `nirvana.data.scatter.IntrinsicScatter` used to both reject outlying
    residuals and determine the intrinsic scatter in the data.
+ - Added galaxy pngs, drpall, and dapall to test data
+ - Added `nirvana.data.meta.GlobalPar` and
+   `nirvana.data.manga.MaNGAGlobalPar` classes to hold metadata
+ - Added iterative axisymmetric disk fitting, assessment plots, and
+   output file.
 

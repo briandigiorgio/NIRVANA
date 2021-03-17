@@ -618,6 +618,29 @@ class BitMask:
                 descr += [hdr.comments[k]]
         return keys, values, descr
 
+    def init_mask_array(self, shape, dtype=None):
+        """
+        Initialize an array to hold mask values.
+
+        Args:
+            shape (:obj:`tuple`):
+                Shape of the output array.
+            dtype (:obj:`str`, `numpy.dtype`_):
+                Data type for the output array. If None, use
+                :func:`minimum_dtype`.
+
+        Returns:
+            `numpy.ndarray`_: Array of the requested shape and relevant data
+            type with all bits turned off.
+        """
+        if dtype is None:
+            dtype = self.minimum_dtype()
+        # Check dtype is an integer
+        if not isinstance(dtype(0), numpy.integer):
+            raise ValueError('Provided dtype must be an integer type.')
+        return numpy.zeros(shape, dtype=dtype)
+
+
 #    def to_rst_table(self, header=True, class_link=True):
 #        """
 #        Construct a reStructuredText table describing the bitmask.

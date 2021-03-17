@@ -890,6 +890,7 @@ class AxisymmetricDisk:
         print('-'*50)
 
 
+# TODO: This is MaNGA-specific and needs to be abstracted
 def _fit_meta_dtype(par_names):
     """
     """
@@ -919,6 +920,7 @@ def _fit_meta_dtype(par_names):
             ('RCHI2', np.float)] + gp + bp + bpe
 
 
+# TODO: This is MaNGA-specific and needs to be abstracted
 def axisym_fit_data(galmeta, kin, p0, disk, ofile, vmask, smask, compress=True):
     """
     Construct a fits file with the results.
@@ -1090,6 +1092,7 @@ def axisym_fit_data(galmeta, kin, p0, disk, ofile, vmask, smask, compress=True):
 
 # TODO: Add keyword for:
 #   - Radial sampling for 1D model RCs and dispersion profiles
+# TODO: This is MaNGA-specific and needs to be abstracted
 def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=None):
     """
     Construct the QA plot for the result of fitting an

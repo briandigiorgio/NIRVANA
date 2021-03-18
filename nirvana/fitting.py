@@ -596,6 +596,7 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11', nbins=None,
     
     #prior bounds defined based off of guess
     args.setbounds()
+    args.getasym()
 
     #open up multiprocessing pool if needed
     if cores > 1 and not ultra:

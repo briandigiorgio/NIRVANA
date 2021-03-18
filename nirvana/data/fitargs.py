@@ -207,8 +207,8 @@ class FitArgs:
         self.guess = guess
         return self.guess
 
-    def setnbin(self, nbin):
-        self.nbin = nbin
+    def setnbins(self, nbins):
+        self.nbins = nbins
 
     def setbounds(self, incpad=20, papad=30, vsyspad=30, cenpad=2, velmax=400, sigmax=300):
         try: theta0 = self.guess

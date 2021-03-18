@@ -255,7 +255,7 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
     else: nbins = int(nbins)
 
     if not isfits:
-        args.setedges(nbins - 1 + args.fixcent, nbin=True, maxr=maxr)
+        if gal is None: args.setedges(nbins - 1 + args.fixcent, nbin=True, maxr=maxr)
         resdict = profs(chains, args, stds=True)
         resdict['plate'] = plate
         resdict['ifu'] = ifu

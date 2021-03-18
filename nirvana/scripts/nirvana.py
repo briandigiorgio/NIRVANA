@@ -108,4 +108,4 @@ def main(args):
             os.remove(fname)
             os.remove(galname)
         except:
-            raise ValueError('Unable to save as FITS. Output still available as .nirv')
+            raise ValueError('Unable to save as FITS. Output still available as .nirv and .gal')

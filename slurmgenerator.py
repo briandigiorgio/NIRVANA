@@ -9,7 +9,7 @@ import time
 
 if __name__ == '__main__':
     nnodes = 20
-    start = 8000
+    start = 7000
     stop = start+1000
     galpernode = (stop-start)//nnodes
     print(galpernode, 'galaxies per file')

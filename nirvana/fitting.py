@@ -591,7 +591,7 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11', nbins=None,
     nbin = len(args.edges) - args.fixcent
     if disp: ndim += nbin + args.fixcent
     if mix: ndim += 3
-    args.setnbin(nbin)
+    args.setnbins(nbin)
     print(f'{nbin + args.fixcent} radial bins, {ndim} parameters')
     
     #prior bounds defined based off of guess

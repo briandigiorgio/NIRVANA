@@ -659,8 +659,8 @@ class MaNGAGasKinematics(MaNGAKinematics):
             maxr = 2.5 if sec else 1.5
 
             # TODO: See my note just above nirvana.fitting.loglike
-            #vel_ivar = 1/(1/vel_ivar + 5**2)
-            #sig_ivar = 1/(1/sig_ivar + 5**2)
+            vel_ivar = 1/(1/vel_ivar + 5**2)
+            sig_ivar = 1/(1/sig_ivar + 5**2)
 
             # Get the masks
             if mask_flags is None:
@@ -782,8 +782,8 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             maxr = 2.5 if sec else 1.5
 
             # TODO: See my note just above nirvana.fitting.loglike
-            #vel_ivar = 1/(1/vel_ivar + 5**2)
-            #sig_ivar = 1/(1/sig_ivar + 5**2)
+            vel_ivar = 1/(1/vel_ivar + 5**2)
+            sig_ivar = 1/(1/sig_ivar + 5**2)
 
             # Get the masks
             if mask_flags is None:

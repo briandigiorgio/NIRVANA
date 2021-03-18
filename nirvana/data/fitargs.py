@@ -7,7 +7,7 @@ from scipy.optimize import leastsq, least_squares
 import matplotlib.pyplot as plt
 from astropy.stats import sigma_clip
 
-from ..models.geometry import projected_polar
+from ..models.geometry import projected_polar, asymmetry
 from ..models.axisym import AxisymmetricDisk
 from ..models.beam import ConvolveFFTW
 
@@ -178,7 +178,7 @@ class FitArgs:
         #generate model velocity field, start assembling array of guess values
         model = fit.model()
         guess = [inc,pa,pa,vsys]
-        if hasattr(self, 'nglobs') and self.nglobs == 6: guess += [0,0]
+        if hasattr(self, 'nglobs') and self.nglobs == 6: guess += [xc, yc]
 
         #if edges have not been defined, just return global parameters
         if not hasattr(self, 'edges') or simple: return [vmax,inc,pa,h,vsys]
@@ -235,3 +235,15 @@ class FitArgs:
         bounds[self.nglobs + self.nbin:self.nglobs + 3*self.nbin] = (0, vmax)
         if self.disp: bounds[self.nglobs + 3*self.nbin:] = (0, min(np.max(self.sig), sigmax))
         self.bounds = bounds
+
+    def getasym(self):
+        if not hasattr(self, 'guess'):
+            raise AttributeError('Must define guess first')
+
+        if args.nglobs == 6: 
+            inc, pa, pab, vsys, xc, yc = self.guess[:6]
+        elif args.nglobs == 4: 
+            inc, pa, pab, vsys = self.guess[:4]
+            xc, yc = [0, 0]
+
+        self.arc, self.asymmap = asymmetry(self, pa, vsys, xc, yc)

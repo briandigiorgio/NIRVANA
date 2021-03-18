@@ -213,10 +213,10 @@ class FitArgs:
     def setbounds(self, incpad=20, papad=30, vsyspad=30, cenpad=2, velmax=400, sigmax=300):
         try: theta0 = self.guess
         except: raise AttributeError('Must define guess first')
-        try: self.nbin
+        try: self.nbins
         except: raise AttributeError('Must define nbin first')
         inc = self.guess[1] if self.phot_inc is None else self.phot_inc
-        ndim = len(self.guess) + (self.nbin + self.fixcent) * self.disp
+        ndim = len(self.guess) + (self.nbins + self.fixcent) * self.disp
 
         #prior bounds defined based off of guess
         bounds = np.zeros((ndim, 2))
@@ -231,18 +231,18 @@ class FitArgs:
 
         #cap velocities at maximum in vf
         vmax = min(np.max(self.vel)/np.cos(np.radians(inc)) * 1.5, velmax)
-        bounds[self.nglobs:self.nglobs + self.nbin] = (0, vmax)
-        bounds[self.nglobs + self.nbin:self.nglobs + 3*self.nbin] = (0, vmax)
-        if self.disp: bounds[self.nglobs + 3*self.nbin:] = (0, min(np.max(self.sig), sigmax))
+        bounds[self.nglobs:self.nglobs + self.nbins] = (0, vmax)
+        bounds[self.nglobs + self.nbins:self.nglobs + 3*self.nbins] = (0, vmax)
+        if self.disp: bounds[self.nglobs + 3*self.nbins:] = (0, min(np.max(self.sig), sigmax))
         self.bounds = bounds
 
     def getasym(self):
         if not hasattr(self, 'guess'):
             raise AttributeError('Must define guess first')
 
-        if args.nglobs == 6: 
+        if self.nglobs == 6: 
             inc, pa, pab, vsys, xc, yc = self.guess[:6]
-        elif args.nglobs == 4: 
+        elif self.nglobs == 4: 
             inc, pa, pab, vsys = self.guess[:4]
             xc, yc = [0, 0]
 

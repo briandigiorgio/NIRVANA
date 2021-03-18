@@ -20,8 +20,8 @@ def extractfile(f, remotedir=None, gal=None):
         #get info out of each file and make bisym model
         args, resdict, chains, meds = fileprep(f, remotedir=remotedir, gal=gal)
 
-        #fractional difference between bisym and axisym
-        arc, asymmap = asymmetry(args)
+        inc, pa, pab, vsys, xc, yc = args.guess[:6]
+        arc, asymmap = asymmetry(args, pa, vsys, xc, yc)
         resdict['a_rc'] = arc
 
     #failure if bad file
@@ -170,7 +170,7 @@ def imagefits(f, gal=None, outfile=None, padding=20, remotedir=None, outdir=''):
     #hdus += [summplot, image]
 
     #add all data extensions from original data
-    maps = ['vel', 'sig', 'sb', 'vel_ivar', 'sig_ivar', 'sb_ivar', 'vel_mask']
+    maps = ['vel', 'sig', 'sb', 'vel_ivar', 'sig_ivar', 'sb_ivar']#, 'vel_mask']
     for m in maps:
         if m == 'sig': 
             data = np.sqrt(args.remap('sig_phys2').data)
@@ -187,7 +187,7 @@ def imagefits(f, gal=None, outfile=None, padding=20, remotedir=None, outdir=''):
     hdus[-1].name = 'MaNGA_mask'
 
     #add mask from clipping
-    args.clip()
+    if gal is None: args.clip()
     clipmask = fits.ImageHDU(np.array(args.remap('vel').mask, dtype=int))
     clipmask.name = 'clip_mask'
     hdus += [clipmask]
@@ -207,7 +207,7 @@ def imagefits(f, gal=None, outfile=None, padding=20, remotedir=None, outdir=''):
     hdr['maxr'] = args.maxr
     hdr['weight'] = args.weight
     hdr['fixcent'] = args.fixcent
-    hdr['nbin'] = args.nbin
+    hdr['nbin'] = args.nbins
     hdr['npoints'] = args.npoints
     hdr['smearing'] = args.smearing
     hdr['avmax'], hdr['ainc'], hdr['apa'], hdr['ahrot'], hdr['avsys'] = args.getguess(simple=True)

@@ -26,7 +26,7 @@ from .fitting import bisym_model, unpack
 from .data.manga import MaNGAStellarKinematics, MaNGAGasKinematics
 from .data.kinematics import Kinematics
 from .models.beam import smear, ConvolveFFTW
-from .models.geometry import projected_polar
+from .models.geometry import projected_polar, asymmetry
 
 
 def dynmeds(samp, stds=False, fixcent=True):
@@ -66,8 +66,8 @@ def dynmeds(samp, stds=False, fixcent=True):
         lstd = np.zeros(samps.shape[1])
         ustd = np.zeros(samps.shape[1])
         for i in range(samps.shape[1]):
-            lstd[i] = dynesty.utils.quantile(samps[:,i],[.5-.6826/2],weights)[0]
-            ustd[i] = dynesty.utils.quantile(samps[:,i],[.5+.6826/2],weights)[0]
+            lstd[i] = dynesty.utils.quantile(samps[:,i], [.5-.6826/2], weights)[0]
+            ustd[i] = dynesty.utils.quantile(samps[:,i], [.5+.6826/2], weights)[0]
         return meds, lstd, ustd
 
     return meds
@@ -345,30 +345,38 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
     if args.sig_ivar is None: args.sig_ivar = np.ones_like(args.sig)
 
     nvar = len(args.vel) + len(args.sig) - len(meds)
-    rchisq = np.sum((vel_r - velmodel)**2 * args.remap('vel_ivar')) / nvar
+    rchisqv = np.sum((vel_r - velmodel)**2 * args.remap('vel_ivar')) / nvar
+    rchisqs = np.sum((sig_r - sigmodel)**2 * args.remap('sig_ivar')) / nvar
+    args.getguess(args.phot_inc)
+    ginc, gpa, gpab, gvsys, gxc, gyc = args.guess[:6]
+    asym, asymmap = asymmetry(args, gpa, gvsys, gxc, gyc)
 
     #print global parameters on figure
     fig = plt.figure(figsize = (12,9))
     plt.subplot(3,4,1)
     ax = plt.gca()
     plt.axis('off')
-    plt.title(f"{resdict['plate']}-{resdict['ifu']} {resdict['type']}",size=20)
-    plt.text(.1, .82, r'$i$: %0.1f$^{+%0.1f}_{-%0.1f}$ deg.'
+    plt.title(f"{resdict['plate']}-{resdict['ifu']} {resdict['type']}",size=18)
+    plt.text(.1, .86, r'$i$: %0.1f$^{+%0.1f}_{-%0.1f}$ deg.'
             %(resdict['inc'], resdict['incu'] - resdict['inc'], 
-            resdict['inc'] - resdict['incl']), transform=ax.transAxes, size=20)
-    plt.text(.1, .64, r'$\phi$: %0.1f$^{+%0.1f}_{-%0.1f}$ deg.'
+            resdict['inc'] - resdict['incl']), transform=ax.transAxes, size=14)
+    plt.text(.1, .72, r'$\phi$: %0.1f$^{+%0.1f}_{-%0.1f}$ deg.'
             %(resdict['pa'], resdict['pau'] - resdict['pa'], 
-            resdict['pa'] - resdict['pal']), transform=ax.transAxes, size=20)
-    plt.text(.1, .46, r'$\phi_b$: %0.1f$^{+%0.1f}_{-%0.1f}$ deg.'
+            resdict['pa'] - resdict['pal']), transform=ax.transAxes, size=14)
+    plt.text(.1, .58, r'$\phi_b$: %0.1f$^{+%0.1f}_{-%0.1f}$ deg.'
             %(resdict['pab'], resdict['pabu'] - resdict['pab'], 
-            resdict['pab'] - resdict['pabl']), transform=ax.transAxes, size=20)
-    plt.text(.1, .28, r'$v_{{sys}}$: %0.1f$^{+%0.1f}_{-%0.1f}$ km/s'
+            resdict['pab'] - resdict['pabl']), transform=ax.transAxes, size=14)
+    plt.text(.1, .44, r'$v_{{sys}}$: %0.1f$^{+%0.1f}_{-%0.1f}$ km/s'
             %(resdict['vsys'], resdict['vsysu'] - resdict['vsys'], 
-            resdict['vsys'] - resdict['vsysl']),transform=ax.transAxes, size=20)
-    plt.text(.1, .1, r'$\chi_r^2$: %0.1f' % rchisq, 
-            transform=ax.transAxes, size=20)
-    if cen: plt.text(.1, -.08, r'$(x_c, y_c)$: (%0.1f, %0.1f)' %  
-            (resdict['xc'], resdict['yc']), transform=ax.transAxes, size=20)
+            resdict['vsys'] - resdict['vsysl']),transform=ax.transAxes, size=14)
+    plt.text(.1, .30, r'$\chi_v^2$: %0.1f,   $\chi_s^2$: %0.1f' % (rchisqv, rchisqs), 
+            transform=ax.transAxes, size=14)
+    plt.text(.1, .16, 'Asymmetry: %0.3f' % asym,
+            transform=ax.transAxes, size=14)
+    if cen: plt.text(.1, .02, r'$x_c: %0.1f$" $ ^{+%0.1f}_{-%0.1f}$,   $y_c: %0.1f$" $ ^{+%0.1f}_{-%0.1f}$' %  
+                    (resdict['xc'], abs(resdict['xcu'] - resdict['xc']), abs(resdict['xcl'] - resdict['xc']), 
+                    resdict['yc'], abs(resdict['ycu'] - resdict['yc']), abs(resdict['ycl'] - resdict['yc'])),
+                    transform=ax.transAxes, size=14)
 
     #image
     plt.subplot(3,4,2)
@@ -380,8 +388,6 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
 
     #Radial velocity profiles
     plt.subplot(3,4,3)
-    #if chains is not None: profs(chains, args, plt.gca(), stds=True)
-    #else: 
     ls = [r'$V_t$',r'$V_{2t}$',r'$V_{2r}$']
     for i,v in enumerate(['vt', 'v2t', 'v2r']):
         plt.plot(args.edges, resdict[v], label=ls[i]) 
@@ -391,6 +397,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
         plt.fill_between(args.edges, p[0], p[1], alpha=.5) 
 
     plt.ylim(bottom=0)
+    plt.legend(loc=2)
     plt.title('Velocity Profiles')
 
     #dispersion profile
@@ -690,6 +697,7 @@ def plotdir(directory=None, fname=None, cores=20, **kwargs):
         kwargs (optional):
             Args for summaryplot
     '''
+    plt.ioff()
     if directory is None: directory = '/data/manga/digiorgio/nirvana/'
     if fname is None: fname = '*-*_*.nirv'
     fs = glob(directory+fname)

@@ -241,6 +241,7 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
     args.setnglobs(4) if not cen else args.setnglobs(6)
     args.setmix(mix)
     args.setfixcent(fixcent)
+    if gal is not None: clip = False
     if clip: args.clip()
 
     vel_r = args.remap('vel')

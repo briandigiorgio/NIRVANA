@@ -9,12 +9,11 @@ import traceback
 
 from astropy.io import fits
 from astropy.table import Table,Column
-from scipy.spatial import KDTree
 
 from .plotting import fileprep, summaryplot
 from .fitting import bisym_model
 from .models.axisym import AxisymmetricDisk
-from .models.geometry import projected_polar
+from .models.geometry import projected_polar, asymmetry
 
 def extractfile(f, remotedir=None, gal=None):
     try: 
@@ -218,66 +217,6 @@ def imagefits(f, gal=None, outfile=None, padding=20, remotedir=None, outdir=''):
     if outfile is None: 
         hdul.writeto(f"{outdir}/nirvana_{resdict['plate']}-{resdict['ifu']}_{resdict['type']}.fits", overwrite=True)
     else: hdul.writeto(outdir + outfile)
-
-def reflect(pa, x, y):
-    '''
-    Reflect arrays of x and y coordinates across a line at angle position angle pa.
-    '''
-
-    th = np.radians(90 - pa) #turn position angle into a regular angle
-
-    #reflection matrix across arbitrary angle
-    ux = np.cos(th) 
-    uy = np.sin(th)
-    return np.dot([[ux**2 - uy**2, 2*ux*uy], [2*ux*uy, uy**2 - ux**2]], [x, y])
-
-def asymmetry(args, resdict=None):
-    '''
-    Calculate asymmetry parameter and maps for major/minor axis reflection.
-    '''
-
-    #use axisym fit if no nirvana fit is given
-    if resdict is None:
-        fit = AxisymmetricDisk()
-        fit.lsq_fit(args)
-        xc,yc,pa,inc,vsys,vmax,h = fit.par
-
-    #get nirvana fit params
-    else:
-        xc,yc,pa,vsys = resdict['xc'], resdict['yc'], resdict['pa'], resdict['vsys']
-        
-    #construct KDTree of spaxels for matching
-    x = args.x - xc
-    y = args.y - xc
-    tree = KDTree(list(zip(x,y)))
-    
-    #compute major and minor axis asymmetry 
-    arc2d = []
-    for axis in [0,90]:
-        #match spaxels to their reflections, mask out ones without matches
-        d,i = tree.query(reflect(pa - axis, x, y).T)
-        mask = np.ma.array(np.ones(len(args.vel)), mask = (d>.5) | args.vel_mask)
-
-        #compute Andersen & Bershady (2013) A_RC parameter 2D maps
-        vel = args.remap(args.vel * mask) - vsys
-        ivar = args.remap(args.vel_ivar * mask)
-        velr = args.remap(args.vel[i] * mask - vsys)
-        ivarr = args.remap(args.vel_ivar[i] * mask)
-        arc2d += [A_RC(vel, velr, ivar, ivarr)]
-    
-    #sum over maps to get global params
-    arc = np.sum([np.sum(a) for a in arc2d])
-    asymmap = np.ma.array(arc2d).mean(axis=0)
-    return arc, asymmap
-
-def A_RC(vel, velr, ivar, ivarr):
-    '''
-    Compute velocity field asymmetry for a velocity field and its reflection.
-
-    From Andersen & Bershady (2013) equation 7 but doesn't sum over whole galaxy so asymmmetry is spatially resolved. 
-    '''
-    return (np.abs(np.abs(vel) - np.abs(velr))/np.sqrt(1/ivar + 1/ivarr) 
-         / (.5*np.sum(np.abs(vel) + np.abs(velr))/np.sqrt(1/ivar + 1/ivarr)))
 
 def fig2data(fig):
     # draw the renderer

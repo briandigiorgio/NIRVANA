@@ -35,8 +35,8 @@ if __name__ == '__main__':
 #SBATCH --ntasks=1 \n\
 #SBATCH --cpus-per-task=40 \n\
 #SBATCH --nodes=1 \n\
-#SBATCH --output=/data/users/bdigiorg/logs/nirvana_{platesi[0]}-{platesi[-1]}.log \n\
 #SBATCH --requeue \n \n\
+#SBATCH --output=/data/users/bdigiorg/logs/nirvana_{platesi[0]}-{platesi[-1]}.log \n\
 \
 pwd; hostname; date \n\n\
 \
@@ -56,12 +56,12 @@ echo {platesi[j]} {ifusi[j]} gas \n\
 mkdir /data/users/bdigiorg/progress/{platesi[j]}/ \n\
 mkdir /data/users/bdigiorg/progress/{platesi[j]}/{ifusi[j]}/ \n\
 touch /data/users/bdigiorg/progress/{platesi[j]}/{ifusi[j]}/gas.start \n\
-nirvana {platesi[j]} {ifusi[j]} -c 40 --root /data/users/bdigiorg/ --dir /data/users/bdigiorg/fits/ --remote /data/users/bdigiorg/download/ --fits \n\
+nirvana {platesi[j]} {ifusi[j]} -c 40 --root /data/users/bdigiorg/ --dir /data/users/bdigiorg/fits/ --remote /data/users/bdigiorg/download/ --fits > /data/users/bdigiorg/progress/{platesi[j]}/{ifusi[j]}/gas.log 2> /data/users/bdigiorg/progress/{platesi[j]}/{ifusi[j]}/gas.err\n\
 touch /data/users/bdigiorg/progress/{platesi[j]}/{ifusi[j]}/gas.finish \n \n\
 \
 echo {platesi[j]} {ifusi[j]} stellar \n\
 touch /data/users/bdigiorg/progress/{platesi[j]}/{ifusi[j]}/stellar.start \n\
-        nirvana {platesi[j]} {ifusi[j]} -c 40 --root /data/users/bdigiorg/ --dir /data/users/bdigiorg/fits/ --remote /data/users/bdigiorg/download/ --fits -s \n\
+        nirvana {platesi[j]} {ifusi[j]} -c 40 --root /data/users/bdigiorg/ --dir /data/users/bdigiorg/fits/ --remote /data/users/bdigiorg/download/ --fits -s > /data/users/bdigiorg/progress/{platesi[j]}/{ifusi[j]}/stellar.log 2> /data/users/bdigiorg/progress/{platesi[j]}/{ifusi[j]}/stellar.err\n\
 touch /data/users/bdigiorg/progress/{platesi[j]}/{ifusi[j]}/stellar.finish \n\
 date\n\n')
         run(['sbatch',fname])

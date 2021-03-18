@@ -351,7 +351,7 @@ def ptform(params, args, bounds=None, gaussprior=False):
 # errors in the calculation of the likelihood. It's not a bad idea to the
 # latter, because ideally we would be fitting the scatter as a model
 # parameter, and doing the calculation here is a step in that direction.
-def loglike(params, args, squared=False):
+def loglike(params, args, penalty=100, squared=False):
     '''
     Log likelihood for :class:`dynesty.NestedSampler` fit. 
     
@@ -415,6 +415,15 @@ def loglike(params, args, squared=False):
         llike -= .5*np.ma.sum(siglike)
         if args.weight != -1:
             llike -= smoothing(paramdict['sig'], args.weight*.1)
+
+    if penalty:
+        vtm = paramdict['vt'].mean()
+        v2tm = paramdict['v2t'].mean()
+        v2rm = paramdict['v2r'].mean()
+        if v2tm > args.arc * vtm:
+            llike -= penalty * (v2tm - vtm)/vtm
+        if v2rm > args.arc * vtm:
+            llike -= penalty * (v2rm - vtm)/vtm
 
     return llike
 

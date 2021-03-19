@@ -14,6 +14,7 @@ from .plotting import fileprep, summaryplot
 from .fitting import bisym_model
 from .models.axisym import AxisymmetricDisk
 from .models.geometry import projected_polar, asymmetry
+from .util import fileio
 
 def extractfile(f, remotedir=None, gal=None):
     try: 
@@ -51,12 +52,14 @@ def extractdir(cores=10, directory='/data/manga/digiorgio/nirvana/'):
 
     return galaxies, arcs, asyms, dicts
 
-def dictformatting(d, drp=None, dap=None, padding=20, fill=-9999):
+def dictformatting(d, drp=None, dap=None, padding=20, fill=-9999, drpalldir='.', dapalldir='.'):
     #load dapall and drpall
     if drp is None:
-        drp = fits.open('/home/bdigiorg/dapall-v3_0_1-3.0.1.fits')[1].data
+        drpfile = glob(drpalldir + '/drpall*')[0]
+        drp = fits.open(drpfile)[1].data
     if dap is None:
-        dap = fits.open('/home/bdigiorg/drpall-v3_1_1.fits')[1].data
+        dapfile = glob(dapalldir + '/dapall*')[0]
+        dap = fits.open(dapfile)[1].data
     try:
         data = list(d.values())
         for i in range(len(data)):
@@ -120,7 +123,7 @@ def makealltable(dicts, outfile=None, padding=20):
     if outfile is not None: t.write(outfile, format='fits', overwrite=True)
     return t
 
-def maskedarraytofile(array, name=None, fill=0):
+def maskedarraytofile(array, name=None, fill=0, hdr=None):
     '''
     Write a masked array to an HDU. 
     
@@ -128,11 +131,10 @@ def maskedarraytofile(array, name=None, fill=0):
     '''
     array[array.mask] = fill
     array = array.data
-    arrayhdu = fits.ImageHDU(array)
-    if name is not None: arrayhdu.name = name
+    arrayhdu = fits.ImageHDU(array, name=name, header=hdr)
     return arrayhdu
 
-def imagefits(f, gal=None, outfile=None, padding=20, remotedir=None, outdir=''):
+def imagefits(f, galmeta, gal=None, outfile=None, padding=20, remotedir=None, outdir='.', drpalldir='.', dapalldir='.'):
     '''
     Make a fits file for an individual galaxy with its fit parameters and relevant data.
     '''
@@ -141,8 +143,11 @@ def imagefits(f, gal=None, outfile=None, padding=20, remotedir=None, outdir=''):
     args, arc, asymmap, resdict = extractfile(f, remotedir=remotedir, gal=gal)
     if gal is not None: args = gal
     resdict['bin_edges'] = np.array(args.edges)
-    data = dictformatting(resdict, padding=padding)
+    r, th = projected_polar(args.x - resdict['xc'], args.y - resdict['yc'], *np.radians((resdict['pa'], resdict['inc'])))
+    r = args.remap(r)
+    th = args.remap(th)
 
+    data = dictformatting(resdict, padding=padding, drpalldir=drpalldir, dapalldir=dapalldir)
     data += [*np.delete(args.bounds.T, slice(7,-1), axis=1)]
 
     names = list(resdict.keys()) + ['velmask','sigmask','drpindex','dapindex','prior_lbound','prior_ubound']
@@ -150,6 +155,39 @@ def imagefits(f, gal=None, outfile=None, padding=20, remotedir=None, outdir=''):
               'f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4',
               '20f4','20f4','20f4','20f4','20f4','20f4','20f4','20f4',
               'I','I','S','f4','20f4','20?','20?','I','I','8f4','8f4']
+
+    #add parameters to the header
+    hdr = fileio.initialize_primary_header(galmeta)
+    maphdr = fileio.add_wcs(hdr, args)
+    psfhdr = hdr.copy()
+    psfhdr['PSFNAME'] = (args.psf_name, 'Original PSF name')
+
+    hdr['MANGAID'] = (galmeta.mangaid, 'MaNGA ID')
+    hdr['PLATE'] = (galmeta.plate, 'MaNGA plate')
+    hdr['IFU'] = (galmeta.ifu, 'MaNGA IFU')
+    hdr['OBJRA'] = (galmeta.ra, 'Galaxy center RA in deg')
+    hdr['OBJDEC'] = (galmeta.dec, 'Galaxy center Dec in deg')
+    hdr['Z'] = (galmeta.z, 'Galaxy redshift')
+    hdr['ASEC2KPC'] = (galmeta.kpc_per_arcsec(), 'Kiloparsec to arcsec conversion factor')
+    hdr['REFF'] = (galmeta.reff, 'Effective radius in arcsec')
+    hdr['SERSICN'] = (galmeta.sersic_n, 'Sersic index')
+    hdr['PHOT_PA'] = (galmeta.pa, 'Position angle derived from photometry in deg')
+    hdr['PHOT_INC'] = (args.phot_inc, 'Photomentric inclination angle in deg')
+    hdr['ELL'] = (galmeta.ell, 'Photometric ellipticity')
+    hdr['Q0'] = (galmeta.q0, 'Intrinsic oblateness')
+
+    hdr['maxr'] = (args.maxr, 'Maximum observation radius in REFF')
+    hdr['weight'] = (args.weight, 'Weight of profile smoothness')
+    hdr['fixcent'] = (args.fixcent, 'Whether first velocity bin is fixed at 0')
+    hdr['nbin'] = (args.nbins, 'Number of radial bins')
+    hdr['npoints'] = (args.npoints, 'Number of dynesty live points')
+    hdr['smearing'] = (args.smearing, 'Whether PSF smearing was used')
+
+    avmax, ainc, apa, ahrot, avsys = args.getguess(simple=True)
+    hdr['a_vmax'] = (avmax, 'Axisymmetric asymptotic velocity in km/s')
+    hdr['a_pa'] = (apa, 'Axisymmetric position angle in deg')
+    hdr['a_inc'] = (ainc, 'Axisymmetric inclination angle in deg')
+    hdr['a_vsys'] = (avsys, 'Axisymmetric systemic velocity in km/s')
 
     #make table of fit data
     t = Table(names=names, dtype=dtypes)
@@ -159,20 +197,22 @@ def imagefits(f, gal=None, outfile=None, padding=20, remotedir=None, outdir=''):
           'xcl','ycl','incl','pal','pabl','vsysl','vtl','v2tl','v2rl','sigl',
           'xcu','ycu','incu','pau','pabu','vsysu','vtu','v2tu','v2ru','sigu','a_rc']
     t = t[reordered]
-    bintable = fits.BinTableHDU(t)
-    bintable.name = 'fit_params'
-    hdus = [fits.PrimaryHDU(), bintable]
+    bintable = fits.BinTableHDU(t, name='fit_params', header=hdr)
+    hdus = [fits.PrimaryHDU(header=hdr), bintable]
 
-    #image = fits.ImageHDU(args.image)
-    #image.name = 'image'
-    #summplot = fits.ImageHDU(fig2data(summaryplot(f)))
-    #summplot.name = 'summary'
-    #hdus += [summplot, image]
+    hdus += [maskedarraytofile(r, name='ell_r', hdr=fileio.finalize_header(maphdr, 'ell_r'))]
+    hdus += [maskedarraytofile(th, name='ell_theta', hdr=fileio.finalize_header(maphdr, 'ell_th'))]
 
     #add all data extensions from original data
-    maps = ['vel', 'sig', 'sb', 'vel_ivar', 'sig_ivar', 'sb_ivar']#, 'vel_mask']
-    for m in maps:
-        if m == 'sig': 
+    mapnames = ['vel', 'sigsqr', 'sb', 'vel_ivar', 'sig_ivar', 'sb_ivar', 'vel_mask', 'sig_mask']
+    units = ['km/s', '(km/2)^2', '1E-17 erg/s/cm^2/ang/spaxel', '(km/s)^{-2}', '(km/s)^{-4}', '(1E-17 erg/s/cm^2/ang/spaxel)^{-2}', None, None]
+    errs = [True, True, True, False, False, False, True, True]
+    quals = [True, True, False, True, True, False, False, False]
+    hduclas2s = ['DATA', 'DATA', 'DATA', 'ERROR', 'ERROR', 'ERROR', 'QUALITY', 'QUALITY', 'QUALITY']
+    bittypes = [None, None, None, None, None, None, np.bool, np.bool]
+
+    for m, u, e, q, h, b in zip(mapnames, units, errs, quals, hduclas2s, bittypes):
+        if m == 'sigsqr': 
             data = np.sqrt(args.remap('sig_phys2').data)
             mask = args.remap('sig_phys2').mask
         else:
@@ -181,16 +221,9 @@ def imagefits(f, gal=None, outfile=None, padding=20, remotedir=None, outdir=''):
 
         if data.dtype == bool: data = data.astype(int) #catch for bools
         data[mask] = 0 if 'mask' not in m else data[mask]
-        hdu = fits.ImageHDU(data)
-        hdu.name = m
-        hdus += [hdu]
-    hdus[-1].name = 'MaNGA_mask'
+        hdus += [fits.ImageHDU(data, name=m, header=fileio.finalize_header(maphdr, m, u, h, e, q, None, b))]
 
-    #add mask from clipping
-    if gal is None: args.clip()
-    clipmask = fits.ImageHDU(np.array(args.remap('vel').mask, dtype=int))
-    clipmask.name = 'clip_mask'
-    hdus += [clipmask]
+    hdus += [fits.ImageHDU(args.beam, name='PSF', header=fileio.finalize_header(psfhdr, 'PSF'))]
 
     #smeared and intrinsic velocity/dispersion models
     velmodel, sigmodel = bisym_model(args, resdict, plot=True)
@@ -198,24 +231,17 @@ def imagefits(f, gal=None, outfile=None, padding=20, remotedir=None, outdir=''):
     intvelmodel, intsigmodel = bisym_model(args, resdict, plot=True)
 
     #unmask them, name them all, and add them to the list
-    newnames = ['vel_model','sig_model','vel_int_model','sig_int_model','asymmetry']
-    for i,a in enumerate([velmodel, sigmodel, intvelmodel, intsigmodel, asymmap]):
-        hdus += [maskedarraytofile(a, name=newnames[i])]
-
-    #add parameters to the header
-    hdr = hdus[0].header
-    hdr['maxr'] = args.maxr
-    hdr['weight'] = args.weight
-    hdr['fixcent'] = args.fixcent
-    hdr['nbin'] = args.nbins
-    hdr['npoints'] = args.npoints
-    hdr['smearing'] = args.smearing
-    hdr['avmax'], hdr['ainc'], hdr['apa'], hdr['ahrot'], hdr['avsys'] = args.getguess(simple=True)
+    models = [velmodel, sigmodel, intvelmodel, intsigmodel, asymmap]
+    modelnames = ['vel_model','sig_model','vel_int_model','sig_int_model','asymmetry']
+    units = ['km/s', '(km/s)^2', 'km/s', '(km/s)^2', None]
+    for a, n, u in zip(models, modelnames, units):
+        hdri = fileio.finalize_header(maphdr, n, u)
+        hdus += [maskedarraytofile(a, name=n, hdr=hdri)]
 
     #write out
     hdul = fits.HDUList(hdus)
     if outfile is None: 
-        hdul.writeto(f"{outdir}/nirvana_{resdict['plate']}-{resdict['ifu']}_{resdict['type']}.fits", overwrite=True)
+        hdul.writeto(f"{outdir}/nirvana_{resdict['plate']}-{resdict['ifu']}_{resdict['type']}.fits", overwrite=True, output_verify='fix', checksum=True)
     else: hdul.writeto(outdir + outfile)
 
 def fig2data(fig):

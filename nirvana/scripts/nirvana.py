@@ -7,9 +7,11 @@ Script that runs the fit.
 import argparse
 import pickle
 import os
+from glob import glob
 
 from nirvana.fitting import fit
 from nirvana.output import imagefits
+from nirvana.data.manga import MaNGAGlobalPar
 
 def parse_args(options=None):
 
@@ -59,6 +61,8 @@ def parse_args(options=None):
                         help='Download sas data into this dir instead of local')
     parser.add_argument('--clobber', default=False, action='store_true',
                         help='Overwrite preexisting outfiles')
+    parser.add_argument('--drpall_dir', default='.',
+                        help='Path to drpall file. Will use first file in dir'
 
     return parser.parse_args() if options is None else parser.parse_args(options)
 
@@ -104,8 +108,10 @@ def main(args):
     pickle.dump(gal, open(galname, 'wb'))
     if args.fits: 
         try:
-            imagefits(fname, gal, outfile=fitsname, remotedir=args.remote) 
+            drpall_file = glob(args.drpall_dir + '/drpall*.fits')[0]
+            galmeta = MaNGAGlobalPar(plate, ifu, drpall_file=drpall_file)
+            imagefits(fname, galmeta, gal, outfile=fitsname, remotedir=args.remote) 
             os.remove(fname)
             os.remove(galname)
-        except:
+        except Exception:
             raise ValueError('Unable to save as FITS. Output still available as .nirv and .gal')

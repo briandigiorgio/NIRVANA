@@ -548,7 +548,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     v2rdict['vt'] = z
     v2rdict['v2t'] = z
     if maxr is not None:
-        r,th = projected_polar(args.x, args.y, resdict['pa'], resdict['inc'])
+        r,th = projected_polar(args.x, args.y, *np.radians((resdict['pa'], resdict['inc'])))
         r /= args.reff
         rmask = r > maxr
         args.vel_mask |= rmask

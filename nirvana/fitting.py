@@ -351,7 +351,7 @@ def ptform(params, args, bounds=None, gaussprior=False):
 # errors in the calculation of the likelihood. It's not a bad idea to the
 # latter, because ideally we would be fitting the scatter as a model
 # parameter, and doing the calculation here is a step in that direction.
-def loglike(params, args, penalty=100, squared=False):
+def loglike(params, args, squared=False):
     '''
     Log likelihood for :class:`dynesty.NestedSampler` fit. 
     
@@ -389,7 +389,8 @@ def loglike(params, args, penalty=100, squared=False):
     #compute chi squared value with error if possible
     llike = (velmodel - args.vel)**2
     if args.vel_ivar is not None: 
-        llike = llike * args.vel_ivar - .5 * np.log(2*np.pi * args.vel_ivar)
+        vel_ivar = 1/(1/args.vel_ivar + args.noise_floor**2)
+        llike = llike * vel_ivar - .5 * np.log(2*np.pi * vel_ivar)
     llike = -.5 * np.ma.sum(llike)
 
     #add in penalty for non smooth rotation curves
@@ -411,19 +412,20 @@ def loglike(params, args, penalty=100, squared=False):
             siglike = (sigmodel - sigdata)**2
 
         if sigdataivar is not None: 
+            sigdataivar = 1/(1/sigdataivar + args.noise_floor**2)
             siglike = siglike * sigdataivar - .5 * np.log(2*np.pi * sigdataivar)
         llike -= .5*np.ma.sum(siglike)
         if args.weight != -1:
             llike -= smoothing(paramdict['sig'], args.weight*.1)
 
-    if penalty:
+    if hasattr(args, 'penalty') and args.penalty:
         vtm = paramdict['vt'].mean()
         v2tm = paramdict['v2t'].mean()
         v2rm = paramdict['v2r'].mean()
         if v2tm > args.arc * vtm:
-            llike -= penalty * (v2tm - vtm)/vtm
+            llike -= args.penalty * (v2tm - vtm)/vtm
         if v2rm > args.arc * vtm:
-            llike -= penalty * (v2rm - vtm)/vtm
+            llike -= args.penalty * (v2rm - vtm)/vtm
 
     return llike
 
@@ -474,7 +476,7 @@ def mixlike(params, args):
 def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11', nbins=None,
         cores=10, maxr=None, cen=True, weight=10, smearing=True, points=500,
         stellar=False, root=None, verbose=False, disp=True, mix=False, 
-        fixcent=True, ultra=False, remotedir=None):
+        fixcent=True, ultra=False, remotedir=None, floor=5, penalty=100):
     '''
     Main function for fitting a MaNGA galaxy with a nonaxisymmetric model.
 
@@ -597,6 +599,8 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11', nbins=None,
     #prior bounds defined based off of guess
     args.setbounds()
     args.getasym()
+    args.setnoisefloor(floor)
+    args.setpenalty(penalty)
 
     #open up multiprocessing pool if needed
     if cores > 1 and not ultra:

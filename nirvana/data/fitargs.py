@@ -18,6 +18,20 @@ class FitArgs:
     data.
     '''
 
+    def __init__(self, nglobs=6, weight=10, edges=None, disp=True, fixcent=True, mix=False, guess=None, nbins=None, bounds=None, arc=None, asymmap=None, maxr=None, noisefloor=5, penalty=100):
+        self.nglobs = nglobs
+        self.weight = weight
+        self.edges = edges
+        self.disp = disp
+        self.fixcent = fixcent
+        self.mix = mix
+        self.guess = guess
+        self.nbins = nbins
+        self.bounds = bounds
+        self.maxr = maxr
+        self.noise_floor = noisefloor
+        self.penalty = penalty
+
     def setnglobs(self, nglobs):
         '''
         Set number of global variables in fit. Global variables are assumed to
@@ -247,3 +261,9 @@ class FitArgs:
             xc, yc = [0, 0]
 
         self.arc, self.asymmap = asymmetry(self, pa, vsys, xc, yc)
+
+    def setnoisefloor(self, floor):
+        self.noise_floor = floor
+
+    def setpenalty(self, penalty):
+        self.penalty = penalty

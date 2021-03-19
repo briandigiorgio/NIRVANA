@@ -62,7 +62,7 @@ def parse_args(options=None):
     parser.add_argument('--clobber', default=False, action='store_true',
                         help='Overwrite preexisting outfiles')
     parser.add_argument('--drpall_dir', default='.',
-                        help='Path to drpall file. Will use first file in dir'
+                        help='Path to drpall file. Will use first file in dir')
 
     return parser.parse_args() if options is None else parser.parse_args(options)
 

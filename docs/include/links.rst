@@ -91,6 +91,7 @@
 .. misc
 
 .. _requests: https://pypi.org/project/requests/
+.. _requests.get: https://requests.readthedocs.io/en/latest/api/#requests.get
 .. _ppxf: https://pypi.org/project/ppxf/
 .. _vorbin: https://pypi.org/project/vorbin/
 

@@ -19,7 +19,7 @@ from .util import fileio
 def extractfile(f, remotedir=None, gal=None):
     try: 
         #get info out of each file and make bisym model
-        args, resdict, chains, meds = fileprep(f, remotedir=remotedir, gal=gal)
+        args, resdict = fileprep(f, remotedir=remotedir, gal=gal)
 
         inc, pa, pab, vsys, xc, yc = args.guess[:6]
         arc, asymmap = asymmetry(args, pa, vsys, xc, yc)
@@ -174,7 +174,7 @@ def imagefits(f, galmeta, gal=None, outfile=None, padding=20, remotedir=None, ou
     hdr['PHOT_PA'] = (galmeta.pa, 'Position angle derived from photometry in deg')
     hdr['PHOT_INC'] = (args.phot_inc, 'Photomentric inclination angle in deg')
     hdr['ELL'] = (galmeta.ell, 'Photometric ellipticity')
-    hdr['Q0'] = (galmeta.q0, 'Intrinsic oblateness')
+    hdr['guess_Q0'] = (galmeta.q0, 'Intrinsic oblateness (from population stats)')
 
     hdr['maxr'] = (args.maxr, 'Maximum observation radius in REFF')
     hdr['weight'] = (args.weight, 'Weight of profile smoothness')
@@ -182,6 +182,8 @@ def imagefits(f, galmeta, gal=None, outfile=None, padding=20, remotedir=None, ou
     hdr['nbin'] = (args.nbins, 'Number of radial bins')
     hdr['npoints'] = (args.npoints, 'Number of dynesty live points')
     hdr['smearing'] = (args.smearing, 'Whether PSF smearing was used')
+    hdr['ivar_flr'] = (args.noise_floor, 'Noise added to ivar arrays in quadrature')
+    hdr['penalty'] = (args.penalty, 'Penalty for large 2nd order terms')
 
     avmax, ainc, apa, ahrot, avsys = args.getguess(simple=True)
     hdr['a_vmax'] = (avmax, 'Axisymmetric asymptotic velocity in km/s')

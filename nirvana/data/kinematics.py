@@ -231,7 +231,7 @@ class Kinematics(FitArgs):
         self.grid_x = grid_x
         self.grid_y = grid_y
         self.grid_wcs = grid_wcs
-        self.binid, self.nbin, self.bin_indx, self.grid_indx, self.bin_inverse, self.bin_transform \
+        self.binid, self.nspax, self.bin_indx, self.grid_indx, self.bin_inverse, self.bin_transform \
                 = get_map_bin_transformations(spatial_shape=self.spatial_shape, binid=binid)
 
         # Unravel and select the valid values for all arrays
@@ -815,9 +815,9 @@ class Kinematics(FitArgs):
         '''
 
         #count spaxels in each bin and make 2d maps excluding large bins
-#        nspax = np.array([(self.remap('binid') == self.binid[i]).sum() for i in range(len(self.binid))])
-#        binmask = self.remap(nspax) > 10
-        binmask = self.remap(self.nbin) > 10
+        nspax = np.array([(self.remap('binid') == self.binid[i]).sum() for i in range(len(self.binid))])
+        binmask = self.remap(nspax) > 10
+        #binmask = self.remap(self.nspax) > 10
         ngood = self.vel_mask.sum()
         nmasked0 = (~self.vel_mask).sum()
 

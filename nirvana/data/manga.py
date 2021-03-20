@@ -180,25 +180,6 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
             Raised if the directory where the datacube should exist can be
             defined but does not exist.
     """
-#        use_marvin (:obj:`bool`, optional):
-#            Use `Marvin`_ to both download the data and return the relevant
-#            file paths. If True, all other keyword arguments are ignored.
-#    #download using marvin instead of looking locally
-#    if use_marvin and (Cube is None or config is None):
-#        raise ImportError('Could not use marvin because marvin Cube could not be imported.')
-#    if use_marvin:
-#        #get files
-#        config.setMPL(dr)
-#        cube = Cube(f'{plate}-{ifu}')
-#        maps = cube.getMaps()
-#        image = cube.getImage()
-#        
-#        #download to local sas directory (see marvin documentation)
-#        cube.download()
-#        maps.download()
-#        image.download()
-#
-#        return maps.filename, cube.filename, image.filename
 
     #download from sas instead of looking locally
     if remotedir is not None:
@@ -658,10 +639,6 @@ class MaNGAGasKinematics(MaNGAKinematics):
             pri, sec, anc, oth = parse_manga_targeting_bits(hdu[0].header['MNGTARG1'], hdu[0].header['MNGTARG3'])
             maxr = 2.5 if sec else 1.5
 
-            # TODO: See my note just above nirvana.fitting.loglike
-            #vel_ivar = 1/(1/vel_ivar + 5**2)
-            #sig_ivar = 1/(1/sig_ivar + 5**2)
-
             # Get the masks
             if mask_flags is None:
                 sb_mask = np.zeros(sb.shape, dtype=bool)
@@ -780,10 +757,6 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             phot_inc = np.degrees(np.arccos(1 - phot_ell))
             pri, sec, anc, oth = parse_manga_targeting_bits(hdu[0].header['MNGTARG1'], hdu[0].header['MNGTARG3'])
             maxr = 2.5 if sec else 1.5
-
-            # TODO: See my note just above nirvana.fitting.loglike
-            #vel_ivar = 1/(1/vel_ivar + 5**2)
-            #sig_ivar = 1/(1/sig_ivar + 5**2)
 
             # Get the masks
             if mask_flags is None:

@@ -2,13 +2,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from glob import glob
-from tqdm import tqdm
 import multiprocessing as mp
 import os
 import traceback
+import pickle
 
 from astropy.io import fits
 from astropy.table import Table,Column
+from tqdm import tqdm
 
 from .plotting import fileprep, summaryplot
 from .fitting import bisym_model
@@ -134,10 +135,14 @@ def maskedarraytofile(array, name=None, fill=0, hdr=None):
     arrayhdu = fits.ImageHDU(array, name=name, header=hdr)
     return arrayhdu
 
-def imagefits(f, galmeta, gal=None, outfile=None, padding=20, remotedir=None, outdir='.', drpalldir='.', dapalldir='.'):
+def imagefits(f, galmeta, gal=None, outfile=None, padding=20, remotedir=None, outdir='', drpalldir='.', dapalldir='.'):
     '''
     Make a fits file for an individual galaxy with its fit parameters and relevant data.
     '''
+
+    if gal==True: 
+        try: gal = pickle.load(open(f[:-4] + 'gal', 'rb'))
+        except: raise FileNotFoundError('Could not load .gal file')
 
     #get relevant data
     args, arc, asymmap, resdict = extractfile(f, remotedir=remotedir, gal=gal)

@@ -46,7 +46,7 @@ def parse_args(options=None):
 
 
 def main(args):
-    files = download_plateifu(args.plate, args.ifu, daptype=args.daptype, dr=args.dr,
-                              oroot=args.root, redux_path=args.redux_path,
-                              analysis_path=args.analysis_path, overwrite=args.overwrite)
+    files = manga.download_plateifu(args.plate, args.ifu, daptype=args.daptype, dr=args.dr,
+                                    oroot=args.root, redux_path=args.redux,
+                                    analysis_path=args.analysis, overwrite=args.overwrite)
 

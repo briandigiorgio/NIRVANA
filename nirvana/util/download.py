@@ -1,13 +1,7 @@
 import os
 import warnings
 import requests
-import netrc
-from astropy.io import fits
-
-try:
-    from tqdm import tqdm
-except:
-    tqdm = None
+import tqdm
 
 
 def download_file(url, outfile, overwrite=True, auth=None):
@@ -40,22 +34,22 @@ def download_file(url, outfile, overwrite=True, auth=None):
             warnings.warn('Overwriting existing file: {0}'.format(outfile))
             os.remove(outfile)
         else:
-            warnings.warn('Using already existing file. To overwrite, set overwrite=True.')
+            warnings.warn(f'{outfile} exists. To overwrite, set overwrite=True.')
             return
 
     print('Downloading: {0}'.format(url))
+    print('To: {0}'.format(outfile))
     # Streaming, so we can iterate over the response.
-    r = requests.get(url, stream=True, auth=(user, password))
+    r = requests.get(url, stream=True, auth=auth)
     # Total size in bytes.
     total_size = int(r.headers.get('content-length', 0))
     block_size = 1024 #1 Kibibyte
-    if tqdm is not None:
-        t = tqdm(total=total_size, unit='iB', unit_scale=True)
+    t = tqdm.tqdm(total=total_size, unit='iB', unit_scale=True)
     with open(outfile, 'wb') as f:
         for data in r.iter_content(block_size):
-            if tqdm is not None: t.update(len(data))
+            t.update(len(data))
             f.write(data)
-    if tqdm is not None: t.close()
+    t.close()
     if total_size != 0 and t.n != total_size:
         raise ValueError(f'Downloaded file ({outfile}) may be corrupted.')
 

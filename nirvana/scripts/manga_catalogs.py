@@ -37,7 +37,7 @@ def parse_args(options=None):
 
 
 def main(args):
-    catalogs = manga.download_catalogs(dr=args.dr, oroot=args.root, redux_path=args.redux_path,
-                                       analysis_path=args.analysis_path, overwrite=args.overwrite)
+    catalogs = manga.download_catalogs(dr=args.dr, oroot=args.root, redux_path=args.redux,
+                                       analysis_path=args.analysis, overwrite=args.overwrite)
 
 

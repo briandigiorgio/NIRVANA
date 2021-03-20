@@ -12,6 +12,7 @@ Module with the derived instances for MaNGA kinematics.
 import os
 import glob
 import warnings
+import netrc
 
 from pkg_resources import resource_filename
 
@@ -361,7 +362,7 @@ def download_catalogs(dr='MPL-11', oroot=None, redux_path=None, analysis_path=No
         :obj:`tuple`: The names of the two downloaded files: (1) the DRPall
         file and (2) the DAPall file.
     """
-    versions = manga_version()
+    versions = manga_versions()
     if dr not in versions.keys():
         raise ValueError(f'{dr} is not an available DR; see nirvana.data.manga.manga_versions.')
 
@@ -378,10 +379,10 @@ def download_catalogs(dr='MPL-11', oroot=None, redux_path=None, analysis_path=No
     else:
         auth = None
 
-    # Get the default relative paths
+    # Get the default relative paths, relative to the top-level reduction and
+    # analysis paths
     sas_drpall_path, _, _, sas_dapall_path, _ \
-            = manga_paths(0, 0, daptype=daptype, dr=dr, redux_path=redux_path,
-                          analysis_path=analysis_path, relative=True)
+            = manga_paths(0, 0, dr=dr, raw='DR' in dr, relative=True)
 
     # Get the output paths
     if oroot is None:
@@ -395,11 +396,22 @@ def download_catalogs(dr='MPL-11', oroot=None, redux_path=None, analysis_path=No
             raise ValueError('Cannot define the analysis path; set the MANGA_SPECTRO_ANALYSIS '
                              'environmental variable or provide analysis_path.')
         # Relative paths are never None...
-        drpall_path = os.path.join(os.path.abspath(_redux_path), sas_drpall_path)
-        dapall_path = os.path.join(os.path.abspath(_analysis_path), sas_dapall_path)
+        if 'DR' in dr:
+            # NOTE: These gymnastics are because there is no DR15 DAP
+            # directory...
+            _drpall_path, _, _, _dapall_path, _ = manga_paths(0, 0, dr=dr, relative=True)
+            drpall_path = os.path.join(os.path.abspath(_redux_path), _drpall_path)
+            dapall_path = os.path.join(os.path.abspath(_analysis_path), _dapall_path)
+        else:
+            drpall_path = os.path.join(os.path.abspath(_redux_path), sas_drpall_path)
+            dapall_path = os.path.join(os.path.abspath(_analysis_path), sas_dapall_path)
     else:
         drpall_path = os.path.abspath(oroot)
         dapall_path = os.path.abspath(oroot)
+
+    # Fix the SAS urls to include the top-level redux and analysis
+    sas_drpall_path = f'redux/{sas_drpall_path}'
+    sas_dapall_path = f'analysis/{sas_dapall_path}'
 
     # Make the paths if they don't already exist
     for p in [drpall_path, dapall_path]:
@@ -407,12 +419,12 @@ def download_catalogs(dr='MPL-11', oroot=None, redux_path=None, analysis_path=No
             os.makedirs(p)
 
     # File names
-    drpall_file, _, _, dapall_file, _ = manga_file_names(0, 0, daptype=daptype, dr=dr)
+    drpall_file, _, _, dapall_file, _ = manga_file_names(0, 0, dr=dr)
 
     # Fix input url?
     _sasurl = sasurl[:-1] if sasurl[-1] == '/' else sasurl
 
-    # NOTE: Order matters and must match the sequence from `manga_files_from_plateifu`
+    # Download the files
     files = ()
     for s,p,f in zip([sas_drpall_path, sas_dapall_path], [drpall_path, dapall_path],
                      [drpall_file, dapall_file]):
@@ -462,7 +474,7 @@ def download_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11'
         LOGCUBE file, (2) SDSS color composite finding chart image, and (3)
         the DAP MAPS file.
     """
-    versions = manga_version()
+    versions = manga_versions()
     if dr not in versions.keys():
         raise ValueError(f'{dr} is not an available DR; see nirvana.data.manga.manga_versions.')
 
@@ -482,7 +494,7 @@ def download_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11'
     # Get the default relative paths
     _, sas_cube_path, sas_image_path, _, sas_maps_path \
             = manga_paths(plate, ifu, daptype=daptype, dr=dr, redux_path=redux_path,
-                          analysis_path=analysis_path, relative=True)
+                          analysis_path=analysis_path, raw='DR' in dr, relative=True)
 
     # Get the output paths
     if oroot is None:
@@ -496,13 +508,28 @@ def download_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11'
             raise ValueError('Cannot define the analysis path; set the MANGA_SPECTRO_ANALYSIS '
                              'environmental variable or provide analysis_path.')
         # Relative paths are never None...
-        cube_path = os.path.join(os.path.abspath(_redux_path), sas_cube_path)
-        image_path = os.path.join(os.path.abspath(_redux_path), sas_image_path)
-        maps_path = os.path.join(os.path.abspath(_analysis_path), sas_maps_path)
+        if 'DR' in dr:
+            # NOTE: These gymnastics are because there is no DR15 DAP
+            # directory...
+            _, _cube_path, _image_path, _, _maps_path \
+                    = manga_paths(plate, ifu, daptype=daptype, dr=dr, redux_path=redux_path,
+                                  analysis_path=analysis_path, relative=True)
+            cube_path = os.path.join(os.path.abspath(_redux_path), _cube_path)
+            image_path = os.path.join(os.path.abspath(_redux_path), _image_path)
+            maps_path = os.path.join(os.path.abspath(_analysis_path), _maps_path)
+        else:
+            cube_path = os.path.join(os.path.abspath(_redux_path), sas_cube_path)
+            image_path = os.path.join(os.path.abspath(_redux_path), sas_image_path)
+            maps_path = os.path.join(os.path.abspath(_analysis_path), sas_maps_path)
     else:
         cube_path = os.path.join(os.path.abspath(oroot), str(plate), str(ifu))
         image_path = cube_path
         maps_path = cube_path
+
+    # Fix the SAS urls to include the top-level redux and analysis
+    sas_cube_path = f'redux/{sas_cube_path}'
+    sas_image_path = f'redux/{sas_image_path}'
+    sas_maps_path = f'analysis/{sas_maps_path}'
 
     # Make the paths if they don't already exist
     for p in [cube_path, image_path, maps_path]:

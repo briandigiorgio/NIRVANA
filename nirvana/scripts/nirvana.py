@@ -63,6 +63,10 @@ def parse_args(options=None):
                         help='Overwrite preexisting outfiles')
     parser.add_argument('--drpall_dir', default='.',
                         help='Path to drpall file. Will use first file in dir')
+    parser.add_argument('--penalty', type=float, default=50,
+                        help='Relative size of penalty for big 2nd order terms')
+    parser.add_argument('--floor', type=float, default=5,
+                        help='Error floor to add onto ivars')
 
     return parser.parse_args() if options is None else parser.parse_args(options)
 

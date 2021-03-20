@@ -161,7 +161,7 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
     return paramdict
 
 def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
-        mix=False, cen=True, fixcent=True, clip=True, remotedir=None,
+        cen=True, fixcent=True, clip=True, remotedir=None,
         gal=None):
     '''
     Function to turn any nirvana outut file into useful objects
@@ -294,7 +294,6 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
     #set relevant parameters for galaxy
     args.setdisp(True)
     args.setnglobs(4) if not cen else args.setnglobs(6)
-    args.setmix(mix)
     args.setfixcent(fixcent)
 
     #clip data if desired
@@ -307,7 +306,7 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
     if not isfits: meds = dynmeds(chains)
 
     #get appropriate number of edges  by looking at length of meds
-    nbins = (len(meds) - args.nglobs - 3*args.mix - fixcent)/4
+    nbins = (len(meds) - args.nglobs - fixcent)/4
     if not nbins.is_integer(): 
         raise ValueError('Dynesty output array has a bad shape.')
     else: nbins = int(nbins)
@@ -324,7 +323,7 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
 
     return args, resdict
 
-def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True, fixcent=True, save=False, clobber=False, remotedir=None):
+def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, cen=True, fixcent=True, save=False, clobber=False, remotedir=None):
     '''
     Make a summary plot for a `nirvana` output file with MaNGA velocity field.
 
@@ -384,7 +383,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
             raise ValueError('Plot file already exists')
 
     #unpack input file into useful objects
-    args, resdict = fileprep(f, plate, ifu, smearing, stellar, maxr, mix, cen, fixcent, remotedir=remotedir)
+    args, resdict = fileprep(f, plate, ifu, smearing, stellar, maxr, cen, fixcent, remotedir=remotedir)
 
     #generate velocity models
     velmodel, sigmodel = bisym_model(args,resdict,plot=True)
@@ -560,7 +559,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
 
     return fig
 
-def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True): 
+def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, cen=True): 
     '''
     Make a plot `nirvana` output file with the different velocity components
     searated.
@@ -583,8 +582,6 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
             Flag for whether or not to apply beam smearing to models.
         stellar (:obj:`bool`, optional):
             Flag for whether or not to use stellar velocity data instead of gas.
-        mix (:obj:`bool`, optional):
-            Flag for whether or not the fit is a Bayesian mixture. [NOT WORKING]
         cen (:obj:`bool`, optional):
             Flag for whether the position of the center was fit.
         
@@ -595,7 +592,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
         signs between.
     '''
 
-    args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, mix, cen, fixcent)
+    args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, cen, fixcent)
     z = np.zeros(len(resdict['vt']))
     vtdict, v2tdict, v2rdict = [resdict.copy(), resdict.copy(), resdict.copy()]
     vtdict['v2t'] = z
@@ -673,7 +670,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
 
     plt.tight_layout(h_pad=2)
 
-def sinewave(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, mix=False, cen=True): 
+def sinewave(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, cen=True): 
     '''
     Compare the `nirvana` fit to the data azimuthally in radial bins.
 
@@ -695,8 +692,6 @@ def sinewave(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
             Flag for whether or not to apply beam smearing to models.
         stellar (:obj:`bool`, optional):
             Flag for whether or not to use stellar velocity data instead of gas.
-        mix (:obj:`bool`, optional):
-            Flag for whether or not the fit is a Bayesian mixture. [NOT WORKING]
         cen (:obj:`bool`, optional):
             Flag for whether the position of the center was fit.
         
@@ -707,7 +702,7 @@ def sinewave(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, m
     '''
 
     #prep the data, parameters, and coordinates
-    args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, mix, cen, fixcent)
+    args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, cen, fixcent)
     inc, pa, pab = np.radians([resdict['inc'], resdict['pa'], resdict['pab']])
     r,th = projected_polar(args.x, args.y, pa, inc)
     r /= args.reff

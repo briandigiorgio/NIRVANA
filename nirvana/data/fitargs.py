@@ -19,7 +19,7 @@ class FitArgs:
     '''
 
     def __init__(self, nglobs=6, weight=10, edges=None, disp=True,
-            fixcent=True, mix=False, guess=None, nbins=None, bounds=None,
+            fixcent=True, guess=None, nbins=None, bounds=None,
             arc=None, asymmap=None, maxr=None, noisefloor=5, penalty=100,
             npoints=500, smearing=True):
 
@@ -28,7 +28,6 @@ class FitArgs:
         self.edges = edges
         self.disp = disp
         self.fixcent = fixcent
-        self.mix = mix
         self.guess = guess
         self.nbins = nbins
         self.bounds = bounds

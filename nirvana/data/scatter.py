@@ -65,10 +65,6 @@ class IntrinsicScatter:
         self.inp_gpm = self.gpm.copy()
         self.npar = npar
 
-        if np.sum(self.gpm) == 0:
-            embed()
-            exit()
-
         # Work-space arrays
         self._x = None
         self._res = None
@@ -215,12 +211,8 @@ class IntrinsicScatter:
         fom = self._merit_err if self.covar is None else self._merit_covar
 
         # Run the fit
-        try:
-            result = optimize.least_squares(fom, self._x, method='lm', diff_step=np.array([1e-5]),
+        result = optimize.least_squares(fom, self._x, method='lm', diff_step=np.array([1e-5]),
                                         verbose=verbose)
-        except:
-            embed()
-            exit()
         # Save the result
         self.sig = abs(result.x[0])
         # TODO: Save the success somehow?

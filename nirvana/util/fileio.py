@@ -107,7 +107,7 @@ def compress_file(ifile, overwrite=False):
             shutil.copyfileobj(f_in, f_out)
 
 
-def create_symlink(ofile, symlink_dir, relative_symlink=True, clobber=False, quiet=False):
+def create_symlink(ofile, symlink_dir, relative_symlink=True, overwrite=False, quiet=False):
     """
     Create a symlink to the input file in the provided directory.  If
     relative_symlink is True (default), the path to the file is relative
@@ -116,7 +116,7 @@ def create_symlink(ofile, symlink_dir, relative_symlink=True, clobber=False, qui
     # Check if the file already exists
     olink_dest = os.path.join(symlink_dir, ofile.split('/')[-1])
     if os.path.isfile(olink_dest) or os.path.islink(olink_dest):
-        if clobber:
+        if overwrite:
             os.remove(olink_dest)
         else:
             return

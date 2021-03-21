@@ -46,8 +46,10 @@
 .. _scipy.sparse.find: https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.find.html
 .. _scipy.linalg.lu_factor: http://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.lu_factor.html
 .. _scipy.linalg.lu_solve: https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.lu_solve.html
+.. _scipy.linalg.cholesky: https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.cholesky.html
 .. _scipy.spatial.KDTree: https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.KDTree.html
 .. _scipy.stats.truncnorm: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.truncnorm.html
+.. _scipy.stats.median_abs_deviation: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.median_abs_deviation.html
 
 .. matplotlib
 
@@ -72,6 +74,7 @@
 .. _astropy.modeling.FittableModel: http://docs.astropy.org/en/stable/api/astropy.modeling.FittableModel.html
 .. _astropy.cosmology.FlatLambdaCDM: http://docs.astropy.org/en/stable/api/astropy.cosmology.FlatLambdaCDM.html#flatlambdacdm
 .. _astropy.constants: http://docs.astropy.org/en/stable/constants/index.html
+.. _astropy.stats.sigma_clip: https://docs.astropy.org/en/stable/api/astropy.stats.sigma_clip.html#astropy.stats.sigma_clip
 
 .. pydl
 

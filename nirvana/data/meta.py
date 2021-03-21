@@ -1,5 +1,8 @@
 """
 Provides a class to house and manipulate galaxy global parameters/metadata.
+
+.. include common links, assuming primary doc root is up one directory
+.. include:: ../include/links.rst
 """
 
 from IPython import embed

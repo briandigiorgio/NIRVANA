@@ -1,3 +1,9 @@
+"""
+Module with classes and functions used to fit an axisymmetric disk to a set of kinematics.
+
+.. include common links, assuming primary doc root is up one directory
+.. include:: ../include/links.rst
+"""
 
 import os
 import warnings
@@ -496,8 +502,8 @@ class AxisymmetricDisk:
                 provided, the internal :attr:`y` is used.
             beam (`numpy.ndarray`_, optional):
                 The 2D rendering of the beam-smearing kernel, or its Fast
-                Fourier Transform (FFT).
-                  If not provided, the internal :attr:`beam_fft` is used.
+                Fourier Transform (FFT). If not provided, the internal
+                :attr:`beam_fft` is used.
             is_fft (:obj:`bool`, optional):
                 The provided ``beam`` object is already the FFT of the
                 beam-smearing kernel.  Ignored if ``beam`` is not provided.

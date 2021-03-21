@@ -1011,13 +1011,19 @@ def axisym_fit_data(galmeta, kin, p0, disk, ofile, vmask, smask, compress=True):
         metadata[f'E_{n}'.upper()] = pe
 
     # Build the output fits extension (base) headers
+    #   - Primary header
     prihdr = fileio.initialize_primary_header(galmeta)
+    #   - Data map header
     maphdr = fileio.add_wcs(prihdr, kin)
+    #   - PSF header
     if kin.beam is None:
         psfhdr = None
     else:
         psfhdr = prihdr.copy()
         psfhdr['PSFNAME'] = (kin.psf_name, 'Original PSF name, if known')
+    #   - Table header
+    tblhdr = prihdr.copy()
+    tblhdr['PHOT_KEY'] = 'none' if galmeta.phot_key is None else galmeta.phot_key
 
     hdus = [fits.PrimaryHDU(header=prihdr),
             fits.ImageHDU(data=binid, header=fileio.finalize_header(maphdr, 'BINID'), name='BINID'),
@@ -1083,7 +1089,8 @@ def axisym_fit_data(galmeta, kin, p0, disk, ofile, vmask, smask, compress=True):
     hdus += [fits.BinTableHDU.from_columns([fits.Column(name=n,
                                                         format=fileio.rec_to_fits_type(metadata[n]),
                                                         array=metadata[n])
-                                             for n in metadata.dtype.names], name='FITMETA')]
+                                             for n in metadata.dtype.names],
+                                           name='FITMETA', header=tblhdr)]
 
     if ofile.split('.')[-1] == 'gz':
         _ofile = ofile[:ofile.rfind('.')]

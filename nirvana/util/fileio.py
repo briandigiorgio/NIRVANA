@@ -133,6 +133,7 @@ def create_symlink(ofile, symlink_dir, relative_symlink=True, clobber=False, qui
     os.symlink(olink_src, olink_dest)
 
 
+# TODO: This is MaNGA specific and needs to be abstracted.
 def initialize_primary_header(galmeta):
     hdr = fits.Header()
 
@@ -156,6 +157,7 @@ def add_wcs(hdr, kin):
     return hdr + kin.grid_wcs.to_header()
 
 
+# TODO: Assumes uncertainties are provided as inverse variances...
 def finalize_header(hdr, ext, bunit=None, hduclas2='DATA', err=False, qual=False, bm=None,
                     bit_type=None, prepend=True):
 

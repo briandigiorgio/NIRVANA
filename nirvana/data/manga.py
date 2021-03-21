@@ -294,7 +294,8 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
     """
     #download from sas instead of looking locally
     if remotedir is not None:
-        return download_plateifu(plate, ifu, remotedir, dr, daptype, clobber=False)
+        return download_plateifu(plate, ifu, daptype=daptype, dr=dr, oroot=remotedir,
+                                 overwrite=False)
 
     _, cube_file, image_file, _, maps_file = manga_file_names(plate, ifu, daptype=daptype, dr=dr)
 
@@ -963,10 +964,17 @@ class MaNGAGasKinematics(MaNGAKinematics):
             sig = hdu['EMLINE_GSIGMA'].data[eml[line]]
             sig_ivar = hdu['EMLINE_GSIGMA_IVAR'].data[eml[line]]
             sig_corr = hdu['EMLINE_INSTSIGMA'].data[eml[line]]
-            reff = hdu[0].header['REFF']
-            phot_ell = hdu[0].header['ECOOELL']
+
+            # TODO: Not all galaxies have a measured effective radius or
+            # ellipticity in the header of the DAP MAPS files. The photometry
+            # keywords are only available if they can be pulled from the DRPall
+            # file. I put in some hacks so this won't fault, but I think we
+            # should deprecate this code in favor of MaNGAGlobalPar.
+            reff = 1.0 if 'REFF' not in hdu[0].header else hdu[0].header['REFF']
+            phot_ell = hdu[0].header['ECOOELL'] if 'ECOOELL' in hdu[0].header else 0.5
             phot_inc = np.degrees(np.arccos(1 - phot_ell))
-            pri, sec, anc, oth = parse_manga_targeting_bits(hdu[0].header['MNGTARG1'], hdu[0].header['MNGTARG3'])
+            pri, sec, anc, oth = parse_manga_targeting_bits(hdu[0].header['MNGTARG1'],
+                                                            hdu[0].header['MNGTARG3'])
             maxr = 2.5 if sec else 1.5
 
             # Get the masks
@@ -1082,10 +1090,17 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             sig = hdu['STELLAR_SIGMA'].data
             sig_ivar = hdu['STELLAR_SIGMA_IVAR'].data
             sig_corr = hdu['STELLAR_SIGMACORR'].data[0]
-            reff = hdu[0].header['REFF']
-            phot_ell = hdu[0].header['ECOOELL']
+
+            # TODO: Not all galaxies have a measured effective radius or
+            # ellipticity in the header of the DAP MAPS files. The photometry
+            # keywords are only available if they can be pulled from the DRPall
+            # file. I put in some hacks so this won't fault, but I think we
+            # should deprecate this code in favor of MaNGAGlobalPar.
+            reff = 1.0 if 'REFF' not in hdu[0].header else hdu[0].header['REFF']
+            phot_ell = hdu[0].header['ECOOELL'] if 'ECOOELL' in hdu[0].header else 0.5
             phot_inc = np.degrees(np.arccos(1 - phot_ell))
-            pri, sec, anc, oth = parse_manga_targeting_bits(hdu[0].header['MNGTARG1'], hdu[0].header['MNGTARG3'])
+            pri, sec, anc, oth = parse_manga_targeting_bits(hdu[0].header['MNGTARG1'],
+                                                            hdu[0].header['MNGTARG3'])
             maxr = 2.5 if sec else 1.5
 
             # Get the masks
@@ -1179,13 +1194,43 @@ class MaNGAGlobalPar(GlobalPar):
         if len(indx) != 1:
             raise ValueError(f'Could not find {plateifu} in {drpall_file}.')
 
-        # Instantiate the object
+        # Default to the elliptical Petrosian photometric values. These are
+        # supposed to be more robust than the Sersic fits, particularly for the
+        # effective radius. In the case where the elliptical Petrosian values
+        # are placeholders (e.g., Reff < 0), use the Sersic values instead. In
+        # the case where both are place holders, use a set of nonsense defaults
+        # and instantiate the object anyway. If it is available, the Sersic
+        # Index is always included, regardless of whether or not the rest of
+        # the photometric measurements are based on the elliptical Petrosian
+        # analysis.
         indx = indx[0]
-        super().__init__(ra=drpall['objra'][indx], dec=drpall['objdec'][indx],
-                         mass=drpall['nsa_sersic_mass'][indx], z=drpall['z'][indx],
-                         pa=drpall['nsa_elpetro_phi'][indx], ell=1.-drpall['nsa_elpetro_ba'][indx],
-                         reff=drpall['nsa_elpetro_th50_r'][indx],
-                         sersic_n=drpall['nsa_sersic_n'][indx], **kwargs)
+        if drpall['nsa_elpetro_th50_r'][indx] > 0:
+            phot_key = 'elpetro'
+            mass = drpall['nsa_elpetro_mass'][indx]
+            pa = drpall['nsa_elpetro_phi'][indx]
+            ell = 1. - drpall['nsa_elpetro_ba'][indx]
+            reff = drpall['nsa_elpetro_th50_r'][indx]
+            sersic_n = drpall['nsa_sersic_n'][indx]
+        elif drpall['nsa_sersic_th50'][indx] > 0:
+            phot_key = 'sersic'
+            mass = drpall['nsa_sersic_mass'][indx]
+            pa = drpall['nsa_sersic_phi'][indx]
+            ell = 1. - drpall['nsa_sersic_ba'][indx]
+            reff = drpall['nsa_sersic_th50'][indx]
+            sersic_n = drpall['nsa_sersic_n'][indx]
+        else:
+            warnings.warn('Photometric data unavailable; adopting bogus defaults.')
+            phot_key = None
+            mass = 1e10
+            pa = 0.
+            ell = 0.5
+            reff = 1.0
+            sersic_n = 1.0
+
+        # Instantiate the object
+        super().__init__(ra=drpall['objra'][indx], dec=drpall['objdec'][indx], mass=mass,
+                         z=drpall['z'][indx], pa=pa, ell=ell, reff=reff, sersic_n=sersic_n,
+                         **kwargs)
 
         # Save MaNGA-specific attributes
         self.dr = 'unknown' if dr is None else dr
@@ -1200,9 +1245,15 @@ class MaNGAGlobalPar(GlobalPar):
         self.psf_fwhm = np.array([drpall['gfwhm'][indx], drpall['rfwhm'][indx],
                                   drpall['ifwhm'][indx], drpall['zfwhm'][indx]])
 
-        self.mag_band = np.array(['NUV', 'r', 'i'])
-        self.mag = np.array([drpall['nsa_elpetro_absmag'][indx][1],
-                             drpall['nsa_elpetro_absmag'][indx][4],
-                             drpall['nsa_elpetro_absmag'][indx][5]])
+        # Save some of the measured magnitudes, if they're available
+        self.phot_key = phot_key
+        if self.phot_key is None:
+            self.mag_band = None
+            self.mag = None
+        else:
+            self.mag_band = np.array(['NUV', 'r', 'i'])
+            self.mag = np.array([drpall[f'nsa_{self.phot_key}_absmag'][indx][1],
+                                 drpall[f'nsa_{self.phot_key}_absmag'][indx][4],
+                                 drpall[f'nsa_{self.phot_key}_absmag'][indx][5]])
 
 

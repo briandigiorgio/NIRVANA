@@ -65,6 +65,10 @@ class IntrinsicScatter:
         self.inp_gpm = self.gpm.copy()
         self.npar = npar
 
+        if np.sum(self.gpm) == 0:
+            embed()
+            exit()
+
         # Work-space arrays
         self._x = None
         self._res = None
@@ -211,8 +215,12 @@ class IntrinsicScatter:
         fom = self._merit_err if self.covar is None else self._merit_covar
 
         # Run the fit
-        result = optimize.least_squares(fom, self._x, method='lm', diff_step=np.array([1e-5]),
+        try:
+            result = optimize.least_squares(fom, self._x, method='lm', diff_step=np.array([1e-5]),
                                         verbose=verbose)
+        except:
+            embed()
+            exit()
         # Save the result
         self.sig = abs(result.x[0])
         # TODO: Save the success somehow?
@@ -325,20 +333,29 @@ class IntrinsicScatter:
         fom_vec = self._merit_vec_err if self.covar is None else self._merit_vec_covar
         fom = self._merit_err if self.covar is None else self._merit_covar
 
+        # Mean error
         mean_eps = np.mean(np.sqrt(self._var))
 
-        enres_def = fom_vec(np.array([1.]))
+        # Error-normalized residuals without including intrinsic scatter
+        enres_def = fom_vec(np.array([0.])) # Only includes valid data; i.e., selected by self.gpm
         rng_def = util.growth_lim(enres_def, 0.95, 1.1, midpoint=0.0)
         mean_enres_def = np.mean(enres_def)
         sigma_enres_def = np.std(enres_def)
+        max_enres_def = np.amax(np.absolute(enres_def))
 
+        # Error-normalized residuals accounting for intrinsic scatter
         enres = fom_vec(self._x)
         rng = util.growth_lim(enres, 0.99, 1.3, midpoint=0.0)
         mean_enres = np.mean(enres)
         sigma_enres = np.std(enres)
+        max_enres = np.amax(np.absolute(enres))
+
+        # Number of rejected points, and number of points in the original input
+        # vectors.
         nrej = np.sum(_rej)
         ntot = np.sum(self.inp_gpm)
 
+        # Tick labels
         logformatter = plot.get_logformatter()
 
         w,h = pyplot.figaspect(1)
@@ -389,47 +406,55 @@ class IntrinsicScatter:
         ax.axhline(y=1-0.9544, color='0.5', linestyle='--', zorder=3)
         ax.axhline(y=1-0.9973, color='0.5', linestyle='--', zorder=3)
 
-        ax.add_patch(patches.Rectangle((0.03,0.02), 0.29, 0.50, facecolor='w', lw=0,
+        ax.add_patch(patches.Rectangle((0.03,0.02), 0.29, 0.58, facecolor='w', lw=0,
                                        edgecolor='none', zorder=7, alpha=0.7,
                                        transform=ax.transAxes))
 
-        ax.text(0.04, 0.49, r'$N_{\rm tot}$:', ha='left', va='center',
+        ax.text(0.04, 0.57, r'$N_{\rm tot}$:', ha='left', va='center',
                 transform=ax.transAxes, zorder=8)
-        ax.text(0.31, 0.49, f'{ntot}', ha='right',
+        ax.text(0.31, 0.57, f'{ntot}', ha='right',
                 va='center', transform=ax.transAxes, zorder=8)
-        ax.text(0.04, 0.45, r'$N_{\rm rej}$:', ha='left', va='center',
+        ax.text(0.04, 0.53, r'$N_{\rm rej}$:', ha='left', va='center',
                 transform=ax.transAxes, zorder=8)
-        ax.text(0.31, 0.45, f'{nrej}', ha='right',
+        ax.text(0.31, 0.53, f'{nrej}', ha='right',
                 va='center', transform=ax.transAxes, zorder=8)
-        ax.text(0.04, 0.41, r'$\nu$:', ha='left', va='center',
+        ax.text(0.04, 0.49, r'$\nu$:', ha='left', va='center',
                 transform=ax.transAxes, zorder=8)
-        ax.text(0.31, 0.41, f'{self._dof}', ha='right',
+        ax.text(0.31, 0.49, f'{self._dof}', ha='right',
                 va='center', transform=ax.transAxes, zorder=8)
-        ax.text(0.04, 0.37, r'$\langle\epsilon\rangle$:', ha='left',
+        ax.text(0.04, 0.45, r'$\langle\epsilon\rangle$:', ha='left',
                 va='center', transform=ax.transAxes, zorder=8)
-        ax.text(0.31, 0.37, '{0:.2f}'.format(mean_eps), ha='right',
+        ax.text(0.31, 0.45, '{0:.2f}'.format(mean_eps), ha='right',
                 va='center', transform=ax.transAxes, zorder=8)
 
-        ax.text(0.04, 0.31, r'$\langle\Delta/\epsilon\rangle_0$:', ha='left',
+        ax.text(0.04, 0.39, r'$\langle\Delta/\epsilon\rangle_0$:', ha='left',
                 va='center', transform=ax.transAxes, zorder=8)
-        ax.text(0.31, 0.31, '{0:.2f}'.format(mean_enres_def), ha='right',
+        ax.text(0.31, 0.39, '{0:.2f}'.format(mean_enres_def), ha='right',
                 va='center', transform=ax.transAxes, zorder=8)
-        ax.text(0.04, 0.27, r'$\sigma_0$:', ha='left',
+        ax.text(0.04, 0.35, r'$\Delta/\epsilon_{\rm 0,max}$:', ha='left',
                 va='center', transform=ax.transAxes, zorder=8)
-        ax.text(0.31, 0.27, '{0:.2f}'.format(sigma_enres_def), ha='right',
+        ax.text(0.31, 0.35, '{0:.2f}'.format(max_enres_def), ha='right',
                 va='center', transform=ax.transAxes, zorder=8)
-        ax.text(0.04, 0.23, r'$|\chi_0^2-\nu|$:', ha='left',
+        ax.text(0.04, 0.31, r'$\sigma_0$:', ha='left',
                 va='center', transform=ax.transAxes, zorder=8)
-        ax.text(0.31, 0.23, '{0:.0f}'.format(fom(np.array([0]))), ha='right',
+        ax.text(0.31, 0.31, '{0:.2f}'.format(sigma_enres_def), ha='right',
+                va='center', transform=ax.transAxes, zorder=8)
+        ax.text(0.04, 0.27, r'$|\chi_0^2-\nu|$:', ha='left',
+                va='center', transform=ax.transAxes, zorder=8)
+        ax.text(0.31, 0.27, '{0:.0f}'.format(fom(np.array([0.]))), ha='right',
                 va='center', transform=ax.transAxes, zorder=8)
 
-        ax.text(0.04, 0.17, r'$\epsilon_i$:', ha='left',
+        ax.text(0.04, 0.21, r'$\epsilon_i$:', ha='left',
                 va='center', transform=ax.transAxes, zorder=8)
-        ax.text(0.31, 0.17, '{0:.2f}'.format(self._x[0]), ha='right',
+        ax.text(0.31, 0.21, '{0:.2f}'.format(self._x[0]), ha='right',
                 va='center', transform=ax.transAxes, zorder=8)
-        ax.text(0.04, 0.13, r'$\langle\Delta/\epsilon\rangle_i$:', ha='left',
+        ax.text(0.04, 0.17, r'$\langle\Delta/\epsilon\rangle_i$:', ha='left',
                 va='center', transform=ax.transAxes, zorder=8)
-        ax.text(0.31, 0.13, '{0:.2f}'.format(mean_enres), ha='right',
+        ax.text(0.31, 0.17, '{0:.2f}'.format(mean_enres), ha='right',
+                va='center', transform=ax.transAxes, zorder=8)
+        ax.text(0.04, 0.13, r'$\Delta/\epsilon_{i,{\rm max}}$:', ha='left',
+                va='center', transform=ax.transAxes, zorder=8)
+        ax.text(0.31, 0.13, '{0:.2f}'.format(max_enres), ha='right',
                 va='center', transform=ax.transAxes, zorder=8)
         ax.text(0.04, 0.09, r'$\sigma_i$:', ha='left',
                 va='center', transform=ax.transAxes, zorder=8)

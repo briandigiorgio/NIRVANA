@@ -72,7 +72,7 @@ class GlobalPar:
             while self.pa < -180.:
                 self.pa += 360.
 
-    def guess_inclination(self):
+    def guess_inclination(self, lb=0., ub=90.):
         r"""
         Return a guess inclination using the equation:
 
@@ -88,6 +88,12 @@ class GlobalPar:
         :attr:`q0` is None, the returned inclination is for an infinitely
         thin disk (:math:`q_0 = 0`).
 
+        Args:
+            lb (:obj:`float`, optional):
+                Lower bound for the returned inclination.
+            ub (:obj:`float`, optional):
+                Upper bound for the returned inclination.
+
         Returns:
             :obj:`float`: Inclination estimate in degrees.
 
@@ -99,11 +105,12 @@ class GlobalPar:
         if self.ell is None:
             raise ValueError('Ellipticity is undefined.')
         if self.q0 is None or self.q0 == 0.0:
-            return np.degrees(np.arccos(1.0 - self.ell))
+            return np.clip(np.degrees(np.arccos(1.0 - self.ell)), lb, ub)
 
         q = 1.0 - self.ell
-        return 90. if q < self.q0 \
-                    else np.degrees(np.arccos(np.sqrt((q**2 - self.q0**2) / (1.0 - self.q0**2))))
+        return np.clip(90. if q < self.q0 
+                       else np.degrees(np.arccos(np.sqrt((q**2-self.q0**2) / (1.0 - self.q0**2)))),
+                       lb, ub)
 
     def guess_kinematic_pa(self, x, y, v, r_range=None, wedge=30., return_vproj=False):
         r"""
@@ -146,7 +153,8 @@ class GlobalPar:
         Returns:
             :obj:`float`, :obj:`tuple`: Provides the position angle estimate
             in degrees, as well as an estimate of the projected rotation
-            velocity, if requested.
+            velocity, if requested. The range of the returned PA is -180 to
+            180 degrees.
 
         Raises:
             ValueError:

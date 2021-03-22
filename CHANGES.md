@@ -22,8 +22,8 @@
  - Huge changes to `barfit.plotting` for dispersion and dictionary
  - Switched to using `MPL-10` by default
  - Tests and docs for `barfit.models.oned`.
- - Added `barfit.models.beam.ConvolveFFTW` class for doing
-   convolutions with the FFTW library.
+ - Added `barfit.models.beam.ConvolveFFTW` class for doing convolutions
+   with the FFTW library.
  - Added masking of edges of mocks to mitigate convolution edge effects
  - Renamed to NIRVANA
  - Removed MCMC and associated arguments
@@ -35,14 +35,24 @@
  - Copy over the BitMask class from the sdss-mangadap
  - Update masking and add method that determines the target sample given
    the targeting bits
- - Added construction of MaNGA covariance matrices and incorporated them into
-   `Kinematics`.
+ - Added construction of MaNGA covariance matrices and incorporated them
+   into `Kinematics`.
  - Added handling of covariance matrices in `AxisymmetricDisk`.
- - Added `nirvana.data.scatter.IntrinsicScatter` used to both reject outlying
-   residuals and determine the intrinsic scatter in the data.
+ - Added `nirvana.data.scatter.IntrinsicScatter` used to both reject
+   outlying residuals and determine the intrinsic scatter in the data.
  - Added galaxy pngs, drpall, and dapall to test data
  - Added `nirvana.data.meta.GlobalPar` and
    `nirvana.data.manga.MaNGAGlobalPar` classes to hold metadata
  - Added iterative axisymmetric disk fitting, assessment plots, and
    output file.
+ - Fix `nirvana.data.manga.MaNGAGlobalPar` to handle when photometry is
+   unavailable.  New header keyword `PHOT_KEY` add to binary table
+   output for axisymmetric fit giving which photometry was used.
+ - Axisymmetric fit changes:
+    - Include flag to set minimum number of valid spaxels for
+      axisymmetric fit to proceed.
+    - set lower bound on inclination to 1 degree to avoid div-by-zero
+      errors.
+ - Added manga download scripts
+
 

@@ -21,6 +21,8 @@ from ..models import axisym
 #       - Fit with covariance
 #       - Fit without velocity dispersion
 
+#import warnings
+#warnings.simplefilter('error', RuntimeWarning)
 
 def parse_args(options=None):
 
@@ -84,6 +86,8 @@ def parse_args(options=None):
     parser.add_argument('--max_sig_err', default=None, type=float,
                         help='Maximum velocity dispersion error to include in fit '
                              '(ignored if dispersion not being fit).')
+    parser.add_argument('--min_unmasked', default=None, type=int,
+                        help='Minimum number of unmasked spaxels required to continue fit.')
     parser.add_argument('--screen', dest='screen', action='store_true', default=False) 
 
     # TODO: Other options:
@@ -151,7 +155,8 @@ def main(args):
                                      fitdisp=args.disp, max_vel_err=args.max_vel_err,
                                      max_sig_err=args.max_sig_err, min_vel_snr=args.min_vel_snr,
                                      min_sig_snr=args.min_sig_snr, fix_cen=args.fix_cen,
-                                     fix_inc=args.fix_inc, verbose=args.verbose)
+                                     fix_inc=args.fix_inc, min_unmasked=args.min_unmasked,
+                                     verbose=args.verbose)
 
     # Plot the final residuals
     dv_plot = os.path.join(args.odir, f'{oroot}-vdist.png')

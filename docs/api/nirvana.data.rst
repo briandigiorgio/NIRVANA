@@ -10,6 +10,9 @@ Submodules
    nirvana.data.fitargs
    nirvana.data.kinematics
    nirvana.data.manga
+   nirvana.data.meta
+   nirvana.data.scatter
+   nirvana.data.util
 
 Module contents
 ---------------

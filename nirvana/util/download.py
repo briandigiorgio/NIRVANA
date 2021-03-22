@@ -1,80 +1,56 @@
 import os
 import warnings
 import requests
-import netrc
-from astropy.io import fits
-
-try:
-    from tqdm import tqdm
-except:
-    tqdm = None
+import tqdm
 
 
-def download_file(url, user, password, outfile, clobber=True):
+def download_file(url, outfile, overwrite=True, auth=None):
     """
+    Download a file.
+
     Thanks to 
     https://stackoverflow.com/questions/37573483/progress-bar-while-download-file-over-http-with-requests/37573701
+
+    Args:
+        url (:obj:`str`):
+            Full URL to the file to download.
+        outfile (:obj:`str`):
+            Full path for the downloaded file.
+        overwrite (:obj:`bool`, optional):
+            If the file exists, overwrite it.
+        auth (:obj:`tuple`, optional):
+            If the download requires authentication, this is, e.g., a tuple
+            with the user name and password. This is passed directly to
+            `requests.get`_, meaning any accepted format in that function is
+            also accepted here.
+
+    Raises:
+        ValueError:
+            Raised if the file may have been corrupted on transfer.
     """
     #Beware of how this is joined!
     if os.path.isfile(outfile):
-        if clobber:
+        if overwrite:
             warnings.warn('Overwriting existing file: {0}'.format(outfile))
             os.remove(outfile)
         else:
-            warnings.warn('Using already existing file. To overwrite, set overwrite=True.')
+            warnings.warn(f'{outfile} exists. To overwrite, set overwrite=True.')
             return
 
     print('Downloading: {0}'.format(url))
+    print('To: {0}'.format(outfile))
     # Streaming, so we can iterate over the response.
-    r = requests.get(url, stream=True, auth=(user, password))
+    r = requests.get(url, stream=True, auth=auth)
     # Total size in bytes.
     total_size = int(r.headers.get('content-length', 0))
     block_size = 1024 #1 Kibibyte
-    if tqdm is not None:
-        t = tqdm(total=total_size, unit='iB', unit_scale=True)
+    t = tqdm.tqdm(total=total_size, unit='iB', unit_scale=True)
     with open(outfile, 'wb') as f:
         for data in r.iter_content(block_size):
-            if tqdm is not None: t.update(len(data))
+            t.update(len(data))
             f.write(data)
-    if tqdm is not None: t.close()
+    t.close()
     if total_size != 0 and t.n != total_size:
-        raise ValueError('Downloaded file may be corrupted.')
-
-
-def download_plateifu(plate, ifu, outdir, dr='MPL-11', daptype='HYB10-MILESHC-MASTARHC2',
-                      basedir='https://data.sdss.org/sas/mangawork/manga/spectro', clobber=True):
-    
-    try:
-        NETRC = netrc.netrc()
-    except Exception as e:
-        raise FileNotFoundError('Could not load ~/.netrc file.') from e
-
-    user, acc, password = NETRC.authenticators('data.sdss.org')
-    outpath = f'{outdir}/{plate}/{ifu}'
-    if not os.path.isdir(outpath):
-        os.makedirs(outpath)
-
-    fname = f'manga-{plate}-{ifu}-MAPS-{daptype}.fits.gz'
-    url = f'{basedir}/analysis/{dr}/{daptype}/{plate}/{ifu}/{fname}'
-    mapsfile = f'{outpath}/{fname}'
-    download_file(url, user, password, mapsfile, clobber)
-    try: fits.open(mapsfile)
-    except Exception as e: 
-        raise ValueError('Downloaded MAPS file may be corrupted.') from e
-
-
-    fname = f'manga-{plate}-{ifu}-LOGCUBE.fits.gz'
-    url = f'{basedir}/redux/{dr}/{plate}/stack/{fname}'
-    cubefile = f'{outpath}/{fname}'
-    download_file(url, user, password, cubefile, clobber)
-    try: fits.open(cubefile)
-    except Exception as e: 
-        raise ValueError('Downloaded LOGCUBE file may be corrupted.') from e
-
-    url = f'{basedir}/redux/{dr}/{plate}/images/{ifu}.png'
-    imfile = f'{outpath}/{ifu}.png'
-    download_file(url, user, password, imfile, clobber)
-
-    return mapsfile, cubefile, imfile
+        raise ValueError(f'Downloaded file ({outfile}) may be corrupted.')
 
 

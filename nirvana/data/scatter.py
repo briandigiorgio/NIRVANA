@@ -307,7 +307,7 @@ class IntrinsicScatter:
 #        pyplot.xscale('log')
 #        pyplot.show()
 
-    def show(self, sig=None, rej=None, gpm=None, ofile=None, title=None):
+    def stats(self, sig=None, rej=None, gpm=None):
         """
         """
         # Save the current gpm so that the method doesn't change it.
@@ -325,42 +325,64 @@ class IntrinsicScatter:
         fom_vec = self._merit_vec_err if self.covar is None else self._merit_vec_covar
         fom = self._merit_err if self.covar is None else self._merit_covar
 
-        # Mean error
-        mean_eps = np.mean(np.sqrt(self._var))
-
-        # Error-normalized residuals without including intrinsic scatter
-        enres_def = fom_vec(np.array([0.])) # Only includes valid data; i.e., selected by self.gpm
-        rng_def = util.growth_lim(enres_def, 0.95, 1.1, midpoint=0.0)
-        mean_enres_def = np.mean(enres_def)
-        sigma_enres_def = np.std(enres_def)
-        max_enres_def = np.amax(np.absolute(enres_def))
-
-        # Error-normalized residuals accounting for intrinsic scatter
-        enres = fom_vec(self._x)
-        rng = util.growth_lim(enres, 0.99, 1.3, midpoint=0.0)
-        mean_enres = np.mean(enres)
-        sigma_enres = np.std(enres)
-        max_enres = np.amax(np.absolute(enres))
-
         # Number of rejected points, and number of points in the original input
         # vectors.
         nrej = np.sum(_rej)
         ntot = np.sum(self.inp_gpm)
 
+        # Median measurement error
+        median_eps = np.median(np.sqrt(self._var))
+
+        # Error-normalized residuals without including intrinsic scatter
+        enres_def = fom_vec(np.array([0.])) # Only includes valid data; i.e., selected by self.gpm
+        chidof_def = fom(np.array([0.]))    # Chi-square minus DOF
+        mean_enres_def = np.mean(enres_def) # Mean of the residuals; should be close to 0.
+        sigma_enres_def = np.std(enres_def) # Standard deviation of the residuals
+        max_enres_def = np.amax(np.absolute(enres_def)) # Maximum residual
+
+        # Error-normalized residuals accounting for intrinsic scatter
+        enres = fom_vec(self._x)            # Only includes valid data; i.e., selected by self.gpm
+        chidof = fom(self._x)               # Chi-square minus DOF
+        mean_enres = np.mean(enres)
+        sigma_enres = np.std(enres)
+        max_enres = np.amax(np.absolute(enres))
+
+        # Revert to original gpm
+        self.gpm = sv_gpm
+
+        return ntot, nrej, median_eps, enres_def, chidof_def, mean_enres_def, sigma_enres_def, \
+                    max_enres_def, enres, chidof, mean_enres, sigma_enres, max_enres
+
+    def show(self, sig=None, rej=None, gpm=None, ofile=None, title=None):
+        """
+        """
+        ntot, nrej, median_eps, enres_def, chidof_def, mean_enres_def, sigma_enres_def, \
+                max_enres_def, enres, chidof, mean_enres, sigma_enres, max_enres \
+                        = self.stats(sig=sig, rej=rej, gpm=gpm)
+
+        # Set the range for the histograms
+        rng_def = util.growth_lim(enres_def, 0.95, 1.1, midpoint=0.0)
+        rng = util.growth_lim(enres, 0.99, 1.3, midpoint=0.0)
+
         # Tick labels
         logformatter = plot.get_logformatter()
 
+        # Make the plot
         w,h = pyplot.figaspect(1)
         fig = pyplot.figure(figsize=(2*w,h))
 
+        # Histogram of the error normalized residuals
         ax = plot.init_ax(fig, [0.03, 0.1, 0.45, 0.87])
+        # Native measurement error
         by, bx, _ = ax.hist(enres_def, bins=100, range=rng_def, density=True, color='k', lw=0,
                             alpha=0.3, zorder=4, histtype='stepfilled')
         maxy = np.amax(by)
+        # With intrinsic scatter
         by, bx, _ = ax.hist(enres, bins=100, range=rng_def, density=True, color='k', lw=0,
                             alpha=0.6, zorder=5, histtype='stepfilled')
         maxy = max(maxy, np.amax(by))
         bc = bx[:-1]+np.diff(bx)/2
+        # Expected for a Gaussian
         ax.step(bc, util.pixelated_gaussian(bc, density=True), where='mid', color='C3',
                 zorder=6)
         ax.set_xlim(rng_def)
@@ -372,6 +394,7 @@ class IntrinsicScatter:
         if title is not None:
             ax.text(0.02, 0.96, title, ha='left', va='center', transform=ax.transAxes, fontsize=12)
 
+        # Growth curves of absolute residuals
         ax = plot.init_ax(fig, [0.54, 0.1, 0.45, 0.87])
         ax.set_xlim([0., rng[1]])
         ax.set_ylim([0.9*2*(1 - stats.norm.cdf(rng[1])), 1.05])
@@ -380,13 +403,15 @@ class IntrinsicScatter:
         plot.rotate_y_ticks(ax, 90., 'center')
         abs_enres_def = np.absolute(enres_def)
         srt = np.argsort(abs_enres_def)
+        # Native measurement error
         ax.step(abs_enres_def[srt], 1-np.arange(srt.size)/srt.size, where='post', color='0.6',
                 zorder=5)
         abs_enres = np.absolute(enres)
         srt = np.argsort(abs_enres)
+        # With intrinsic scatter
         ax.step(abs_enres[srt], 1-np.arange(srt.size)/srt.size, where='post', color='0.3',
                 zorder=6)
-
+        # Expected for a Gaussian
         ax.plot(abs_enres[srt], 2 - stats.norm.cdf(abs_enres[srt])*2, color='C3',
                 zorder=4)
 
@@ -414,9 +439,9 @@ class IntrinsicScatter:
                 transform=ax.transAxes, zorder=8)
         ax.text(0.31, 0.49, f'{self._dof}', ha='right',
                 va='center', transform=ax.transAxes, zorder=8)
-        ax.text(0.04, 0.45, r'$\langle\epsilon\rangle$:', ha='left',
+        ax.text(0.04, 0.45, r'$\tilde{\epsilon}$:', ha='left',
                 va='center', transform=ax.transAxes, zorder=8)
-        ax.text(0.31, 0.45, '{0:.2f}'.format(mean_eps), ha='right',
+        ax.text(0.31, 0.45, '{0:.2f}'.format(median_eps), ha='right',
                 va='center', transform=ax.transAxes, zorder=8)
 
         ax.text(0.04, 0.39, r'$\langle\Delta/\epsilon\rangle_0$:', ha='left',
@@ -433,7 +458,7 @@ class IntrinsicScatter:
                 va='center', transform=ax.transAxes, zorder=8)
         ax.text(0.04, 0.27, r'$|\chi_0^2-\nu|$:', ha='left',
                 va='center', transform=ax.transAxes, zorder=8)
-        ax.text(0.31, 0.27, '{0:.0f}'.format(fom(np.array([0.]))), ha='right',
+        ax.text(0.31, 0.27, '{0:.0f}'.format(chidof_def), ha='right',
                 va='center', transform=ax.transAxes, zorder=8)
 
         ax.text(0.04, 0.21, r'$\epsilon_i$:', ha='left',
@@ -454,7 +479,7 @@ class IntrinsicScatter:
                 va='center', transform=ax.transAxes, zorder=8)
         ax.text(0.04, 0.05, r'$|\chi_i^2-\nu|$:', ha='left',
                 va='center', transform=ax.transAxes, zorder=8)
-        ax.text(0.31, 0.05, '{0:.0f}'.format(fom(self._x)), ha='right',
+        ax.text(0.31, 0.05, '{0:.0f}'.format(chidof), ha='right',
                 va='center', transform=ax.transAxes, zorder=8)
 
         if ofile is not None:
@@ -463,7 +488,4 @@ class IntrinsicScatter:
             pyplot.show()
         fig.clear()
         pyplot.close(fig)
-
-        # Revert to original gpm
-        self.gpm = sv_gpm
 

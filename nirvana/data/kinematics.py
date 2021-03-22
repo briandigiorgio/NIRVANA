@@ -488,7 +488,11 @@ class Kinematics(FitArgs):
                              'attributes: {0}'.format(self.vel.shape))
 
         # Construct the output map
-        _data = np.ma.masked_all(self.spatial_shape, dtype=d.dtype)
+#        _data = np.ma.masked_all(self.spatial_shape, dtype=d.dtype)
+        # NOTE: np.ma.masked_all sets the initial data array to
+        # 2.17506892e-314, which just leads to trouble. I've replaced this with
+        # the line below to make sure that the initial value is just 0.
+        _data = np.ma.MaskedArray(np.zeros(self.spatial_shape, dtype=d.dtype), mask=True)
         _data[np.unravel_index(self.grid_indx, self.spatial_shape)] = d[self.bin_inverse]
         if m is not None:
             np.ma.getmaskarray(_data)[np.unravel_index(self.grid_indx, self.spatial_shape)] \

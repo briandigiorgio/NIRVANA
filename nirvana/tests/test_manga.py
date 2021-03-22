@@ -124,3 +124,33 @@ def test_meta():
     meta = data.manga.MaNGAGlobalPar(8138, 12704, drpall_file=drpall_file)
 
 
+def test_versions():
+    versions = data.manga.manga_versions()
+    assert 'MPL-10' in versions.keys(), 'Available versions changed'
+    assert versions['DR15']['DAP'] == '2.2.1', 'DR15 DAP version changed'
+
+
+def test_paths():
+    versions = data.manga.manga_versions()
+    dr = 'MPL-11'
+    paths = data.manga.manga_paths(8138, 12704, dr=dr, relative=True)
+    assert len(paths) == 5, 'Number of paths changed'
+    assert paths[0] == dr, 'Did not use symlink in path construction'
+
+    paths = data.manga.manga_paths(8138, 12704, dr=dr, relative=True, raw=True)
+    assert paths[0] == versions[dr]['DRP'], 'Incorrect DRP path'
+
+
+def test_files():
+    versions = data.manga.manga_versions()
+    dr = 'MPL-11'
+    files = data.manga.manga_file_names(8138, 12704, dr=dr)
+
+    assert len(files) == 5, 'Number of files changed'
+    assert files[0].split('-')[0] == 'drpall', 'Order of files changed'
+    assert files[2].split('.')[0] == '12704', 'Image file name changed'
+
+if __name__ == '__main__':
+    test_files()
+
+

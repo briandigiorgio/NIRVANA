@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+
+from nirvana.scripts import manga_catalogs
+
+if __name__ == '__main__':
+    manga_catalogs.main(manga_catalogs.parse_args())
+

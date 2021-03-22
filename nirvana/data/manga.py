@@ -12,6 +12,7 @@ Module with the derived instances for MaNGA kinematics.
 import os
 import glob
 import warnings
+import netrc
 
 from pkg_resources import resource_filename
 
@@ -23,18 +24,12 @@ import matplotlib.image as img
 
 from astropy.io import fits
 from astropy.wcs import WCS
-#try:
-#    from marvin.tools import Cube
-#    from marvin import config
-#except:
-#    Cube = None
-#    config = None
 
 from .util import get_map_bin_transformations, impose_positive_definite
 from .kinematics import Kinematics
 from .meta import GlobalPar
 from ..util.bitmask import BitMask
-from ..util.download import download_plateifu
+from ..util.download import download_file
 
 
 def channel_dictionary(hdu, ext, prefix='C'):
@@ -122,9 +117,124 @@ def read_manga_psf(cube_file, psf_ext, fwhm=False, quiet=False):
     return psf
 
 
+def manga_versions():
+    """
+    Return a dictionary connecting the MaNGA DR/MPL to the relevant DRP and
+    DAP versions.  To list the available versions::
+
+        from nirvana.data.manga import manga_versions
+        print(manga_versions().keys())
+
+    """
+    return {'DR15': {'DRP': 'v2_4_3', 'DAP': '2.2.1', 'collab': False},
+            'MPL-10': {'DRP': 'v3_0_1', 'DAP': '3.0.1', 'collab': True},
+            'MPL-11': {'DRP': 'v3_1_1', 'DAP': '3.1.0', 'collab': True}}
+
+# TODO: Split this into catalog paths and galaxy paths
+def manga_paths(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11', redux_path=None,
+                analysis_path=None, raw=False, relative=False):
+    """
+    Construct a set of directory paths for the MaNGA data.
+
+    .. warning::
+
+        If absolute paths are used (``relative`` is False) and the code is
+        unable to define ``redux_path`` or ``analysis_path`` by default, the
+        relevant file paths are returned as ``None``.
+
+    Args:
+        plate (:obj:`int`):
+            MaNGA plate number.
+        ifu (:obj:`int`):
+            MaNGA IFU number.
+        daptype (:obj:`str`, optional):
+            The identifier for the method used by the DAP to analyze
+            the data.
+        dr (:obj:`str`, optional):
+            Data release identifier; see :func:`manga_versions`.
+        redux_path (:obj:`str`, optional):
+            The top-level directory with all DRP output. If None and
+            ``relative`` is False, this will be set to the
+            ``MANGA_SPECTRO_REDUX`` environmental variable, if it is defined.
+        analysis_path (:obj:`str`, optional):
+            The top-level directory with all DAP output. If None and
+            ``relative`` is False, this will be set to the
+            ``MANGA_SPECTRO_ANALYSIS`` environmental variable, if it is
+            defined.
+        raw (:obj:`bool`, optional):
+            Construct the directories using the raw version numbers instead
+            of the DR/MPL symlink.
+        relative (:obj:`bool`, optional):
+            When constructing the directories, only provide the path relative
+            to the top-level path for each relevant root path. I.e., if
+            ``relative`` is true, the output cube path is relative to the
+            top-level DRP path, which is normally defined by
+            ``MANGA_SPECTRO_REDUX``.
+
+    Returns:
+        :obj:`tuple`: Five strings providing (1) the DRP directory with the
+        DRPall file, (2) the DRP directory with the LOGCUBE file, (3) the DRP
+        directory with the SDSS multicolor finding chart image file, (4) the
+        DAP directory with the DAPall file, and (5) the DAP directory with
+        the MAPS file.
+    """
+    versions = manga_versions()
+    if dr not in versions.keys():
+        raise ValueError(f'{dr} is not an available DR; see nirvana.data.manga.manga_versions.')
+    drpall_path = versions[dr]['DRP'] if raw else dr
+    cube_path = os.path.join(drpall_path, str(plate), 'stack')
+    image_path = os.path.join(drpall_path, str(plate), 'images')
+    dapall_path = os.path.join(versions[dr]['DRP'], versions[dr]['DAP']) if raw else dr
+    maps_path = os.path.join(dapall_path, daptype, str(plate), str(ifu))
+    if relative:
+        # Return only the relative paths
+        return drpall_path, cube_path, image_path, dapall_path, maps_path
+
+    _redux_path = os.getenv('MANGA_SPECTRO_REDUX') if redux_path is None else redux_path
+    _analysis_path = os.getenv('MANGA_SPECTRO_ANALYSIS') if analysis_path is None \
+                        else analysis_path
+
+    drpall_path = None if _redux_path is None else os.path.join(_redux_path, drpall_path)
+    cube_path = None if _redux_path is None else os.path.join(_redux_path, cube_path)
+    image_path = None if _redux_path is None else os.path.join(_redux_path, image_path)
+    dapall_path = None if _analysis_path is None else os.path.join(_analysis_path, dapall_path)
+    maps_path = None if _analysis_path is None else os.path.join(_analysis_path, maps_path)
+    return drpall_path, cube_path, image_path, dapall_path, maps_path
+
+
+# TODO: Split this into catalog files and galaxy files
+def manga_file_names(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11'):
+    """
+    Construct MaNGA file names.
+
+    Args:
+        plate (:obj:`int`):
+            MaNGA plate number.
+        ifu (:obj:`int`):
+            MaNGA IFU number.
+        daptype (:obj:`str`, optional):
+            The identifier for the method used by the DAP to analyze
+            the data.
+        dr (:obj:`str`, optional):
+            Data release identifier; see :func:`manga_versions`. 
+
+    Returns:
+        :obj:`tuple`: Five strings providing (1) the DRPall file name, (2)
+        the LOGCUBE file name, (3) the SDSS multicolor finding chart image
+        file name, (4) the DAPall file name, and (5) the MAPS file name.
+    """
+    versions = manga_versions()
+    if dr not in versions.keys():
+        raise ValueError(f'{dr} is not an available DR; see nirvana.data.manga.manga_versions.')
+    drpver = versions[dr]['DRP']
+    dapver = versions[dr]['DAP']
+    return f'drpall-{drpver}.fits', f'manga-{plate}-{ifu}-LOGCUBE.fits.gz', f'{ifu}.png', \
+                f'dapall-{drpver}-{dapver}.fits', f'manga-{plate}-{ifu}-MAPS-{daptype}.fits.gz'
+
+
 def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11',
                               redux_path=None, cube_path=None, image_path=None, analysis_path=None,
-                              maps_path=None, check=True, remotedir=None):
+                              maps_path=None, check=True, remotedir=None, rawpaths=False):
     """
     Get MaNGA files used by NIRVANA.
 
@@ -141,8 +251,7 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
             The identifier for the method used by the DAP to analyze
             the data.
         dr (:obj:`str`, optional):
-            Data release identifier that matches the directory with
-            the data.
+            Data release identifier; see :func:`manga_versions`.
         redux_path (:obj:`str`, optional):
             The top-level directory with all DRP output. If None,
             this will be set to the ``MANGA_SPECTRO_REDUX``
@@ -165,6 +274,9 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
         remotedir (:obj:`str`, optional):
             If specified, it will download the data from sas into this root
             directory instead of looking locally
+        rawpaths (:obj:`bool`, optional):
+            When constructing the default paths, use the raw version
+            directories instead of the DR symlinks. See :func:`manga_paths`.
 
     Returns:
         :obj:`tuple`: Full path to three files: (1) the DAP MAPS file, (2)
@@ -180,97 +292,315 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
             Raised if the directory where the datacube should exist can be
             defined but does not exist.
     """
-
     #download from sas instead of looking locally
     if remotedir is not None:
-        return download_plateifu(plate, ifu, remotedir, dr, daptype, clobber=False)
+        return download_plateifu(plate, ifu, daptype=daptype, dr=dr, oroot=remotedir,
+                                 overwrite=False)
 
-    if cube_path is None or image_path is None:
-        _redux_path = os.getenv('MANGA_SPECTRO_REDUX') if redux_path is None else redux_path
-        if _redux_path is None and cube_path is None:
-            raise ValueError('Could not define top-level root for DRP output.')
-    if cube_path is None:
-        cube_path = os.path.join(os.path.abspath(_redux_path), dr, str(plate), 'stack')
-    if image_path is None:
-        image_path = None if _redux_path is None \
-                        else os.path.join(os.path.abspath(_redux_path), dr, str(plate), 'images')
-        if image_path is None:
-            warnings.warn('Could not define directory to image PNGs')
-        elif not os.path.isdir(image_path):
-            warnings.warn('No such directory: {0}'.format(image_path))
-            image_path = None
-    if check and not os.path.isdir(cube_path):
-        raise NotADirectoryError('No such directory: {0}'.format(cube_path))
+    _, cube_file, image_file, _, maps_file = manga_file_names(plate, ifu, daptype=daptype, dr=dr)
 
-    cube_file = os.path.abspath(os.path.join(cube_path, f'manga-{plate}-{ifu}-LOGCUBE.fits.gz'))
-    image_file = None if image_path is None \
-                    else os.path.abspath(os.path.join(image_path, f'{ifu}.png'))
+    # Construct the paths
+    if cube_path is None or image_path is None or maps_path is None:
+        _, cpath, ipath, _, mpath = manga_paths(plate, ifu, daptype=daptype, dr=dr,
+                                                redux_path=redux_path, analysis_path=analysis_path,
+                                                raw=rawpaths)
 
     if maps_path is None:
-        _analysis_path = os.getenv('MANGA_SPECTRO_ANALYSIS') \
-                            if analysis_path is None else analysis_path
-        if _analysis_path is None:
-            raise ValueError('Could not define top-level root for DAP output.')
-        maps_path = os.path.join(os.path.abspath(_analysis_path), dr, daptype, str(plate), str(ifu))
-
+        maps_path = mpath
+    if maps_path is None:
+        raise ValueError('Could not define path to MAPS file.')
     if check and not os.path.isdir(maps_path):
         raise NotADirectoryError('No such directory: {0}'.format(maps_path))
+    maps_file = os.path.abspath(os.path.join(maps_path, maps_file))
 
-    maps_file = os.path.abspath(os.path.join(maps_path,
-                                             f'manga-{plate}-{ifu}-MAPS-{daptype}.fits.gz'))
+    if cube_path is None:
+        cube_path = cpath
+    if cube_path is None:
+        raise ValueError('Could not define path to LOGCUBE file.')
+    if check and not os.path.isdir(cube_path):
+        raise NotADirectoryError('No such directory: {0}'.format(cube_path))
+    cube_file = os.path.abspath(os.path.join(cube_path, cube_file))
+
+    if image_path is None:
+        image_path = ipath
+    if image_path is None:
+        warnings.warn('Could not define directory to image PNGs')
+    elif not os.path.isdir(image_path):
+        warnings.warn('No such directory: {0}'.format(image_path))
+        image_path = None
+    image_file = None if image_path is None \
+                    else os.path.abspath(os.path.join(image_path, image_file))
 
     return maps_file, cube_file, image_file
 
-
-def read_drpall(plate, ifu, redux_path, dr, ext='elpetro', quiet=False):
+# TODO: Break this into two functions to download the DRPall and DAPall file
+# separately?
+def download_catalogs(dr='MPL-11', oroot=None, redux_path=None, analysis_path=None, overwrite=True,
+                      sasurl='https://data.sdss.org/sas/mangawork/manga/spectro'):
     """
-    Read the NASA Sloan Atlas data from the DRPall file for the
-    appropriate data release.
+    Download the two main MaNGA catalog files, the DRPall and DAPall files.
 
     Args:
-        plate (:obj:`int`):
-            Plate of galaxy.
-        ifu (:obj:`int`):
-            IFU of galaxy.
+        dr (:obj:`str`, optional):
+            Data release identifier; see :func:`manga_versions`.
+        oroot (:obj:`str`, optional):
+            Root directory for all files. If provided, ``redux_path`` and
+            ``analysis_path`` are ignored.
         redux_path (:obj:`str`, optional):
             The top-level directory with all DRP output. If None,
             this will be set to the ``MANGA_SPECTRO_REDUX``
-        dr (:obj:`str`, optional):
-            Data release identifier that matches the directory with
-            the data.
-        ext (:obj:`str`):
-            Whether to use the `elpetro` or `sersic` derived values
-            in the NSA catalog.
-        quiet (:obj:`bool`, optional):
-            Suppress printed output.
+            environmental variable, if it is defined.
+        analysis_path (:obj:`str`, optional):
+            The top-level directory with all DAP output. If None,
+            this will be set to the ``MANGA_SPECTRO_ANALYSIS``
+            environmental variable, if it is defined.
+        overwrite (:obj:`bool`, optional):
+            Overwrite existing files.
+        sasurl (:obj:`str`, optional):
+            Top-level Science Archive Server url with the MaNGA data.
 
     Returns:
-        :obj:`tuple`: tuple of inclination, position angle, and |Sersic| n
-        values. Angles are in degrees.
-
-    Raises:
-        FileNotFoundError:
-            Raised if the DRPall file can't be found in the specified
-            place.
+        :obj:`tuple`: The names of the two downloaded files: (1) the DRPall
+        file and (2) the DAPall file.
     """
-    # Read the drpall file
-    if not quiet:
-        print('Reading {0} ... '.format(cube_file))
-    drpall_file = glob.glob(f'{cubepath}/{dr}/drpall*.fits')[0]
-    plateifu = f'{plate}-{ifu}'
+    versions = manga_versions()
+    if dr not in versions.keys():
+        raise ValueError(f'{dr} is not an available DR; see nirvana.data.manga.manga_versions.')
 
-    if not drpall_file:
-        raise FileNotFoundError('Could not find drpall file')
+    # Get the authentication if needed
+    if versions[dr]['collab']:
+        try:
+            NETRC = netrc.netrc()
+        except Exception as e:
+            raise FileNotFoundError('Authentication required, but no ~/.netrc file.') from e
+        # TODO: What happens if the .netrc file doesn't have 'data.sdss.org'
+        # credentials?
+        user, acc, password = NETRC.authenticators('data.sdss.org')
+        auth = (user, password)
+    else:
+        auth = None
 
-    with fits.open(drpall_file) as hdu:
-        data = hdu[1].data[hdu[1].data['plateifu'] == plateifu]
-        inc = np.degrees(np.arccos(data[f'nsa_{ext}_ba']))
-        pa = data[f'nsa_{ext}_phi']
-        n = data['nsa_sersic_n']
+    # Get the default relative paths, relative to the top-level reduction and
+    # analysis paths
+    sas_drpall_path, _, _, sas_dapall_path, _ \
+            = manga_paths(0, 0, dr=dr, raw='DR' in dr, relative=True)
 
-    if not quiet:
-        print('Done')
-    return inc, pa, n
+    # Get the output paths
+    if oroot is None:
+        _redux_path = os.getenv('MANGA_SPECTRO_REDUX') if redux_path is None else redux_path
+        if _redux_path is None:
+            raise ValueError('Cannot define the reduction path; set the MANGA_SPECTRO_REDUX '
+                             'environmental variable or provide redux_path.')
+        _analysis_path = os.getenv('MANGA_SPECTRO_ANALYSIS') if analysis_path is None \
+                            else analysis_path
+        if _analysis_path is None:
+            raise ValueError('Cannot define the analysis path; set the MANGA_SPECTRO_ANALYSIS '
+                             'environmental variable or provide analysis_path.')
+        # Relative paths are never None...
+        if 'DR' in dr:
+            # NOTE: These gymnastics are because there is no DR15 DAP
+            # directory...
+            _drpall_path, _, _, _dapall_path, _ = manga_paths(0, 0, dr=dr, relative=True)
+            drpall_path = os.path.join(os.path.abspath(_redux_path), _drpall_path)
+            dapall_path = os.path.join(os.path.abspath(_analysis_path), _dapall_path)
+        else:
+            drpall_path = os.path.join(os.path.abspath(_redux_path), sas_drpall_path)
+            dapall_path = os.path.join(os.path.abspath(_analysis_path), sas_dapall_path)
+    else:
+        drpall_path = os.path.abspath(oroot)
+        dapall_path = os.path.abspath(oroot)
+
+    # Fix the SAS urls to include the top-level redux and analysis
+    sas_drpall_path = f'redux/{sas_drpall_path}'
+    sas_dapall_path = f'analysis/{sas_dapall_path}'
+
+    # Make the paths if they don't already exist
+    for p in [drpall_path, dapall_path]:
+        if not os.path.isdir(p):
+            os.makedirs(p)
+
+    # File names
+    drpall_file, _, _, dapall_file, _ = manga_file_names(0, 0, dr=dr)
+
+    # Fix input url?
+    _sasurl = sasurl[:-1] if sasurl[-1] == '/' else sasurl
+
+    # Download the files
+    files = ()
+    for s,p,f in zip([sas_drpall_path, sas_dapall_path], [drpall_path, dapall_path],
+                     [drpall_file, dapall_file]):
+        files += (os.path.join(p, f),)
+        download_file(f'{_sasurl}/{s}/{f}', files[-1], overwrite=overwrite, auth=auth)
+    return files
+
+
+def download_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11', oroot=None, 
+                      redux_path=None, analysis_path=None, overwrite=True,
+                      sasurl='https://data.sdss.org/sas/mangawork/manga/spectro'):
+    """
+    Download the individual plate-ifu MaNGA data files.
+
+    Method currently requires authentication using a ``.netrc`` file in your
+    home directory if you are using collaboration-only data; see `SDSS
+    Collaboration Access`_.
+
+    Args:
+        plate (:obj:`int`):
+            MaNGA plate number.
+        ifu (:obj:`int`):
+            MaNGA IFU number.
+        daptype (:obj:`str`, optional):
+            The identifier for the method used by the DAP to analyze
+            the data.
+        dr (:obj:`str`, optional):
+            Data release identifier; see :func:`manga_versions`.
+        oroot (:obj:`str`, optional):
+            Root directory for all files. If provided, ``redux_path`` and
+            ``analysis_path`` are ignored.
+        redux_path (:obj:`str`, optional):
+            The top-level directory with all DRP output. If None,
+            this will be set to the ``MANGA_SPECTRO_REDUX``
+            environmental variable, if it is defined.
+        analysis_path (:obj:`str`, optional):
+            The top-level directory with all DAP output. If None,
+            this will be set to the ``MANGA_SPECTRO_ANALYSIS``
+            environmental variable, if it is defined.
+        overwrite (:obj:`bool`, optional):
+            Overwrite existing files.
+        sasurl (:obj:`str`, optional):
+            Top-level Science Archive Server url with the MaNGA data.
+
+    Returns:
+        :obj:`tuple`: The names of the three downloaded files: (1) the DRP
+        LOGCUBE file, (2) SDSS color composite finding chart image, and (3)
+        the DAP MAPS file.
+    """
+    versions = manga_versions()
+    if dr not in versions.keys():
+        raise ValueError(f'{dr} is not an available DR; see nirvana.data.manga.manga_versions.')
+
+    # Get the authentication if needed
+    if versions[dr]['collab']:
+        try:
+            NETRC = netrc.netrc()
+        except Exception as e:
+            raise FileNotFoundError('Authentication required, but no ~/.netrc file.') from e
+        # TODO: What happens if the .netrc file doesn't have 'data.sdss.org'
+        # credentials?
+        user, acc, password = NETRC.authenticators('data.sdss.org')
+        auth = (user, password)
+    else:
+        auth = None
+
+    # Get the default relative paths
+    _, sas_cube_path, sas_image_path, _, sas_maps_path \
+            = manga_paths(plate, ifu, daptype=daptype, dr=dr, redux_path=redux_path,
+                          analysis_path=analysis_path, raw='DR' in dr, relative=True)
+
+    # Get the output paths
+    if oroot is None:
+        _redux_path = os.getenv('MANGA_SPECTRO_REDUX') if redux_path is None else redux_path
+        if _redux_path is None:
+            raise ValueError('Cannot define the reduction path; set the MANGA_SPECTRO_REDUX '
+                             'environmental variable or provide redux_path.')
+        _analysis_path = os.getenv('MANGA_SPECTRO_ANALYSIS') if analysis_path is None \
+                            else analysis_path
+        if _analysis_path is None:
+            raise ValueError('Cannot define the analysis path; set the MANGA_SPECTRO_ANALYSIS '
+                             'environmental variable or provide analysis_path.')
+        # Relative paths are never None...
+        if 'DR' in dr:
+            # NOTE: These gymnastics are because there is no DR15 DAP
+            # directory...
+            _, _cube_path, _image_path, _, _maps_path \
+                    = manga_paths(plate, ifu, daptype=daptype, dr=dr, redux_path=redux_path,
+                                  analysis_path=analysis_path, relative=True)
+            cube_path = os.path.join(os.path.abspath(_redux_path), _cube_path)
+            image_path = os.path.join(os.path.abspath(_redux_path), _image_path)
+            maps_path = os.path.join(os.path.abspath(_analysis_path), _maps_path)
+        else:
+            cube_path = os.path.join(os.path.abspath(_redux_path), sas_cube_path)
+            image_path = os.path.join(os.path.abspath(_redux_path), sas_image_path)
+            maps_path = os.path.join(os.path.abspath(_analysis_path), sas_maps_path)
+    else:
+        cube_path = os.path.join(os.path.abspath(oroot), str(plate), str(ifu))
+        image_path = cube_path
+        maps_path = cube_path
+
+    # Fix the SAS urls to include the top-level redux and analysis
+    sas_cube_path = f'redux/{sas_cube_path}'
+    sas_image_path = f'redux/{sas_image_path}'
+    sas_maps_path = f'analysis/{sas_maps_path}'
+
+    # Make the paths if they don't already exist
+    for p in [cube_path, image_path, maps_path]:
+        if not os.path.isdir(p):
+            os.makedirs(p)
+
+    # File names
+    _, cube_file, image_file, _, maps_file = manga_file_names(plate, ifu, daptype=daptype, dr=dr)
+
+    # Fix input url?
+    _sasurl = sasurl[:-1] if sasurl[-1] == '/' else sasurl
+
+    # NOTE: Order matters and must match the sequence from `manga_files_from_plateifu`
+    files = ()
+    for s,p,f in zip([sas_maps_path, sas_cube_path, sas_image_path],
+                     [maps_path, cube_path, image_path], [maps_file, cube_file, image_file]):
+        files += (os.path.join(p, f),)
+        download_file(f'{_sasurl}/{s}/{f}', files[-1], overwrite=overwrite, auth=auth)
+    return files
+
+# TODO: I think this has been deprecated in favor of MaNGAGlobalPar.
+#def read_drpall(plate, ifu, redux_path, dr, ext='elpetro', quiet=False):
+#    """
+#    Read the NASA Sloan Atlas data from the DRPall file for the
+#    appropriate data release.
+#
+#    Args:
+#        plate (:obj:`int`):
+#            Plate of galaxy.
+#        ifu (:obj:`int`):
+#            IFU of galaxy.
+#        redux_path (:obj:`str`, optional):
+#            The top-level directory with all DRP output. If None,
+#            this will be set to the ``MANGA_SPECTRO_REDUX``
+#        dr (:obj:`str`, optional):
+#            Data release identifier that matches the directory with
+#            the data.
+#        ext (:obj:`str`):
+#            Whether to use the `elpetro` or `sersic` derived values
+#            in the NSA catalog.
+#        quiet (:obj:`bool`, optional):
+#            Suppress printed output.
+#
+#    Returns:
+#        :obj:`tuple`: tuple of inclination, position angle, and |Sersic| n
+#        values. Angles are in degrees.
+#
+#    Raises:
+#        FileNotFoundError:
+#            Raised if the DRPall file can't be found in the specified
+#            place.
+#    """
+#    # Read the drpall file
+#    if not quiet:
+#        print('Reading {0} ... '.format(cube_file))
+#    drpall_file = glob.glob(f'{cubepath}/{dr}/drpall*.fits')[0]
+#    plateifu = f'{plate}-{ifu}'
+#
+#    if not drpall_file:
+#        raise FileNotFoundError('Could not find drpall file')
+#
+#    with fits.open(drpall_file) as hdu:
+#        data = hdu[1].data[hdu[1].data['plateifu'] == plateifu]
+#        inc = np.degrees(np.arccos(data[f'nsa_{ext}_ba']))
+#        pa = data[f'nsa_{ext}_phi']
+#        n = data['nsa_sersic_n']
+#
+#    if not quiet:
+#        print('Done')
+#    return inc, pa, n
 
 
 def sdss_bitmask(bitgroup):
@@ -510,7 +840,6 @@ class MaNGAKinematics(Kinematics):
 
     This class *should not* be instantiated by itself.
     """
-
     @classmethod
     def from_plateifu(cls, plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11',
                       redux_path=None, cube_path=None, image_path=None, analysis_path=None,
@@ -523,6 +852,8 @@ class MaNGAKinematics(Kinematics):
         disk.  See that function for the description of the arguments.
 
         Args:
+            dr (:obj:`str`, optional):
+                Data release identifier; see :func:`manga_versions`.
             ignore_psf (:obj:`bool`, optional):
                 Ignore the point-spread function when collecting the
                 data. I.e., this instantiates the object setting
@@ -633,10 +964,17 @@ class MaNGAGasKinematics(MaNGAKinematics):
             sig = hdu['EMLINE_GSIGMA'].data[eml[line]]
             sig_ivar = hdu['EMLINE_GSIGMA_IVAR'].data[eml[line]]
             sig_corr = hdu['EMLINE_INSTSIGMA'].data[eml[line]]
-            reff = hdu[0].header['REFF']
-            phot_ell = hdu[0].header['ECOOELL']
+
+            # TODO: Not all galaxies have a measured effective radius or
+            # ellipticity in the header of the DAP MAPS files. The photometry
+            # keywords are only available if they can be pulled from the DRPall
+            # file. I put in some hacks so this won't fault, but I think we
+            # should deprecate this code in favor of MaNGAGlobalPar.
+            reff = 1.0 if 'REFF' not in hdu[0].header else hdu[0].header['REFF']
+            phot_ell = hdu[0].header['ECOOELL'] if 'ECOOELL' in hdu[0].header else 0.5
             phot_inc = np.degrees(np.arccos(1 - phot_ell))
-            pri, sec, anc, oth = parse_manga_targeting_bits(hdu[0].header['MNGTARG1'], hdu[0].header['MNGTARG3'])
+            pri, sec, anc, oth = parse_manga_targeting_bits(hdu[0].header['MNGTARG1'],
+                                                            hdu[0].header['MNGTARG3'])
             maxr = 2.5 if sec else 1.5
 
             # Get the masks
@@ -752,10 +1090,17 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             sig = hdu['STELLAR_SIGMA'].data
             sig_ivar = hdu['STELLAR_SIGMA_IVAR'].data
             sig_corr = hdu['STELLAR_SIGMACORR'].data[0]
-            reff = hdu[0].header['REFF']
-            phot_ell = hdu[0].header['ECOOELL']
+
+            # TODO: Not all galaxies have a measured effective radius or
+            # ellipticity in the header of the DAP MAPS files. The photometry
+            # keywords are only available if they can be pulled from the DRPall
+            # file. I put in some hacks so this won't fault, but I think we
+            # should deprecate this code in favor of MaNGAGlobalPar.
+            reff = 1.0 if 'REFF' not in hdu[0].header else hdu[0].header['REFF']
+            phot_ell = hdu[0].header['ECOOELL'] if 'ECOOELL' in hdu[0].header else 0.5
             phot_inc = np.degrees(np.arccos(1 - phot_ell))
-            pri, sec, anc, oth = parse_manga_targeting_bits(hdu[0].header['MNGTARG1'], hdu[0].header['MNGTARG3'])
+            pri, sec, anc, oth = parse_manga_targeting_bits(hdu[0].header['MNGTARG1'],
+                                                            hdu[0].header['MNGTARG3'])
             maxr = 2.5 if sec else 1.5
 
             # Get the masks
@@ -812,8 +1157,7 @@ class MaNGAGlobalPar(GlobalPar):
             this will be set to the ``MANGA_SPECTRO_REDUX``
             environmental variable, if it is defined.
         dr (:obj:`str`, optional):
-            Data release identifier that matches the directory with
-            the data.
+            Data release identifier; see :func:`manga_versions`.
         drpall_file (:obj:`str`, optional):
             DRPall filename. If None, the filename is assumed to be
             ``drpall*.fits`` and the path is constructed from other
@@ -821,19 +1165,22 @@ class MaNGAGlobalPar(GlobalPar):
         drpall_path (:obj:`str`, optional):
             This provides the *direct* path to the drpall file,
             circumventing the use of ``dr`` and ``redux_path``.
+        **kwargs:
+            Additional arguments passed directly to the nominal
+            instantiation method.
     """
-    def __init__(self, plate, ifu, redux_path=None, dr=None, drpall_file=None, drpall_path=None, 
-                 **kwargs):
+    def __init__(self, plate, ifu, redux_path=None, dr='MPL-11', drpall_file=None,
+                 drpall_path=None, **kwargs):
 
         if drpall_file is None:
-            # Set the path to the DRPall file
+            # Get the default file name
+            drpall_file = manga_file_names(plate, ifu, dr=dr)[0]
             if drpall_path is None:
-                _redux_path = os.getenv('MANGA_SPECTRO_REDUX') \
-                                if redux_path is None else redux_path
-                if _redux_path is None:
-                    raise ValueError('Could not define top-level root for DRP output.')
-                drpall_path = os.path.join(_redux_path, dr)
-            drpall_file = glob.glob(os.path.join(drpall_path, 'drpall*.fits'))[0]
+                # Get the default path
+                drpall_path = manga_paths(plate, ifu, dr=dr, redux_path=redux_path)[0]
+            if drpall_path is None:
+                raise ValueError('Could not define path to the DRPall file.')
+            drpall_file = os.path.join(drpall_path, drpall_file)
 
         # Read the table
         plateifu = f'{plate}-{ifu}'
@@ -847,13 +1194,43 @@ class MaNGAGlobalPar(GlobalPar):
         if len(indx) != 1:
             raise ValueError(f'Could not find {plateifu} in {drpall_file}.')
 
-        # Instantiate the object
+        # Default to the elliptical Petrosian photometric values. These are
+        # supposed to be more robust than the Sersic fits, particularly for the
+        # effective radius. In the case where the elliptical Petrosian values
+        # are placeholders (e.g., Reff < 0), use the Sersic values instead. In
+        # the case where both are place holders, use a set of nonsense defaults
+        # and instantiate the object anyway. If it is available, the Sersic
+        # Index is always included, regardless of whether or not the rest of
+        # the photometric measurements are based on the elliptical Petrosian
+        # analysis.
         indx = indx[0]
-        super().__init__(ra=drpall['objra'][indx], dec=drpall['objdec'][indx],
-                         mass=drpall['nsa_sersic_mass'][indx], z=drpall['z'][indx],
-                         pa=drpall['nsa_elpetro_phi'][indx], ell=1.-drpall['nsa_elpetro_ba'][indx],
-                         reff=drpall['nsa_elpetro_th50_r'][indx],
-                         sersic_n=drpall['nsa_sersic_n'][indx], **kwargs)
+        if drpall['nsa_elpetro_th50_r'][indx] > 0:
+            phot_key = 'elpetro'
+            mass = drpall['nsa_elpetro_mass'][indx]
+            pa = drpall['nsa_elpetro_phi'][indx]
+            ell = 1. - drpall['nsa_elpetro_ba'][indx]
+            reff = drpall['nsa_elpetro_th50_r'][indx]
+            sersic_n = drpall['nsa_sersic_n'][indx]
+        elif drpall['nsa_sersic_th50'][indx] > 0:
+            phot_key = 'sersic'
+            mass = drpall['nsa_sersic_mass'][indx]
+            pa = drpall['nsa_sersic_phi'][indx]
+            ell = 1. - drpall['nsa_sersic_ba'][indx]
+            reff = drpall['nsa_sersic_th50'][indx]
+            sersic_n = drpall['nsa_sersic_n'][indx]
+        else:
+            warnings.warn('Photometric data unavailable; adopting bogus defaults.')
+            phot_key = None
+            mass = 1e10
+            pa = 0.
+            ell = 0.5
+            reff = 1.0
+            sersic_n = 1.0
+
+        # Instantiate the object
+        super().__init__(ra=drpall['objra'][indx], dec=drpall['objdec'][indx], mass=mass,
+                         z=drpall['z'][indx], pa=pa, ell=ell, reff=reff, sersic_n=sersic_n,
+                         **kwargs)
 
         # Save MaNGA-specific attributes
         self.dr = 'unknown' if dr is None else dr
@@ -868,9 +1245,15 @@ class MaNGAGlobalPar(GlobalPar):
         self.psf_fwhm = np.array([drpall['gfwhm'][indx], drpall['rfwhm'][indx],
                                   drpall['ifwhm'][indx], drpall['zfwhm'][indx]])
 
-        self.mag_band = np.array(['NUV', 'r', 'i'])
-        self.mag = np.array([drpall['nsa_elpetro_absmag'][indx][1],
-                             drpall['nsa_elpetro_absmag'][indx][4],
-                             drpall['nsa_elpetro_absmag'][indx][5]])
+        # Save some of the measured magnitudes, if they're available
+        self.phot_key = phot_key
+        if self.phot_key is None:
+            self.mag_band = None
+            self.mag = None
+        else:
+            self.mag_band = np.array(['NUV', 'r', 'i'])
+            self.mag = np.array([drpall[f'nsa_{self.phot_key}_absmag'][indx][1],
+                                 drpall[f'nsa_{self.phot_key}_absmag'][indx][4],
+                                 drpall[f'nsa_{self.phot_key}_absmag'][indx][5]])
 
 

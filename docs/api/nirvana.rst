@@ -18,6 +18,7 @@ Submodules
 
    nirvana.fitting
    nirvana.galaxy
+   nirvana.output
    nirvana.plotting
 
 Module contents

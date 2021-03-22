@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+
+from nirvana.scripts import manga_download
+
+if __name__ == '__main__':
+    manga_download.main(manga_download.parse_args())
+

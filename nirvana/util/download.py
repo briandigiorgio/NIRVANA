@@ -41,6 +41,8 @@ def download_file(url, outfile, overwrite=True, auth=None):
     print('To: {0}'.format(outfile))
     # Streaming, so we can iterate over the response.
     r = requests.get(url, stream=True, auth=auth)
+    # Ensure that the url exists
+    r.raise_for_status()
     # Total size in bytes.
     total_size = int(r.headers.get('content-length', 0))
     block_size = 1024 #1 Kibibyte

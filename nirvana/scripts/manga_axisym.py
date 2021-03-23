@@ -88,7 +88,13 @@ def parse_args(options=None):
                              '(ignored if dispersion not being fit).')
     parser.add_argument('--min_unmasked', default=None, type=int,
                         help='Minimum number of unmasked spaxels required to continue fit.')
-    parser.add_argument('--screen', dest='screen', action='store_true', default=False) 
+    parser.add_argument('--coherent', default=False, action='store_true',
+                        help='After the initial rejection of S/N and error limits, find the '
+                             'largest coherent region of adjacent spaxels and only fit that '
+                             'region.')
+    parser.add_argument('--screen', default=False, action='store_true',
+                        help='Indicate that the script is being run behind a screen (used to set '
+                             'matplotlib backend).') 
 
     # TODO: Other options:
     #   - Fit with least-squares vs. dynesty
@@ -156,7 +162,7 @@ def main(args):
                                      max_sig_err=args.max_sig_err, min_vel_snr=args.min_vel_snr,
                                      min_sig_snr=args.min_sig_snr, fix_cen=args.fix_cen,
                                      fix_inc=args.fix_inc, min_unmasked=args.min_unmasked,
-                                     verbose=args.verbose)
+                                     select_coherent=args.coherent, verbose=args.verbose)
 
     # Plot the final residuals
     dv_plot = os.path.join(args.odir, f'{oroot}-vdist.png')

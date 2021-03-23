@@ -11,7 +11,7 @@ import warnings
 from IPython import embed
 
 import numpy as np
-from scipy import optimize
+from scipy import optimize, ndimage
 from matplotlib import pyplot, rc, patches, ticker, colors
 
 from astropy.io import fits
@@ -21,7 +21,7 @@ from .geometry import projected_polar
 from .beam import smear
 from .util import cov_err
 from ..data.scatter import IntrinsicScatter
-from ..data.util import impose_positive_definite, cinv, inverse
+from ..data.util import impose_positive_definite, cinv, inverse, find_largest_coherent_region
 from ..data.util import select_major_axis, bin_stats, growth_lim, atleast_one_decade
 from ..util.bitmask import BitMask
 from ..util import plot
@@ -221,11 +221,13 @@ class AxisymmetricDiskFitBitMask(BitMask):
         mask_def = np.array([['DIDNOTUSE', 'Data not used because it was flagged on input.'],
                              ['REJ_ERR', 'Data rejected because of its large measurement error.'],
                              ['REJ_SNR', 'Data rejected because of its low signal-to-noise.'],
-                             ['REJ_UNR', 'Data rejected after first iteration and are so ' \
-                                         'discrepant from the other data that we expect the ' \
+                             ['REJ_UNR', 'Data rejected after first iteration and are so '
+                                         'discrepant from the other data that we expect the '
                                          'measurements are unreliable.'],
-                             ['REJ_RESID', 'Data rejected due to iterative rejection process ' \
-                                           'of model residuals.']])
+                             ['REJ_RESID', 'Data rejected due to iterative rejection process '
+                                           'of model residuals.'],
+                             ['DISJOINT', 'Data part of a smaller disjointed region, not '
+                                          'congruent with the main body of the measurements.']])
         super().__init__(mask_def[:,0], descr=mask_def[:,1])
 
     @staticmethod
@@ -234,7 +236,7 @@ class AxisymmetricDiskFitBitMask(BitMask):
         Return the list of "base-level" flags that are *always* ignored,
         regardless of the fit iteration.
         """
-        return ['DIDNOTUSE', 'REJ_ERR', 'REJ_SNR', 'REJ_UNR']
+        return ['DIDNOTUSE', 'REJ_ERR', 'REJ_SNR', 'REJ_UNR', 'DISJOINT']
 
 
 class AxisymmetricDiskGlobalBitMask(BitMask):
@@ -1787,10 +1789,15 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
 
 def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponential', fitdisp=True,
                     max_vel_err=None, max_sig_err=None, min_vel_snr=None, min_sig_snr=None,
-                    fix_cen=False, fix_inc=False, min_unmasked=None, verbose=0):
+                    fix_cen=False, fix_inc=False, min_unmasked=None, select_coherent=False,
+                    verbose=0):
     """
     add doc string...
+
+    select_coherent means ignore small disjointed regions separated from the
+    main group of data.
     """
+    select_coherent = True
 
     # Running in "debug" mode
     debug = verbose > 1
@@ -1885,11 +1892,25 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     if min_unmasked is not None:
         if np.sum(np.logical_not(vel_mask > 0)) < min_unmasked:
             raise ValueError('Insufficient valid velocity measurements to continue!')
-        if np.sum(np.logical_not(sig_mask > 0)) < min_unmasked:
+        if sig_mask is not None and np.sum(np.logical_not(sig_mask > 0)) < min_unmasked:
             raise ValueError('Insufficient valid velocity dispersion measurements to continue!')
 
-    embed()
-    exit()
+    # Fit only the spatially coherent regions
+    if select_coherent:
+        gpm = np.logical_not(kin.remap(vel_mask, masked=False, fill_value=1).astype(bool))
+        indx = find_largest_coherent_region(gpm.astype(int)).astype(int)
+        indx = np.logical_not(kin.bin(indx).astype(bool)) & (vel_mask == 0)
+        if np.any(indx):
+            print(f'Flagging {np.sum(indx)} velocities as disjoint from the main group.')
+            vel_mask[indx] = disk_bm.turn_on(vel_mask[indx], flag='DISJOINT')
+
+        if sig_mask is not None:
+            gpm = np.logical_not(kin.remap(sig_mask, masked=False, fill_value=1).astype(bool))
+            indx = find_largest_coherent_region(gpm.astype(int)).astype(int)
+            indx = np.logical_not(kin.bin(indx).astype(bool)) & (sig_mask == 0)
+            if np.any(indx):
+                print(f'Flagging {np.sum(indx)} dispersions as disjoint from the main group.')
+                sig_mask[indx] = disk_bm.turn_on(sig_mask[indx], flag='DISJOINT')
 
     #---------------------------------------------------------------------------
     # Define the fitting object

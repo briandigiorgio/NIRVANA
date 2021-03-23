@@ -1055,7 +1055,7 @@ def axisym_fit_data(galmeta, kin, p0, disk, ofile, vmask, smask, compress=True):
         metadata['SISCT'] = 0.0 if disk.scatter is None else disk.scatter[1]
         metadata['SCHI2'] = np.sum(sfom**2)
 
-    # Total fit chi-square. SCHI2 and NSIG are 0 if sigma not fit because of
+    # Total fit chi-square. SCHI2 and SNFIT are 0 if sigma not fit because of
     # the instantiation value of init_record_array
     metadata['CHI2'] = metadata['VCHI2'] + metadata['SCHI2']
     metadata['RCHI2'] = metadata['CHI2'] / (metadata['VNFIT'] + metadata['SNFIT'] - disk.np)

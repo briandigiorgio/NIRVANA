@@ -1227,10 +1227,14 @@ class MaNGAGlobalPar(GlobalPar):
             reff = 1.0
             sersic_n = 1.0
 
+        z = drpall['z'][indx]
+        if z <= 0.:
+            warnings.warn('Redshift not available; adopting z=0!')
+            z = 0.
+
         # Instantiate the object
-        super().__init__(ra=drpall['objra'][indx], dec=drpall['objdec'][indx], mass=mass,
-                         z=drpall['z'][indx], pa=pa, ell=ell, reff=reff, sersic_n=sersic_n,
-                         **kwargs)
+        super().__init__(ra=drpall['objra'][indx], dec=drpall['objdec'][indx], mass=mass, z=z,
+                         pa=pa, ell=ell, reff=reff, sersic_n=sersic_n, **kwargs)
 
         # Save MaNGA-specific attributes
         self.dr = 'unknown' if dr is None else dr

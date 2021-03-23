@@ -8,7 +8,7 @@ import warnings
 from IPython import embed
 
 import numpy as np
-from scipy import sparse, linalg, stats, special
+from scipy import sparse, linalg, stats, special, ndimage
 
 from astropy.stats import sigma_clip
 
@@ -779,5 +779,35 @@ def pixelated_gaussian(x, c=0.0, s=1.0, density=False):
     dx = np.mean(np.diff(x))
     g = (special.erf((d+dx/2.)/n) - special.erf((d-dx/2.)/n))/2.
     return g/dx if density else g
+
+
+def find_largest_coherent_region(a):
+    """
+    Find the largest coherent region in a 2D array.
+
+    This is basically a wrapper for `scipy.ndimage.label`_ that associates
+    adjacent pixels (including diagonally) into groups. The largest group is
+    determined and a boolean array is returned that selects those pixels
+    associated with that group.
+
+    Args:
+        a (`numpy.ndarray`_):
+            A 2D array passed directly to `scipy.ndimage.label`_. Pulled from
+            that documentation: "Any non-zero values in input are counted as
+            features and zero values are considered the background."
+            Perferrably this is an integer array.
+
+    Returns:
+        `numpy.ndarray`_: Boolean array with the same shape as the input that
+        selects pixels that are part of the largest coherent group.
+    """
+    labels, n = ndimage.label(a, structure=np.ones((3,3), dtype=int))
+    if n == 1:
+        return a != 0
+
+    # Only keep the largest coherent structure
+    uniq_labels, npix = np.unique(labels, return_counts=True)
+    indx = uniq_labels != 0
+    return labels == uniq_labels[indx][np.argmax(npix[indx])]
 
 

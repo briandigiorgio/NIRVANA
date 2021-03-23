@@ -53,6 +53,8 @@
       axisymmetric fit to proceed.
     - set lower bound on inclination to 1 degree to avoid div-by-zero
       errors.
+    - Added option to find the largest coherent region of valid spaxels
+      for the fit.
  - Added manga download scripts
 
 

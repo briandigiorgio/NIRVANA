@@ -162,7 +162,7 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
 
 def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
         cen=True, fixcent=True, clip=True, remotedir=None,
-        gal=None):
+        gal=None, galmeta=None):
     """
     Function to turn any nirvana output file into useful objects.
 
@@ -321,7 +321,7 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
     else:
         args.edges = resdict['bin_edges'][~resdict['velmask']]
 
-    args.getguess()
+    args.getguess(galmeta=galmeta)
     args.getasym()
 
     return args, resdict

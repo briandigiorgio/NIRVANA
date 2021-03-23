@@ -1,6 +1,10 @@
 """
 Provides a class to house and manipulate galaxy global parameters/metadata.
+
+.. include common links, assuming primary doc root is up one directory
+.. include:: ../include/links.rst
 """
+import warnings
 
 from IPython import embed
 
@@ -72,7 +76,7 @@ class GlobalPar:
             while self.pa < -180.:
                 self.pa += 360.
 
-    def guess_inclination(self):
+    def guess_inclination(self, lb=0., ub=90.):
         r"""
         Return a guess inclination using the equation:
 
@@ -88,6 +92,12 @@ class GlobalPar:
         :attr:`q0` is None, the returned inclination is for an infinitely
         thin disk (:math:`q_0 = 0`).
 
+        Args:
+            lb (:obj:`float`, optional):
+                Lower bound for the returned inclination.
+            ub (:obj:`float`, optional):
+                Upper bound for the returned inclination.
+
         Returns:
             :obj:`float`: Inclination estimate in degrees.
 
@@ -99,13 +109,15 @@ class GlobalPar:
         if self.ell is None:
             raise ValueError('Ellipticity is undefined.')
         if self.q0 is None or self.q0 == 0.0:
-            return np.degrees(np.arccos(1.0 - self.ell))
+            return np.clip(np.degrees(np.arccos(1.0 - self.ell)), lb, ub)
 
         q = 1.0 - self.ell
-        return 90. if q < self.q0 \
-                    else np.degrees(np.arccos(np.sqrt((q**2 - self.q0**2) / (1.0 - self.q0**2))))
+        return np.clip(90. if q < self.q0 
+                       else np.degrees(np.arccos(np.sqrt((q**2-self.q0**2) / (1.0 - self.q0**2)))),
+                       lb, ub)
 
-    def guess_kinematic_pa(self, x, y, v, r_range=None, wedge=30., return_vproj=False):
+    def guess_kinematic_pa(self, x, y, v, r_range=None, wedge=30., return_vproj=False,
+                           default_vproj=100.):
         r"""
         Use the input coordinates and velocity field to estimate the
         kinematic position angle.
@@ -142,11 +154,15 @@ class GlobalPar:
             return_vproj (:obj:`bool`, optional):
                 Return the estimate of the projected rotational velocity
                 along the major axis, as well as the position angle.
+            default_vproj (:obj:`float`, optional):
+                If no unmasked pixels and ``return_vproj`` is True, return
+                this default value for the projected rotation speed.
 
         Returns:
             :obj:`float`, :obj:`tuple`: Provides the position angle estimate
             in degrees, as well as an estimate of the projected rotation
-            velocity, if requested.
+            velocity, if requested. The range of the returned PA is -180 to
+            180 degrees.
 
         Raises:
             ValueError:
@@ -162,11 +178,18 @@ class GlobalPar:
                 raise ValueError('Specified radial range must contain 2 and only 2 elements.')
 
         # Get the disk-plane polar coordinates
-        r, th = projected_polar(x, y, np.radians(self.pa), np.radians(self.guess_inclination()))
+        r, th = projected_polar(x, y, np.radians(self.pa),
+                                np.radians(self.guess_inclination(lb=1., ub=89.)))
         # Create a mask that selects data near the major axis
         gpm = select_major_axis(r, th, r_range=r_range, wedge=wedge)
         # Include any input mask
         gpm |= np.logical_not(np.ma.getmaskarray(v))
+
+        if not np.any(gpm):
+            warnings.warn('No viable velocity data to use for determining kinematic PA; wedge too '
+                          'narrow or too much masking.  Returning photometric PA (and, if '
+                          'requested, the default projected rotation speed).')
+            return (self.pa, default_vproj) if return_vproj else self.pa
 
         # Get the median projected rotation speed
         vp = np.ma.median((v[gpm] - np.ma.median(v[gpm])) / np.cos(th[gpm]))
@@ -178,7 +201,7 @@ class GlobalPar:
         # Return the position angle and the projected rotation speed, if requested
         return (_pa, abs(vp)) if return_vproj else _pa
 
-    def guess_central_dispersion(self, x, y, s, r_lim=1.25):
+    def guess_central_dispersion(self, x, y, s, r_lim=1.25, default=100.):
         r"""
         Use the input coordinates and velocity dispersion field to estimate
         the central velocity dispersion.
@@ -199,6 +222,9 @@ class GlobalPar:
             r_lim (:obj:`float`, optional):
                 The upper limit for the *on-sky* radius used in the estimate.
                 Units should match the ``x`` and ``y`` inputs.
+            default (:obj:`float`, optional):
+                Default to use if the provided velocity dispersion map has no
+                valid measurements in the selected region.
 
         Returns:
             :obj:`float`: Provides the mean velocity dispersion within the
@@ -211,7 +237,11 @@ class GlobalPar:
         # Check input
         if x.shape != y.shape or x.shape != s.shape:
             raise ValueError('Input arrays must all have the same shape.')
-        return np.mean(s[x**2 + y**2 < r_lim**2])
+        indx = x**2 + y**2 < r_lim**2
+        if isinstance(s, np.ma.MaskedArray):
+            indx &= np.logical_not(np.ma.getmaskarray(s))
+        return np.mean(s[indx]) if np.any(indx) else default
+
 
     def kpc_per_arcsec(self):
         r"""

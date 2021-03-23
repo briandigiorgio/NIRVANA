@@ -163,34 +163,34 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
 def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
         cen=True, fixcent=True, clip=True, remotedir=None,
         gal=None):
-    '''
-    Function to turn any nirvana outut file into useful objects
+    """
+    Function to turn any nirvana output file into useful objects.
 
     Can take in `.fits`, `.nirv`, `dynesty.NestedSampler`_, or
-    `dynesty.results.Results`_ along with any relevant parameters and spit out
-    galaxy, result dicitonary, all livepoint poitions, and median values for
-    each of the parameters.
+    `dynesty.results.Results`_ along with any relevant parameters and spit
+    out galaxy, result dictionary, all livepoint positions, and median values
+    for each of the parameters.
 
     Args:
         f (:obj:`str`, `dynesty.NestedSampler`_, `dynesty.results.Results`_):
-            `.fits` file, sampler, results, `.nirv` file of dumped results from
-            :func:`~nirvana.fitting.fit`. If this is in the regular format from
-            the automatic outfile generator in
-            :func:`~nirvana.scripts.nirvana.main` then it will fill in most of
-            the rest of the parameters by itself.
-        plate (:obj:`int`), optional):
+            `.fits` file, sampler, results, `.nirv` file of dumped results
+            from :func:`~nirvana.fitting.fit`. If this is in the regular
+            format from the automatic outfile generator in
+            :func:`~nirvana.scripts.nirvana.main` then it will fill in most
+            of the rest of the parameters by itself.
+        plate (:obj:`int`, optional):
             MaNGA plate number for desired galaxy. Can be auto filled by `f`.
-        ifu (:obj:`int`), optional):
+        ifu (:obj:`int`, optional):
             MaNGA IFU number for desired galaxy. Can be auto filled by `f`.
         smearing (:obj:`bool`, optional):
-            Whether or not to apply beam smearing to models. Can be auto filled
-            by `f`.
+            Whether or not to apply beam smearing to models. Can be auto
+            filled by `f`.
         stellar (:obj:`bool`, optional):
-            Whether or not to use stellar velocity data instead of gas. Can be
-            auto filled by `f`.
-        maxr (:obj:`float`, optional:
-            Maximum radius to make edges go out to in units of effective radii.
-            Can be auto filled by `f`.
+            Whether or not to use stellar velocity data instead of gas. Can
+            be auto filled by `f`.
+        maxr (:obj:`float`, optional):
+            Maximum radius to make edges go out to in units of effective
+            radii. Can be auto filled by `f`.
         cen (:obj:`bool`, optional):
             Whether the position of the center was fit. Can be auto filled by
             `f`.
@@ -206,12 +206,11 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
         gal (:class:`~nirvana.data.fitargs.FitArgs`, optional):
             Galaxy object to use instead of loading the galaxy from scratch.
         
-        
         Returns:
-            :class:`~nirvana.data.fitargs.FitArgs`: Galaxy object containing relevant data and parameters.
-            :obj:`dict`: Dictionary of results of the fit. 
-    '''
-
+            :class:`~nirvana.data.fitargs.FitArgs`: Galaxy object containing
+            relevant data and parameters. :obj:`dict`: Dictionary of results
+            of the fit.
+    """
     #unpack fits file
     if type(f) == str and '.fits' in f:
         isfits = True #tracker variable
@@ -262,7 +261,8 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
             stellar = True if 'stel' in info else False
             cen = True if 'nocen' not in info else False
             smearing = True if 'nosmear' not in info else False
-            maxr = float([i for i in info if 'r' in i][0][:-1])
+            try: maxr = float([i for i in info if 'r' in i][0][:-1])
+            except: maxr = None
 
             if 'fixcent' in info: fixcent = True
             elif 'freecent' in info: fixcent = False
@@ -326,35 +326,37 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
 
     return args, resdict
 
-def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, cen=True, fixcent=True, save=False, clobber=False, remotedir=None):
-    '''
-    Make a summary plot for a `nirvana` output file with MaNGA velocity field.
+def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, cen=True,
+                fixcent=True, save=False, clobber=False, remotedir=None):
+    """
+    Make a summary plot for a `nirvana` output file with MaNGA velocity
+    field.
 
     Shows the values for the global parameters of the galaxy, the rotation
-    curves (with 1 sigma lower and upper bounds) for the different velocity
-    components, then comparisons of the MaNGA data, the model, and the residuals
-    for the rotational velocity and the velocity dispersion. 
+    curves (with 1-sigma lower and upper bounds) for the different velocity
+    components, then comparisons of the MaNGA data, the model, and the
+    residuals for the rotational velocity and the velocity dispersion.
 
     Args:
         f (:obj:`str`, `dynesty.NestedSampler`_, `dynesty.results.Results`_):
-            `.fits` file, sampler, results, `.nirv` file of dumped results from
-            :func:`~nirvana.fitting.fit`. If this is in the regular format from
-            the automatic outfile generator in
-            :func:`~nirvana.scripts.nirvana.main` then it will fill in most of
-            the rest of the parameters by itself.
-        plate (:obj:`int`), optional):
+            `.fits` file, sampler, results, `.nirv` file of dumped results
+            from :func:`~nirvana.fitting.fit`. If this is in the regular
+            format from the automatic outfile generator in
+            :func:`~nirvana.scripts.nirvana.main` then it will fill in most
+            of the rest of the parameters by itself.
+        plate (:obj:`int`, optional):
             MaNGA plate number for desired galaxy. Can be auto filled by `f`.
-        ifu (:obj:`int`), optional):
+        ifu (:obj:`int`, optional):
             MaNGA IFU number for desired galaxy. Can be auto filled by `f`.
         smearing (:obj:`bool`, optional):
-            Whether or not to apply beam smearing to models. Can be auto filled
-            by `f`.
+            Whether or not to apply beam smearing to models. Can be auto
+            filled by `f`.
         stellar (:obj:`bool`, optional):
-            Whether or not to use stellar velocity data instead of gas. Can be
-            auto filled by `f`.
-        maxr (:obj:`float`, optional:
-            Maximum radius to make edges go out to in units of effective radii.
-            Can be auto filled by `f`.
+            Whether or not to use stellar velocity data instead of gas. Can
+            be auto filled by `f`.
+        maxr (:obj:`float`, optional):
+            Maximum radius to make edges go out to in units of effective
+            radii. Can be auto filled by `f`.
         cen (:obj:`bool`, optional):
             Whether the position of the center was fit. Can be auto filled by
             `f`.
@@ -370,13 +372,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
         remotedir (:obj:`str`, optional):
             Directory to load MaNGA data files from, or save them if they are
             not found and are remotely downloaded.
-        
-    Returns:
-        Plot: The values for the global parameters of the galaxy, the rotation
-        curves (with 1 sigma lower and upper bounds) for the different velocity
-        components, then comparisons of the MaNGA data, the model, the
-        residuals, and chisq for the rotational velocity and the velocity dispersion. 
-    '''
+    """
 
     #check if plot file already exists
     if save and not clobber:
@@ -461,6 +457,8 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
 
     plt.ylim(bottom=0)
     plt.legend(loc=2)
+    plt.xlabel('Radius (arcsec)')
+    plt.ylabel(r'$v$ (km/s)')
     plt.title('Velocity Profiles')
 
     #dispersion profile
@@ -469,7 +467,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
     plt.fill_between(args.edges, resdict['sigl'], resdict['sigu'], alpha=.5)
     plt.ylim(bottom=0)
     plt.title('Velocity Dispersion Profile')
-    plt.xlabel(r'$R_e$')
+    plt.xlabel('Radius (arcsec)')
     plt.ylabel(r'$v$ (km/s)')
 
     #MaNGA Ha velocity field
@@ -563,7 +561,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
     return fig
 
 def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, cen=True): 
-    '''
+    """
     Make a plot `nirvana` output file with the different velocity components
     searated.
 
@@ -571,29 +569,29 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     components next to each other along with the full model, data, image, and
     global parameters
 
+    The created plot contains the global parameters of the galaxy, the image
+    of the galaxy, and the data of the velocity field on the first row. The
+    second row is the full model followed by the different components broken
+    out with + and = signs between.
+
     Args:
-        f (:class:`dynesty.NestedSampler` or :obj:`str` or
-        :class:`dynesty.results.Results`):
+        f (:class:`dynesty.NestedSampler`, :obj:`str`, :class:`dynesty.results.Results`):
             Sampler, results, or file of dumped results from `dynesty` fit.
-        plate (:obj:`int`), optional):
+        plate (:obj:`int`, optional):
             MaNGA plate number for desired galaxy. Must be specified if
             `auto=False`.
-        ifu (:obj:`int`), optional):
+        ifu (:obj:`int`, optional):
             MaNGA IFU design number for desired galaxy. Must be specified if
             `auto=False`.
         smearing (:obj:`bool`, optional):
             Flag for whether or not to apply beam smearing to models.
         stellar (:obj:`bool`, optional):
-            Flag for whether or not to use stellar velocity data instead of gas.
+            Flag for whether or not to use stellar velocity data instead of
+            gas.
         cen (:obj:`bool`, optional):
             Flag for whether the position of the center was fit.
         
-    Returns:
-        Plot: The global parameters of the galaxy, the image of the galaxy,
-        the data of the velocity field on the first row. The second row is the
-        full model follwed by the different components broken out with + and =
-        signs between.
-    '''
+    """
 
     args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, cen, fixcent)
     z = np.zeros(len(resdict['vt']))
@@ -606,7 +604,6 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     v2rdict['v2t'] = z
     if maxr is not None:
         r,th = projected_polar(args.x, args.y, *np.radians((resdict['pa'], resdict['inc'])))
-        r /= args.reff
         rmask = r > maxr
         args.vel_mask |= rmask
         args.sig_mask |= rmask
@@ -674,41 +671,39 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     plt.tight_layout(h_pad=2)
 
 def sinewave(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, cen=True): 
-    '''
+    """
     Compare the `nirvana` fit to the data azimuthally in radial bins.
 
     Breaks down the data into radial bins and plots the velocity data points
     in each bin azimuthally, overplotting the fit for each bin. These are
     separated out into a Joy Division style plot.
 
+    The plot provides the data points in each radial bin plotted azimuthally,
+    color coded and separated on an arbitrary y axis. The curve the fit
+    generated is plotted on top.
+
     Args:
-        f (:class:`dynesty.NestedSampler` or :obj:`str` or
-        :class:`dynesty.results.Results`):
+        f (:class:`dynesty.NestedSampler`, :obj:`str`, :class:`dynesty.results.Results`):
             Sampler, results, or file of dumped results from `dynesty` fit.
-        plate (:obj:`int`), optional):
+        plate (:obj:`int`, optional):
             MaNGA plate number for desired galaxy. Must be specified if
             `auto=False`.
-        ifu (:obj:`int`), optional):
+        ifu (:obj:`int`, optional):
             MaNGA IFU design number for desired galaxy. Must be specified if
             `auto=False`.
         smearing (:obj:`bool`, optional):
             Flag for whether or not to apply beam smearing to models.
         stellar (:obj:`bool`, optional):
-            Flag for whether or not to use stellar velocity data instead of gas.
+            Flag for whether or not to use stellar velocity data instead of
+            gas.
         cen (:obj:`bool`, optional):
             Flag for whether the position of the center was fit.
-        
-    Returns:
-        Plot: the data points in each radial bin plotted azimuthally, color
-        coded and separated on an arbitrary y axis. The curve the fit generated
-        is plotted on top. 
-    '''
+    """
 
     #prep the data, parameters, and coordinates
     args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, cen, fixcent)
     inc, pa, pab = np.radians([resdict['inc'], resdict['pa'], resdict['pab']])
     r,th = projected_polar(args.x, args.y, pa, inc)
-    r /= args.reff
 
     plt.figure(figsize=(4,len(args.edges)*.75))
     c = plt.cm.jet(np.linspace(0,1,len(args.edges)-1))

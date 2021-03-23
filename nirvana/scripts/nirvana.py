@@ -35,7 +35,7 @@ def parse_args(options=None):
     parser.add_argument('-w', '--weight', default=10, type=int,
                         help='How much to weight smoothness of rotation curves in fit')
     parser.add_argument('-r', '--maxr', default=0.0, type=float,
-                        help='Maximum radius in Re for bins')
+                        help='Maximum radius in arcsec for bins')
     parser.add_argument('-p', '--points', default = 500, type=int,
                         help='Number of dynesty live points')
     parser.add_argument('--root', default=None, type=str,
@@ -77,6 +77,7 @@ def main(args):
     if not os.path.isdir(args.dir):
         raise NotADirectoryError(f'Outfile directory does not exist: {args.dir}')
     if args.nbins == 0: args.nbins = None
+    if args.maxr == 0: args.maxr = None
 
     #make descriptive outfile name
     plate, ifu = args.plateifu

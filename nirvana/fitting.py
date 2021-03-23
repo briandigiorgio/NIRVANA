@@ -33,7 +33,7 @@ from .data.fitargs import FitArgs
 
 from .models.geometry import projected_polar
 
-def bisym_model(args, paramdict, plot=False):
+def bisym_model(args, paramdict, plot=False, relative_pab=True):
     '''
     Evaluate a bisymmetric velocity field model for given parameters.
 
@@ -51,6 +51,10 @@ def bisym_model(args, paramdict, plot=False):
         plot (:obj:`bool`, optional): 
             Flag to return resulting models as 2D arrays instead of 1D for 
             plotting purposes.
+        relative_pab (:obj:`bool`, optional):
+            Whether to define the second order position angle relative to the
+            first order position angle (better for fitting) or absolutely
+            (better for output).
 
     Returns:
         :obj:`tuple`: Tuple of two objects that are the model velocity field and
@@ -62,8 +66,8 @@ def bisym_model(args, paramdict, plot=False):
 
     #convert angles to polar and normalize radial coorinate
     inc, pa, pab = np.radians([paramdict['inc'], paramdict['pa'], paramdict['pab']])
+    if not relative_pab: pab = (pab - pa) % (2*np.pi)
     r, th = projected_polar(args.grid_x-paramdict['xc'], args.grid_y-paramdict['yc'], pa, inc)
-    r /= args.reff
 
     #interpolate the velocity arrays over full coordinates
     if len(args.edges) != len(paramdict['vt']):
@@ -157,7 +161,7 @@ def unpack(params, args, jump=None, bound=False, relative_pab=True):
 
     #adjust pab if necessary
     if not relative_pab:
-        paramdict['pab'] = paramdict['pab'] + paramdict['pa'] % 360
+        paramdict['pab'] = (paramdict['pab'] + paramdict['pa']) % 360
 
     #figure out what indices to get velocities from
     start = args.nglobs
@@ -428,10 +432,8 @@ def loglike(params, args, squared=False):
         v2rm = paramdict['v2r'].mean()
 
         #scaling penalty if 2nd order profs are big
-        if v2tm > args.arc * vtm:
-            llike -= args.penalty * (v2tm - vtm)/vtm
-        if v2rm > args.arc * vtm:
-            llike -= args.penalty * (v2rm - vtm)/vtm
+        llike -= args.penalty * abs((v2tm - vtm)/vtm)**1
+        llike -= args.penalty * abs((v2rm - vtm)/vtm)**1
 
     return llike
 

@@ -233,9 +233,9 @@ def imagefits(f, galmeta, gal=None, outfile=None, padding=20, remotedir=None, ou
     hdus += [fits.ImageHDU(args.beam, name='PSF', header=fileio.finalize_header(psfhdr, 'PSF'))]
 
     #smeared and intrinsic velocity/dispersion models
-    velmodel, sigmodel = bisym_model(args, resdict, plot=True)
+    velmodel, sigmodel = bisym_model(args, resdict, plot=True, relative_pab=False)
     args.beam_fft = None
-    intvelmodel, intsigmodel = bisym_model(args, resdict, plot=True)
+    intvelmodel, intsigmodel = bisym_model(args, resdict, plot=True, relative_pab=False)
 
     #unmask them, name them all, and add them to the list
     models = [velmodel, sigmodel, intvelmodel, intsigmodel, asymmap]

@@ -25,7 +25,7 @@ from .fitting import bisym_model, unpack
 from .data.manga import MaNGAStellarKinematics, MaNGAGasKinematics
 from .data.kinematics import Kinematics
 from .models.beam import smear, ConvolveFFTW
-from .models.geometry import projected_polar, asymmetry
+from .models.geometry import projected_polar
 
 
 def dynmeds(samp, stds=False, fixcent=True):
@@ -321,6 +321,9 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
     else:
         args.edges = resdict['bin_edges'][~resdict['velmask']]
 
+    args.getguess()
+    args.getasym()
+
     return args, resdict
 
 def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, cen=True, fixcent=True, save=False, clobber=False, remotedir=None):
@@ -386,7 +389,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
     args, resdict = fileprep(f, plate, ifu, smearing, stellar, maxr, cen, fixcent, remotedir=remotedir)
 
     #generate velocity models
-    velmodel, sigmodel = bisym_model(args,resdict,plot=True)
+    velmodel, sigmodel = bisym_model(args,resdict,plot=True,relative_pab=False)
     vel_r = args.remap('vel')
     sig_r = np.sqrt(args.remap('sig_phys2')) if hasattr(args, 'sig_phys2') else args.remap('sig')
 

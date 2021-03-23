@@ -76,11 +76,19 @@ def main(args):
         args.dir = '/data/manga/digiorgio/nirvana/'
     if not os.path.isdir(args.dir):
         raise NotADirectoryError(f'Outfile directory does not exist: {args.dir}')
+
     if args.nbins == 0: args.nbins = None
     if args.maxr == 0: args.maxr = None
+    plate, ifu = args.plateifu
+
+    try:
+        drpall_file = glob(args.drpall_dir + '/drpall*.fits')[0]
+        galmeta = MaNGAGlobalPar(plate, ifu, drpall_file=drpall_file)
+    except Exception as e: 
+        print(e)
+        galmeta = None
 
     #make descriptive outfile name
-    plate, ifu = args.plateifu
     if args.outfile is None:
         args.outfile = f'{plate}-{ifu}_{args.weight}w_{args.points}p'
         if args.nbins is not None: args.outfile += f'_{args.nbins}bin'
@@ -98,11 +106,11 @@ def main(args):
     #check if outfile already exists
     if not args.clobber and os.path.isfile(fname):
         raise FileExistsError(f'Output .nirv file already exists. Use --clobber to overwrite it: {fname}')
-    elif args.clobber and args.fits and os.path.isfile(fitsname):
+    elif not args.clobber and args.fits and os.path.isfile(fitsname):
         raise FileExistsError(f'Output FITS file already exists. Use --clobber to overwrite it: {fitsname}')
 
     #run fit with supplied args
-    samp, gal = fit(plate, ifu, daptype=args.daptype, dr=args.dr, cores=args.cores, nbins=args.nbins,
+    samp, gal = fit(plate, ifu, galmeta=galmeta, daptype=args.daptype, dr=args.dr, cores=args.cores, nbins=args.nbins,
                   weight=args.weight, maxr=args.maxr, smearing=args.smearing, root=args.root,
                   verbose=args.verbose, disp=args.disp, points=args.points, 
                   stellar=args.stellar, cen=args.cen, fixcent=args.fixcent,
@@ -113,8 +121,6 @@ def main(args):
     pickle.dump(gal, open(galname, 'wb'))
     if args.fits: 
         try:
-            drpall_file = glob(args.drpall_dir + '/drpall*.fits')[0]
-            galmeta = MaNGAGlobalPar(plate, ifu, drpall_file=drpall_file)
             imagefits(fname, galmeta, gal, outfile=fitsname, remotedir=args.remote) 
             os.remove(fname)
             os.remove(galname)

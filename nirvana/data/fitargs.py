@@ -31,12 +31,13 @@ class FitArgs:
         self.guess = guess
         self.nbins = nbins
         self.bounds = bounds
+        self.arc = arc
+        self.asymmap = asymmap
         self.maxr = maxr
         self.noise_floor = noisefloor
         self.penalty = penalty
         self.npoints = npoints
         self.smearing = smearing
-
 
     def setedges(self, inc, maxr=0, nbin=False, clipmasked=True):
         '''

@@ -162,7 +162,7 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
 
 def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
         cen=True, fixcent=True, clip=True, remotedir=None,
-        gal=None):
+        gal=None, galmeta=None):
     """
     Function to turn any nirvana output file into useful objects.
 
@@ -321,13 +321,13 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
     else:
         args.edges = resdict['bin_edges'][~resdict['velmask']]
 
-    args.getguess()
+    args.getguess(galmeta=galmeta)
     args.getasym()
 
     return args, resdict
 
 def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, cen=True,
-                fixcent=True, save=False, clobber=False, remotedir=None):
+                fixcent=True, save=False, clobber=False, remotedir=None, gal=None):
     """
     Make a summary plot for a `nirvana` output file with MaNGA velocity
     field.
@@ -382,7 +382,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
             raise ValueError('Plot file already exists')
 
     #unpack input file into useful objects
-    args, resdict = fileprep(f, plate, ifu, smearing, stellar, maxr, cen, fixcent, remotedir=remotedir)
+    args, resdict = fileprep(f, plate, ifu, smearing, stellar, maxr, cen, fixcent, remotedir=remotedir, gal=gal)
 
     #generate velocity models
     velmodel, sigmodel = bisym_model(args,resdict,plot=True,relative_pab=False)
@@ -401,9 +401,11 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
     if args.sig_ivar is None: args.sig_ivar = np.ones_like(args.sig)
 
     #calculate number of variables
-    fill = len(resdict['velmask'])
-    fixcent = resdict['vt'][0] == 0
-    lenmeds = 6 + 3*(fill - resdict['velmask'].sum() - fixcent) + (fill - resdict['sigmask'].sum())
+    if 'velmask' in resdict:
+        fill = len(resdict['velmask'])
+        fixcent = resdict['vt'][0] == 0
+        lenmeds = 6 + 3*(fill - resdict['velmask'].sum() - fixcent) + (fill - resdict['sigmask'].sum())
+    else: lenmeds = len(resdict['vt'])
     nvar = len(args.vel) + len(args.sig) - lenmeds
 
     #calculate reduced chisq for vel and sig

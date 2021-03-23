@@ -194,7 +194,7 @@ def imagefits(f, galmeta=True, gal=None, outfile=None, padding=20, remotedir=Non
     hdr['ivar_flr'] = (args.noise_floor, 'Noise added to ivar arrays in quadrature')
     hdr['penalty'] = (args.penalty, 'Penalty for large 2nd order terms')
 
-    avmax, ainc, apa, ahrot, avsys = args.getguess(simple=True)
+    avmax, ainc, apa, ahrot, avsys = args.getguess(simple=True, galmeta=galmeta)
     hdr['a_vmax'] = (avmax, 'Axisymmetric asymptotic velocity in km/s')
     hdr['a_pa'] = (apa, 'Axisymmetric position angle in deg')
     hdr['a_inc'] = (ainc, 'Axisymmetric inclination angle in deg')
@@ -252,8 +252,8 @@ def imagefits(f, galmeta=True, gal=None, outfile=None, padding=20, remotedir=Non
     #write out
     hdul = fits.HDUList(hdus)
     if outfile is None: 
-        hdul.writeto(f"{outdir}/nirvana_{resdict['plate']}-{resdict['ifu']}_{resdict['type']}.fits", overwrite=True, output_verify='fix', checksum=True)
-    else: hdul.writeto(outdir + outfile)
+        outfile = f"nirvana_{resdict['plate']}-{resdict['ifu']}_{resdict['type']}.fits"
+    hdul.writeto(outdir + outfile, overwrite=True, output_verify='fix', checksum=True)
 
 def fig2data(fig):
     # draw the renderer

@@ -432,12 +432,12 @@ def loglike(params, args, squared=False):
         v2rm = paramdict['v2r'].mean()
 
         #scaling penalty if 2nd order profs are big
-        llike -= args.penalty * abs((v2tm - vtm)/vtm)**1
-        llike -= args.penalty * abs((v2rm - vtm)/vtm)**1
+        llike -= args.penalty * (v2tm - vtm)/vtm
+        llike -= args.penalty * (v2rm - vtm)/vtm
 
     return llike
 
-def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11', nbins=None,
+def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11', nbins=None,
         cores=10, maxr=None, cen=True, weight=10, smearing=True, points=500,
         stellar=False, root=None, verbose=False, disp=True, 
         fixcent=True, ultra=False, remotedir=None, floor=5, penalty=100):
@@ -548,7 +548,11 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11', nbins=None,
     args.smearing = smearing
 
     #set bin edges
-    inc = args.getguess()[1] if args.phot_inc is None else args.phot_inc
+    if galmeta is not None: 
+        args.phot_inc = galmeta.guess_inclination()
+        args.reff = galmeta.reff
+
+    inc = args.getguess(galmeta=galmeta)[1] if args.phot_inc is None else args.phot_inc
     if nbins is not None: args.setedges(nbins, nbin=True, maxr=maxr)
     else: args.setedges(inc, maxr=maxr)
 
@@ -563,7 +567,8 @@ def fit(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11', nbins=None,
 
     #starting positions for all parameters based on a quick fit
     #not used in dynesty
-    theta0 = args.getguess(clip=True)
+    args.clip()
+    theta0 = args.getguess(galmeta=galmeta)
     ndim = len(theta0)
 
     #adjust dimensions according to fit params

@@ -1808,7 +1808,6 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     select_coherent means ignore small disjointed regions separated from the
     main group of data.
     """
-    select_coherent = True
 
     # Running in "debug" mode
     debug = verbose > 1

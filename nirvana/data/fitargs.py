@@ -170,7 +170,6 @@ class FitArgs:
 
         #define polar coordinates and normalize to effective radius
         r,th = projected_polar(self.grid_x, self.grid_y, *np.radians([pa,inc]))
-        r /= self.reff
 
         #iterate through bins and get vt value for each bin, 
         #dummy value for v2t and v2r since there isn't a good guess

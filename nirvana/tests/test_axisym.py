@@ -4,7 +4,9 @@ from IPython import embed
 import numpy
 
 from scipy import stats, special
-from nirvana import data
+from nirvana.data import manga
+from nirvana.data import util
+from nirvana.data import scatter
 from nirvana.tests.util import remote_data_file, requires_remote
 from nirvana.models.oned import HyperbolicTangent, Exponential
 from nirvana.models.axisym import AxisymmetricDisk
@@ -33,8 +35,8 @@ def test_lsq_nopsf():
 
     # Read the data to fit
     data_root = remote_data_file()
-    kin = data.manga.MaNGAGasKinematics.from_plateifu(8138, 12704, cube_path=data_root,
-                                                      maps_path=data_root, ignore_psf=True)
+    kin = manga.MaNGAGasKinematics.from_plateifu(8138, 12704, cube_path=data_root,
+                                                 maps_path=data_root, ignore_psf=True)
     # Set the rotation curve
     rc = HyperbolicTangent(lb=numpy.array([0., 1e-3]), ub=numpy.array([500., kin.max_radius()]))
     # Set the disk velocity field
@@ -52,8 +54,8 @@ def test_lsq_psf():
 
     # Read the data to fit
     data_root = remote_data_file()
-    kin = data.manga.MaNGAGasKinematics.from_plateifu(8138, 12704, cube_path=data_root,
-                                                      maps_path=data_root)
+    kin = manga.MaNGAGasKinematics.from_plateifu(8138, 12704, cube_path=data_root,
+                                                 maps_path=data_root)
     # Set the rotation curve
     rc = HyperbolicTangent(lb=numpy.array([0., 1e-3]), ub=numpy.array([500., kin.max_radius()]))
     # Set the disk velocity field
@@ -72,8 +74,8 @@ def test_lsq_with_sig():
 
     # Read the data to fit
     data_root = remote_data_file()
-    kin = data.manga.MaNGAGasKinematics.from_plateifu(8138, 12704, cube_path=data_root,
-                                                      maps_path=data_root)
+    kin = manga.MaNGAGasKinematics.from_plateifu(8138, 12704, cube_path=data_root,
+                                                 maps_path=data_root)
     # Set the rotation curve
     rc = HyperbolicTangent(lb=numpy.array([0., 1e-3]), ub=numpy.array([500., kin.max_radius()]))
     # Set the dispersion profile
@@ -96,10 +98,10 @@ def test_lsq_with_covar():
 
     # Read the data to fit
     data_root = remote_data_file()
-    kin = data.manga.MaNGAGasKinematics.from_plateifu(8138, 12704, cube_path=data_root,
-                                                      maps_path=data_root, covar=True)
+    kin = manga.MaNGAGasKinematics.from_plateifu(8138, 12704, cube_path=data_root,
+                                                 maps_path=data_root, covar=True)
 
-    kin.vel_covar = data.util.impose_positive_definite(kin.vel_covar)
+    kin.vel_covar = util.impose_positive_definite(kin.vel_covar)
 
     # Set the rotation curve
     rc = HyperbolicTangent(lb=numpy.array([0., 1e-3]), ub=numpy.array([500., kin.max_radius()]))
@@ -110,7 +112,7 @@ def test_lsq_with_covar():
     # Rejected based on error-weighted residuals, accounting for intrinsic scatter
     resid = kin.vel - kin.bin(disk.model())
     err = 1/numpy.sqrt(kin.vel_ivar)
-    scat = data.scatter.IntrinsicScatter(resid, err=err, gpm=disk.vel_gpm)
+    scat = scatter.IntrinsicScatter(resid, err=err, gpm=disk.vel_gpm)
     sig, rej, gpm = scat.iter_fit(fititer=5) #, verbose=2)
     # Check
     assert sig > 8., 'Different intrinsic scatter'
@@ -123,8 +125,8 @@ def test_lsq_with_covar():
                  assume_posdef_covar=True) #, verbose=2)
     # Reject
     resid = kin.vel - kin.bin(disk.model())
-    scat = data.scatter.IntrinsicScatter(resid, covar=kin.vel_covar, gpm=disk.vel_gpm,
-                                         assume_posdef_covar=True)
+    scat = scatter.IntrinsicScatter(resid, covar=kin.vel_covar, gpm=disk.vel_gpm,
+                                    assume_posdef_covar=True)
     sig, rej, gpm = scat.iter_fit(fititer=5) #, verbose=2)
     # Check
     assert sig > 5., 'Different intrinsic scatter'

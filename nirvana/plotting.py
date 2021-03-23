@@ -261,7 +261,8 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
             stellar = True if 'stel' in info else False
             cen = True if 'nocen' not in info else False
             smearing = True if 'nosmear' not in info else False
-            maxr = float([i for i in info if 'r' in i][0][:-1])
+            try: maxr = float([i for i in info if 'r' in i][0][:-1])
+            except: maxr = None
 
             if 'fixcent' in info: fixcent = True
             elif 'freecent' in info: fixcent = False
@@ -453,6 +454,8 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
 
     plt.ylim(bottom=0)
     plt.legend(loc=2)
+    plt.xlabel('Radius (arcsec)')
+    plt.ylabel(r'$v$ (km/s)')
     plt.title('Velocity Profiles')
 
     #dispersion profile
@@ -461,7 +464,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
     plt.fill_between(args.edges, resdict['sigl'], resdict['sigu'], alpha=.5)
     plt.ylim(bottom=0)
     plt.title('Velocity Dispersion Profile')
-    plt.xlabel(r'$R_e$')
+    plt.xlabel('Radius (arcsec)')
     plt.ylabel(r'$v$ (km/s)')
 
     #MaNGA Ha velocity field
@@ -598,7 +601,6 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     v2rdict['v2t'] = z
     if maxr is not None:
         r,th = projected_polar(args.x, args.y, *np.radians((resdict['pa'], resdict['inc'])))
-        r /= args.reff
         rmask = r > maxr
         args.vel_mask |= rmask
         args.sig_mask |= rmask
@@ -699,7 +701,6 @@ def sinewave(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, c
     args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, cen, fixcent)
     inc, pa, pab = np.radians([resdict['inc'], resdict['pa'], resdict['pab']])
     r,th = projected_polar(args.x, args.y, pa, inc)
-    r /= args.reff
 
     plt.figure(figsize=(4,len(args.edges)*.75))
     c = plt.cm.jet(np.linspace(0,1,len(args.edges)-1))

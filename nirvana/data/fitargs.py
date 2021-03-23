@@ -20,7 +20,7 @@ class FitArgs:
 
     def __init__(self, nglobs=6, weight=10, edges=None, disp=True,
             fixcent=True, guess=None, nbins=None, bounds=None,
-            arc=None, asymmap=None, maxr=None, noisefloor=5, penalty=100,
+            arc=None, asymmap=None, noisefloor=5, penalty=100,
             npoints=500, smearing=True):
 
         self.nglobs = nglobs
@@ -31,14 +31,13 @@ class FitArgs:
         self.guess = guess
         self.nbins = nbins
         self.bounds = bounds
-        self.maxr = maxr
         self.noise_floor = noisefloor
         self.penalty = penalty
         self.npoints = npoints
         self.smearing = smearing
 
 
-    def setedges(self, inc, maxr=0, nbin=False, clipmasked=True):
+    def setedges(self, inc, maxr=None, nbin=False, clipmasked=True):
         '''
         Construct array of bin edges for the galaxy.
 
@@ -54,7 +53,7 @@ class FitArgs:
                 `nbin == True`, this is instead the number of bins to make
                 (must be an :obj:`int`)
             maxr (:obj:`float`, optional):
-                Maximum radius for the bins in effective radii. If not
+                Maximum radius for the bins in arcsec. If not
                 specified, it will default to the maximum unmasked radius of
                 the galaxy.
             nbin (:obj:`bool`, optional):
@@ -65,33 +64,29 @@ class FitArgs:
         '''
 
         #figure out max radius if not set
-        if maxr == 0: 
-            if self.maxr is not None: maxr = self.maxr #check if it is set
-            else:
-                #mask outside pixels if necessary
-                if self.bordermask is not None:
-                    x = self.x * (1-self.bordermask)
-                    y = self.y * (1-self.bordermask)
-                else: x,y = (self.x, self.y)
+        if maxr == None: 
+            #mask outside pixels if necessary
+            if self.bordermask is not None:
+                x = self.x * (1-self.bordermask)
+                y = self.y * (1-self.bordermask)
+            else: x,y = (self.x, self.y)
 
-                #calculate maximum radius of image if none is given
-                maxr = np.max(np.sqrt(x**2 + y**2))/self.reff
-        maxr *= self.reff #change to arcsec
+            #calculate maximum radius of image if none is given
+            maxr = np.max(np.sqrt(x**2 + y**2))
 
         #specify number of bins manually if desired
-        if nbin: self.edges = np.linspace(0, maxr, inc+1)/self.reff
+        if nbin: self.edges = np.linspace(0, maxr, inc+1)
 
         #calculate nyquist bin width based off fwhm and inc
         else:
             binwidth = min(self.fwhm/2/np.cos(np.radians(inc)), self.fwhm)
-            self.edges = np.arange(0, maxr, binwidth)/self.reff
+            self.edges = np.arange(0, maxr, binwidth)
 
         #clip outer bins that have too many masked spaxels
         if clipmasked:
             #find radial coordinates of each spaxel
             guess = self.getguess(simple=True)
             r,th = projected_polar(self.x, self.y, *np.radians((guess[2], inc)))
-            r /= self.reff
             mr = np.ma.array(r, mask=self.vel_mask)
 
             #calculate the number of spaxels in each bin 
@@ -105,11 +100,13 @@ class FitArgs:
                 maskfrac[i] = np.sum(self.vel_mask[cut])/cut.sum()
             
             #cut bins where too many spaxels are masked
-            bad = (maskfrac > .75) #| (nspax < 10)
+            bad = (maskfrac > .75)
             self.edges = [self.edges[0], *self.edges[1:][~bad]]
 
             #mask spaxels outside last bin edge
             self.vel_mask[r > self.edges[-1]] = True
+
+        self.maxr = max(self.edges)
 
     def getguess(self, fill=10, clip=False, simple=False):
         '''
@@ -244,7 +241,7 @@ class FitArgs:
         if bounds[1][0] < 0 or bounds[1][1] > 360: bounds[1] = (0,360)
 
         #cap velocities at maximum in vf plus a padding factor
-        vmax = min(np.max(self.vel)/np.cos(np.radians(inc)) * velpad, velmax)
+        vmax = min(np.max(np.abs(self.vel))/np.cos(np.radians(inc)) * velpad, velmax)
         bounds[self.nglobs:self.nglobs + self.nbins] = (0, vmax)
         bounds[self.nglobs + self.nbins:self.nglobs + 3*self.nbins] = (0, vmax)
         if self.disp: bounds[self.nglobs + 3*self.nbins:] = (0, min(np.max(self.sig), sigmax))

@@ -63,7 +63,6 @@ def bisym_model(args, paramdict, plot=False):
     #convert angles to polar and normalize radial coorinate
     inc, pa, pab = np.radians([paramdict['inc'], paramdict['pa'], paramdict['pab']])
     r, th = projected_polar(args.grid_x-paramdict['xc'], args.grid_y-paramdict['yc'], pa, inc)
-    r /= args.reff
 
     #interpolate the velocity arrays over full coordinates
     if len(args.edges) != len(paramdict['vt']):
@@ -428,10 +427,8 @@ def loglike(params, args, squared=False):
         v2rm = paramdict['v2r'].mean()
 
         #scaling penalty if 2nd order profs are big
-        if v2tm > args.arc * vtm:
-            llike -= args.penalty * (v2tm - vtm)/vtm
-        if v2rm > args.arc * vtm:
-            llike -= args.penalty * (v2rm - vtm)/vtm
+        llike -= args.penalty * abs((v2tm - vtm)/vtm)**1
+        llike -= args.penalty * abs((v2rm - vtm)/vtm)**1
 
     return llike
 

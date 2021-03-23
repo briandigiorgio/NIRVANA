@@ -16,6 +16,7 @@ from astropy.stats import sigma_clip
 from . import util
 from ..util import plot
 
+#warnings.simplefilter('error', RuntimeWarning)
 
 class IntrinsicScatter:
     """
@@ -374,17 +375,25 @@ class IntrinsicScatter:
         # Histogram of the error normalized residuals
         ax = plot.init_ax(fig, [0.03, 0.1, 0.45, 0.87])
         # Native measurement error
-        by, bx, _ = ax.hist(enres_def, bins=100, range=rng_def, density=True, color='k', lw=0,
-                            alpha=0.3, zorder=4, histtype='stepfilled')
-        maxy = np.amax(by)
+        bx = None
+        if np.any((enres_def > rng_def[0]) & (enres_def < rng_def[1])):
+            by, bx, _ = ax.hist(enres_def, bins=100, range=rng_def, density=True, color='k', lw=0,
+                                alpha=0.3, zorder=4, histtype='stepfilled')
+            maxy = np.amax(by)
+        else:
+            maxy = 1
         # With intrinsic scatter
-        by, bx, _ = ax.hist(enres, bins=100, range=rng_def, density=True, color='k', lw=0,
-                            alpha=0.6, zorder=5, histtype='stepfilled')
-        maxy = max(maxy, np.amax(by))
+        if np.any((enres > rng_def[0]) & (enres < rng_def[1])):
+            by, bx, _ = ax.hist(enres, bins=100, range=rng_def, density=True, color='k', lw=0,
+                                alpha=0.6, zorder=5, histtype='stepfilled')
+            maxy = max(maxy, np.amax(by))
+        if bx is None:
+            bx = np.linspace(*rng_def, 101)
         bc = bx[:-1]+np.diff(bx)/2
         # Expected for a Gaussian
-        ax.step(bc, util.pixelated_gaussian(bc, density=True), where='mid', color='C3',
-                zorder=6)
+        gy = util.pixelated_gaussian(bc, density=True)
+        ax.step(bc, gy, where='mid', color='C3', zorder=6)
+        maxy = max(maxy, np.amax(gy))
         ax.set_xlim(rng_def)
         ax.set_ylim([0, 1.05*maxy])
         plot.rotate_y_ticks(ax, 90., 'center')

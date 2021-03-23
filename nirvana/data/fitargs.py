@@ -3,12 +3,14 @@
 from IPython import embed
 
 import numpy as np
+import warnings
+
 from scipy.optimize import leastsq, least_squares
 import matplotlib.pyplot as plt
 from astropy.stats import sigma_clip
 
 from ..models.geometry import projected_polar, asymmetry
-from ..models.axisym import AxisymmetricDisk
+from ..models.axisym import AxisymmetricDisk, axisym_iter_fit
 from ..models.beam import ConvolveFFTW
 
 class FitArgs:
@@ -110,7 +112,7 @@ class FitArgs:
 
         self.maxr = max(self.edges)
 
-    def getguess(self, fill=10, clip=False, simple=False):
+    def getguess(self, fill=10, clip=False, simple=False, galmeta=None):
         '''
         Generate a set of guess parameters for the galaxy using a simple least
         squares fit.
@@ -151,17 +153,28 @@ class FitArgs:
         if self.vel_ivar is None: ivar = np.ones_like(self.vel)
         else: ivar = self.vel_ivar
 
-        #quick fit of data
         if clip: self.clip()
-        fit = AxisymmetricDisk()
-        fit.lsq_fit(self)
+
+        #axisymmetric fit of data
+        fit = None
+        if galmeta is not None:
+            try:
+                fit = axisym_iter_fit(galmeta, self)[0]
+                model = fit.model()[0]
+            except Exception as e: 
+                print(e)
+                warnings.warn('Iterative fit failed, using noniterative fit instead')
+
+        if fit is None:
+            fit = AxisymmetricDisk()
+            fit.lsq_fit(self)
+            model = fit.model()
 
         #get fit params
-        xc, yc, pa, inc, vsys, vsini, h = fit.par
+        xc, yc, pa, inc, vsys, vsini, h = fit.par[:7]
         vmax = vsini/np.sin(np.radians(inc))
 
         #generate model velocity field, start assembling array of guess values
-        model = fit.model()
         guess = [inc,pa,pa,vsys]
         if hasattr(self, 'nglobs') and self.nglobs == 6: guess += [xc, yc]
 
@@ -175,7 +188,7 @@ class FitArgs:
         #dummy value for v2t and v2r since there isn't a good guess
         nbin = len(self.edges)
         vt = [0] if not self.fixcent else []
-        for i in range(1,nbin):
+        for i in range(1, nbin):
             cut = (r > self.edges[i-1]) * (r < self.edges[i])
             vt += [np.max(model[cut])]
         v2t = [0] + [fill] * (nbin - 1) if not self.fixcent else [fill] * (nbin - 1)

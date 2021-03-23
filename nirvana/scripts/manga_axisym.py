@@ -8,7 +8,7 @@ from IPython import embed
 
 from matplotlib import pyplot
 
-from .. import data
+from ..data import manga
 from ..models import axisym
 
 # TODO: Setup a logger
@@ -125,34 +125,29 @@ def main(args):
     #---------------------------------------------------------------------------
     # Read the data to fit
     if args.tracer == 'Gas':
-        kin = data.manga.MaNGAGasKinematics.from_plateifu(args.plate, args.ifu,
-                                                          daptype=args.daptype, dr=args.dr,
-                                                          redux_path=args.redux,
-                                                          cube_path=args.root,
-                                                          image_path=args.root,
-                                                          analysis_path=args.analysis,
-                                                          maps_path=args.root,
-                                                          ignore_psf=not args.smear,
-                                                          covar=args.covar,
-                                                          positive_definite=True)
+        kin = manga.MaNGAGasKinematics.from_plateifu(args.plate, args.ifu, daptype=args.daptype,
+                                                     dr=args.dr, redux_path=args.redux,
+                                                     cube_path=args.root, image_path=args.root,
+                                                     analysis_path=args.analysis,
+                                                     maps_path=args.root,
+                                                     ignore_psf=not args.smear, covar=args.covar,
+                                                     positive_definite=True)
     elif args.tracer == 'Stars':
-        kin = data.manga.MaNGAStellarKinematics.from_plateifu(args.plate, args.ifu,
-                                                              daptype=args.daptype, dr=args.dr,
-                                                              redux_path=args.redux,
-                                                              cube_path=args.root,
-                                                              image_path=args.root,
-                                                              analysis_path=args.analysis,
-                                                              maps_path=args.root,
-                                                              ignore_psf=not args.smear,
-                                                              covar=args.covar,
-                                                              positive_definite=True)
+        kin = manga.MaNGAStellarKinematics.from_plateifu(args.plate, args.ifu,
+                                                         daptype=args.daptype, dr=args.dr,
+                                                         redux_path=args.redux,
+                                                         cube_path=args.root, image_path=args.root,
+                                                         analysis_path=args.analysis,
+                                                         maps_path=args.root,
+                                                         ignore_psf=not args.smear,
+                                                         covar=args.covar, positive_definite=True)
     else:
         # NOTE: Should never get here given the check above.
         raise ValueError(f'Unknown tracer: {args.tracer}')
 
     # Setup the metadata
-    galmeta = data.manga.MaNGAGlobalPar(args.plate, args.ifu, redux_path=args.redux, dr=args.dr,
-                                        drpall_path=args.root)
+    galmeta = manga.MaNGAGlobalPar(args.plate, args.ifu, redux_path=args.redux, dr=args.dr,
+                                   drpall_path=args.root)
     #---------------------------------------------------------------------------
 
     # Run the iterative fit

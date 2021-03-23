@@ -22,9 +22,9 @@ copyright = '2021, Brian DiGiorgio, Kyle Westfall'
 author = 'Brian DiGiorgio, Kyle Westfall'
 
 # The short X.Y version.
-version = '0.1.0dev'
+version = '0.0.1dev'
 # The full version, including alpha/beta/rc tags
-release = '0.1.0dev'
+release = '0.0.1dev'
 
 
 # -- General configuration ---------------------------------------------------

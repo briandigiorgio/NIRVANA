@@ -1553,120 +1553,6 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
             fontsize=10)
 
     #-------------------------------------------------------------------
-    # Radial plot radius limits
-    # Select bins with sufficient data
-    vrot_indx = vrot_nbin > 5
-    if not np.any(vrot_indx):
-        vrot_indx = vrot_nbin > 0
-    sprof_indx = sprof_nbin > 5
-    if not np.any(sprof_indx):
-        sprof_indx = sprof_nbin > 0
-
-    concat_r = binr[vrot_indx] if np.any(vrot_indx) else np.array([])
-    if np.any(sprof_indx):
-        concat_r = np.append(concat_r, binr[sprof_indx])
-    if len(concat_r) == 0:
-        # Should not get here because it means there's no data being fit!
-        raise ValueError('No valid velocity and/or sigma data.')
-
-    r_lim = [0.0, np.amax(concat_r)*1.1]
-
-    #-------------------------------------------------------------------
-    # Rotation curve
-    maxrc = np.amax(np.append(vrot_ewmean[vrot_indx], vrotm_ewmean[vrot_indx])) \
-                if np.any(vrot_indx) else np.amax(vrot_intr_model)
-    rc_lim = [0.0, maxrc*1.1]
-
-    reff_lines = np.arange(galmeta.reff, r_lim[1], galmeta.reff)
-
-    ax = plot.init_ax(fig, [0.27, 0.27, 0.51, 0.23], facecolor='0.9', top=False, right=False)
-    ax.set_xlim(r_lim)
-    ax.set_ylim(rc_lim)
-    plot.rotate_y_ticks(ax, 90, 'center')
-    if smod is None:
-        ax.text(0.5, -0.13, r'$R$ [arcsec]', ha='center', va='center', transform=ax.transAxes,
-                fontsize=10)
-    else:
-        ax.xaxis.set_major_formatter(ticker.NullFormatter())
-
-    indx = vrot_nbin > 0
-    ax.scatter(vrot_r, vrot, marker='.', color='k', s=30, lw=0, alpha=0.6, zorder=1)
-    if np.any(indx):
-        ax.scatter(binr[indx], vrot_ewmean[indx], marker='o', edgecolors='none', s=100,
-                   alpha=1.0, facecolors='0.5', zorder=3)
-        ax.scatter(binr[indx], vrotm_ewmean[indx], edgecolors='C3', marker='o', lw=3, s=100,
-                   alpha=1.0, facecolors='none', zorder=4)
-        ax.errorbar(binr[indx], vrot_ewmean[indx], yerr=vrot_ewsdev[indx], color='0.6', capsize=0,
-                    linestyle='', linewidth=1, alpha=1.0, zorder=2)
-    ax.plot(modelr, vrot_intr_model, color='C3', zorder=5, lw=0.5)
-    for l in reff_lines:
-        ax.axvline(x=l, linestyle='--', lw=0.5, zorder=2, color='k')
-
-    asec2kpc = galmeta.kpc_per_arcsec()
-    if asec2kpc > 0:
-        axt = plot.get_twin(ax, 'x')
-        axt.set_xlim(np.array(r_lim) * galmeta.kpc_per_arcsec())
-        axt.set_ylim(rc_lim)
-        ax.text(0.5, 1.14, r'$R$ [$h^{-1}$ kpc]', ha='center', va='center', transform=ax.transAxes,
-                fontsize=10)
-    else:
-        ax.text(0.5, 1.05, 'kpc conversion unavailable', ha='center', va='center',
-                transform=ax.transAxes, fontsize=10)
-
-    kin_inc = disk.par[3]
-    axt = plot.get_twin(ax, 'y')
-    axt.set_xlim(r_lim)
-    axt.set_ylim(np.array(rc_lim)/np.sin(np.radians(kin_inc)))
-    plot.rotate_y_ticks(axt, 90, 'center')
-    axt.spines['right'].set_color('0.4')
-    axt.tick_params(which='both', axis='y', colors='0.4')
-    axt.yaxis.label.set_color('0.4')
-
-    ax.add_patch(patches.Rectangle((0.62,0.03), 0.36, 0.19, facecolor='w', lw=0, edgecolor='none',
-                                   zorder=5, alpha=0.7, transform=ax.transAxes))
-    ax.text(0.97, 0.13, r'$V_{\rm rot}\ \sin i$ [km/s; left axis]', ha='right', va='bottom',
-            transform=ax.transAxes, fontsize=10, zorder=6)
-    ax.text(0.97, 0.04, r'$V_{\rm rot}$ [km/s; right axis]', ha='right', va='bottom', color='0.4',
-            transform=ax.transAxes, fontsize=10, zorder=6)
-
-    #-------------------------------------------------------------------
-    # Velocity Dispersion profile
-    if smod is not None:
-        concat_s = np.append(sprof_ewmean[sprof_indx], sprofm_ewmean[sprof_indx]) \
-                        if np.any(sprof_indx) else sprof_intr_model
-        sprof_lim = np.power(10.0, growth_lim(np.ma.log10(concat_s), 0.9, 1.5))
-        sprof_lim = atleast_one_decade(sprof_lim)
-
-        ax = plot.init_ax(fig, [0.27, 0.04, 0.51, 0.23], facecolor='0.9')
-        ax.set_xlim(r_lim)
-        ax.set_ylim(sprof_lim)#[10,275])
-        ax.set_yscale('log')
-        ax.yaxis.set_major_formatter(logformatter)
-        plot.rotate_y_ticks(ax, 90, 'center')
-
-        indx = sprof_nbin > 0
-        ax.scatter(sprof_r, sprof, marker='.', color='k', s=30, lw=0, alpha=0.6, zorder=1)
-        if np.any(indx):
-            ax.scatter(binr[indx], sprof_ewmean[indx], marker='o', edgecolors='none', s=100,
-                       alpha=1.0, facecolors='0.5', zorder=3)
-            ax.scatter(binr[indx], sprofm_ewmean[indx], edgecolors='C3', marker='o', lw=3, s=100,
-                       alpha=1.0, facecolors='none', zorder=4)
-            ax.errorbar(binr[indx], sprof_ewmean[indx], yerr=sprof_ewsdev[indx], color='0.6',
-                        capsize=0, linestyle='', linewidth=1, alpha=1.0, zorder=2)
-        ax.plot(modelr, sprof_intr_model, color='C3', zorder=5, lw=0.5)
-        for l in reff_lines:
-            ax.axvline(x=l, linestyle='--', lw=0.5, zorder=2, color='k')
-
-        ax.text(0.5, -0.13, r'$R$ [arcsec]', ha='center', va='center', transform=ax.transAxes,
-                fontsize=10)
-
-        ax.add_patch(patches.Rectangle((0.81,0.86), 0.17, 0.09, facecolor='w', lw=0,
-                                       edgecolor='none', zorder=5, alpha=0.7,
-                                       transform=ax.transAxes))
-        ax.text(0.97, 0.87, r'$\sigma_{\rm los}$ [km/s]', ha='right', va='bottom',
-                transform=ax.transAxes, fontsize=10, zorder=6)
-
-    #-------------------------------------------------------------------
     # SDSS image
     ax = fig.add_axes([0.01, 0.29, 0.23, 0.23])
     if kin.image is not None:
@@ -1769,12 +1655,137 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
     ax.text(1.01, -1.17, f'{rchi2:.2f}', ha='right', va='center', transform=ax.transAxes,
             fontsize=10)
 
+    #-------------------------------------------------------------------
+    # Radial plot radius limits
+    # Select bins with sufficient data
+    vrot_indx = vrot_nbin > 5
+    if not np.any(vrot_indx):
+        vrot_indx = vrot_nbin > 0
+    sprof_indx = sprof_nbin > 5
+    if not np.any(sprof_indx):
+        sprof_indx = sprof_nbin > 0
+
+    concat_r = binr[vrot_indx] if np.any(vrot_indx) else np.array([])
+    if np.any(sprof_indx):
+        concat_r = np.append(concat_r, binr[sprof_indx])
+    if len(concat_r) == 0:
+        warnings.warn('No valid bins of velocity or sigma data.  Skipping radial bin plots!')
+
+        # Close off the plot
+        if ofile is None:
+            pyplot.show()
+        else:
+            fig.canvas.print_figure(ofile, bbox_inches='tight')
+        fig.clear()
+        pyplot.close(fig)
+
+        # Reset to default style
+        pyplot.rcdefaults()
+        return
+
+    # Set the radius limits for the radial plots
+    r_lim = [0.0, np.amax(concat_r)*1.1]
+
+    #-------------------------------------------------------------------
+    # Rotation curve
+    maxrc = np.amax(np.append(vrot_ewmean[vrot_indx], vrotm_ewmean[vrot_indx])) \
+                if np.any(vrot_indx) else np.amax(vrot_intr_model)
+    rc_lim = [0.0, maxrc*1.1]
+
+    reff_lines = np.arange(galmeta.reff, r_lim[1], galmeta.reff) if galmeta.reff > 1 else None
+
+    ax = plot.init_ax(fig, [0.27, 0.27, 0.51, 0.23], facecolor='0.9', top=False, right=False)
+    ax.set_xlim(r_lim)
+    ax.set_ylim(rc_lim)
+    plot.rotate_y_ticks(ax, 90, 'center')
+    if smod is None:
+        ax.text(0.5, -0.13, r'$R$ [arcsec]', ha='center', va='center', transform=ax.transAxes,
+                fontsize=10)
+    else:
+        ax.xaxis.set_major_formatter(ticker.NullFormatter())
+
+    indx = vrot_nbin > 0
+    ax.scatter(vrot_r, vrot, marker='.', color='k', s=30, lw=0, alpha=0.6, zorder=1)
+    if np.any(indx):
+        ax.scatter(binr[indx], vrot_ewmean[indx], marker='o', edgecolors='none', s=100,
+                   alpha=1.0, facecolors='0.5', zorder=3)
+        ax.scatter(binr[indx], vrotm_ewmean[indx], edgecolors='C3', marker='o', lw=3, s=100,
+                   alpha=1.0, facecolors='none', zorder=4)
+        ax.errorbar(binr[indx], vrot_ewmean[indx], yerr=vrot_ewsdev[indx], color='0.6', capsize=0,
+                    linestyle='', linewidth=1, alpha=1.0, zorder=2)
+    ax.plot(modelr, vrot_intr_model, color='C3', zorder=5, lw=0.5)
+    if reff_lines is not None:
+        for l in reff_lines:
+            ax.axvline(x=l, linestyle='--', lw=0.5, zorder=2, color='k')
+
+    asec2kpc = galmeta.kpc_per_arcsec()
+    if asec2kpc > 0:
+        axt = plot.get_twin(ax, 'x')
+        axt.set_xlim(np.array(r_lim) * galmeta.kpc_per_arcsec())
+        axt.set_ylim(rc_lim)
+        ax.text(0.5, 1.14, r'$R$ [$h^{-1}$ kpc]', ha='center', va='center', transform=ax.transAxes,
+                fontsize=10)
+    else:
+        ax.text(0.5, 1.05, 'kpc conversion unavailable', ha='center', va='center',
+                transform=ax.transAxes, fontsize=10)
+
+    kin_inc = disk.par[3]
+    axt = plot.get_twin(ax, 'y')
+    axt.set_xlim(r_lim)
+    axt.set_ylim(np.array(rc_lim)/np.sin(np.radians(kin_inc)))
+    plot.rotate_y_ticks(axt, 90, 'center')
+    axt.spines['right'].set_color('0.4')
+    axt.tick_params(which='both', axis='y', colors='0.4')
+    axt.yaxis.label.set_color('0.4')
+
+    ax.add_patch(patches.Rectangle((0.62,0.03), 0.36, 0.19, facecolor='w', lw=0, edgecolor='none',
+                                   zorder=5, alpha=0.7, transform=ax.transAxes))
+    ax.text(0.97, 0.13, r'$V_{\rm rot}\ \sin i$ [km/s; left axis]', ha='right', va='bottom',
+            transform=ax.transAxes, fontsize=10, zorder=6)
+    ax.text(0.97, 0.04, r'$V_{\rm rot}$ [km/s; right axis]', ha='right', va='bottom', color='0.4',
+            transform=ax.transAxes, fontsize=10, zorder=6)
+
+    #-------------------------------------------------------------------
+    # Velocity Dispersion profile
+    if smod is not None:
+        concat_s = np.append(sprof_ewmean[sprof_indx], sprofm_ewmean[sprof_indx]) \
+                        if np.any(sprof_indx) else sprof_intr_model
+        sprof_lim = np.power(10.0, growth_lim(np.ma.log10(concat_s), 0.9, 1.5))
+        sprof_lim = atleast_one_decade(sprof_lim)
+
+        ax = plot.init_ax(fig, [0.27, 0.04, 0.51, 0.23], facecolor='0.9')
+        ax.set_xlim(r_lim)
+        ax.set_ylim(sprof_lim)#[10,275])
+        ax.set_yscale('log')
+        ax.yaxis.set_major_formatter(logformatter)
+        plot.rotate_y_ticks(ax, 90, 'center')
+
+        indx = sprof_nbin > 0
+        ax.scatter(sprof_r, sprof, marker='.', color='k', s=30, lw=0, alpha=0.6, zorder=1)
+        if np.any(indx):
+            ax.scatter(binr[indx], sprof_ewmean[indx], marker='o', edgecolors='none', s=100,
+                       alpha=1.0, facecolors='0.5', zorder=3)
+            ax.scatter(binr[indx], sprofm_ewmean[indx], edgecolors='C3', marker='o', lw=3, s=100,
+                       alpha=1.0, facecolors='none', zorder=4)
+            ax.errorbar(binr[indx], sprof_ewmean[indx], yerr=sprof_ewsdev[indx], color='0.6',
+                        capsize=0, linestyle='', linewidth=1, alpha=1.0, zorder=2)
+        ax.plot(modelr, sprof_intr_model, color='C3', zorder=5, lw=0.5)
+        if reff_lines is not None:
+            for l in reff_lines:
+                ax.axvline(x=l, linestyle='--', lw=0.5, zorder=2, color='k')
+
+        ax.text(0.5, -0.13, r'$R$ [arcsec]', ha='center', va='center', transform=ax.transAxes,
+                fontsize=10)
+
+        ax.add_patch(patches.Rectangle((0.81,0.86), 0.17, 0.09, facecolor='w', lw=0,
+                                       edgecolor='none', zorder=5, alpha=0.7,
+                                       transform=ax.transAxes))
+        ax.text(0.97, 0.87, r'$\sigma_{\rm los}$ [km/s]', ha='right', va='bottom',
+                transform=ax.transAxes, fontsize=10, zorder=6)
+
     # TODO:
-    # Room for ~4-6 more...
-    # Add errors (if available)
-    # Label vertical lines in profile plots as 1, 2 Re, etc
-    # Surface brightness units
-    # Unit in general
+    #   - Add errors (if available)?
+    #   - Surface brightness units?
 
     if ofile is None:
         pyplot.show()

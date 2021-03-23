@@ -11,7 +11,7 @@ import warnings
 from IPython import embed
 
 import numpy as np
-from scipy import optimize, ndimage
+from scipy import optimize
 from matplotlib import pyplot, rc, patches, ticker, colors
 
 from astropy.io import fits

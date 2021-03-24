@@ -803,7 +803,7 @@ def find_largest_coherent_region(a):
     """
     labels, n = ndimage.label(a, structure=np.ones((3,3), dtype=int))
     if n == 1:
-        return a != 0
+        return labels == 1
 
     # Only keep the largest coherent structure
     uniq_labels, npix = np.unique(labels, return_counts=True)

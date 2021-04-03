@@ -88,6 +88,7 @@ def main(args):
         print(e)
         galmeta = None
 
+
     #make descriptive outfile name
     if args.outfile is None:
         args.outfile = f'{plate}-{ifu}_{args.weight}w_{args.points}p'
@@ -99,8 +100,12 @@ def main(args):
         else: args.outfile += '_gas'
         if not args.cen: args.outfile += '_nocen'
         if not args.fixcent: args.outfile += '_freecent'
+
+    if args.stellar: vftype = 'Stars'
+    else: vftype = 'Gas'
+
     fname = args.dir + args.outfile + '.nirv'
-    fitsname = args.dir + args.outfile + '.fits'
+    fitsname = f'{args.dir}nirvana_{plate}-{ifu}_{vftype}.fits'
     galname = args.dir + args.outfile + '.gal'
 
     #check if outfile already exists

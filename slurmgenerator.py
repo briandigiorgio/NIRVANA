@@ -8,15 +8,21 @@ from astropy.io import fits
 import time
 
 if __name__ == '__main__':
-    nnodes = 20
-    start = 7000
-    stop = start+1000
+    drp = fits.open('/home/bdigiorg/drpall-v3_1_1.fits')[1].data
+
+    nnodes = 1
+    start = 0
+    stop = 1
     galpernode = (stop-start)//nnodes
     print(galpernode, 'galaxies per file')
 
-    drp = fits.open('/home/bdigiorg/drpall-v3_1_1.fits')[1].data
-    plates = drp['plate'][start:]
-    ifus = np.array(drp['ifudsgn'], dtype=int)[start:]
+    rootdir = '/data/users/bdigiorg/'
+    outdir = '/data/users/bdigiorg/fits/'
+    remotedir = '/data/users/bdigiorg/download/'
+    progressdir = '/data/users/bdigiorg/progress/'
+
+    plates = drp['plate'][start:stop]
+    ifus = np.array(drp['ifudsgn'], dtype=int)[start:stop]
 
     for i in range(nnodes):
         platesi = plates[galpernode * i:galpernode * (i+1)]
@@ -51,18 +57,21 @@ export MANGA_SPECTRO_ANALYSIS=$MANGA_SPECTRO/analysis/\n\n')
 
 
             for j in range(len(platesi)):
+                progresspath = f'{progressdir}/{platesi[j]}/{ifusi[j]}/'
                 f.write(f'\
 echo {platesi[j]} {ifusi[j]} gas \n\
-mkdir /data/users/bdigiorg/progress/{platesi[j]}/ \n\
-mkdir /data/users/bdigiorg/progress/{platesi[j]}/{ifusi[j]}/ \n\
-touch /data/users/bdigiorg/progress/{platesi[j]}/{ifusi[j]}/gas.start \n\
-nirvana {platesi[j]} {ifusi[j]} -c 40 --root /data/users/bdigiorg/ --dir /data/users/bdigiorg/fits/ --remote /data/users/bdigiorg/download/ --fits > /data/users/bdigiorg/progress/{platesi[j]}/{ifusi[j]}/gas.log 2> /data/users/bdigiorg/progress/{platesi[j]}/{ifusi[j]}/gas.err\n\
-touch /data/users/bdigiorg/progress/{platesi[j]}/{ifusi[j]}/gas.finish \n \n\
+mkdir {progressdir}/{platesi[j]}/ \n\
+mkdir {progressdir}/{platesi[j]}/{ifusi[j]}/ \n\
+touch {progresspath}/gas.start \n\
+nirvana {platesi[j]} {ifusi[j]} -c 40 --root {rootdir} --dir {outdir} --remote {remotedir} --fits > {progresspath}/gas.log 2> {progresspath}/gas.err\n\
+touch {progressdir}/{platesi[j]}/{ifusi[j]}/gas.finish \n \n\
+ln -s {outdir}/nirvana_{platesi[j]}-{ifusi[j]}_Gas.fits {progresspath}/gas.fits\n\
 \
 echo {platesi[j]} {ifusi[j]} stellar \n\
-touch /data/users/bdigiorg/progress/{platesi[j]}/{ifusi[j]}/stellar.start \n\
-        nirvana {platesi[j]} {ifusi[j]} -c 40 --root /data/users/bdigiorg/ --dir /data/users/bdigiorg/fits/ --remote /data/users/bdigiorg/download/ --fits -s > /data/users/bdigiorg/progress/{platesi[j]}/{ifusi[j]}/stellar.log 2> /data/users/bdigiorg/progress/{platesi[j]}/{ifusi[j]}/stellar.err\n\
-touch /data/users/bdigiorg/progress/{platesi[j]}/{ifusi[j]}/stellar.finish \n\
+touch {progresspath}/stellar.start \n\
+nirvana {platesi[j]} {ifusi[j]} -s -c 40 --root {rootdir} --dir {outdir} --remote {remotedir} --fits > {progresspath}/stellar.log 2> {progresspath}/stellar.err\n\
+touch {progresspath}/stellar.finish \n\
+ln -s {outdir}/nirvana_{platesi[j]}-{ifusi[j]}_Stars.fits {progresspath}/stellar.fits\n\
 date\n\n')
         run(['sbatch',fname])
         time.sleep(.1)

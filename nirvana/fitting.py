@@ -77,8 +77,8 @@ def bisym_model(args, paramdict, plot=False, relative_pab=True):
 
     #spekkens and sellwood 2nd order vf model (from andrew's thesis)
     velmodel = paramdict['vsys'] + np.sin(inc) * (vtvals * np.cos(th) \
-             - v2tvals * np.cos(2*pab) * np.cos(th) \
-             - v2rvals * np.sin(2*pab) * np.sin(th))
+             - v2tvals * np.cos(2 * (th - pab)) * np.cos(th) \
+             - v2rvals * np.sin(2 * (th - pab)) * np.sin(th))
 
 
     #define dispersion and surface brightness if desired
@@ -302,7 +302,7 @@ def ptform(params, args, gaussprior=False):
     #uniform priors defined by bounds
     else:
         #uniform prior on sin(inc)
-        incp = np.degrees(np.arccos(np.radians(unifprior('inc', paramdict, bounddict)))
+        incp = np.degrees(np.arccos(np.radians(unifprior('inc', paramdict, bounddict))))
         pap = unifprior('pa', paramdict, bounddict)
         pabp = unifprior('pab', paramdict, bounddict)
         vsysp = unifprior('vsys', paramdict, bounddict)

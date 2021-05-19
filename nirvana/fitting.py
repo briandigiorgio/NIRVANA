@@ -8,7 +8,7 @@ import argparse
 import multiprocessing as mp
 
 import numpy as np
-from scipy import stats
+from scipy import stats, optimize
 
 import matplotlib.pyplot as plt
 
@@ -66,6 +66,7 @@ def bisym_model(args, paramdict, plot=False, relative_pab=True):
 
     #convert angles to polar and normalize radial coorinate
     inc, pa, pab = np.radians([paramdict['inc'], paramdict['pa'], paramdict['pab']])
+    if not relative_pab: pab = (pab - pa) % (2*np.pi)
     r, th = projected_polar(args.grid_x-paramdict['xc'], args.grid_y-paramdict['yc'], pa, inc)
 
     #interpolate the velocity arrays over full coordinates
@@ -94,7 +95,7 @@ def bisym_model(args, paramdict, plot=False, relative_pab=True):
     except: conv = None
     if args.beam_fft is not None:
         sbmodel, velmodel, sigmodel = smear(velmodel, args.beam_fft, sb=sb, 
-                sig=sigmodel, beam_fft=True, cnvfftw=conv)
+                sig=sigmodel, beam_fft=True, cnvfftw=conv, verbose=False)
 
     #remasking after convolution
     if args.vel_mask is not None: velmodel = np.ma.array(velmodel, mask=args.remap('vel_mask'))
@@ -236,7 +237,7 @@ def trunc(q, mean, std, left, right):
     a,b = (left-mean)/std, (right-mean)/std #transform to z values
     return stats.truncnorm.ppf(q,a,b,mean,std)
 
-def unifprior(key, params, bounds, indx=0):
+def unifprior(key, params, bounds, indx=0, func=lambda x:x):
     '''
     Uniform prior transform for a given key in the params and bounds dictionaries.
 
@@ -257,9 +258,9 @@ def unifprior(key, params, bounds, indx=0):
 
     '''
     if bounds[key].ndim > 1:
-        return (bounds[key][:,1] - bounds[key][:,0]) * params[key][indx:] + bounds[key][:,0]
+        return (func(bounds[key][:,1]) - func(bounds[key][:,0])) * params[key][indx:] + func(bounds[key][:,0])
     else:
-        return (bounds[key][1] - bounds[key][0]) * params[key] + bounds[key][0]
+        return (func(bounds[key][1]) - func(bounds[key][0])) * params[key] + func(bounds[key][0])
 
 def ptform(params, args, gaussprior=False):
     '''
@@ -302,7 +303,8 @@ def ptform(params, args, gaussprior=False):
     #uniform priors defined by bounds
     else:
         #uniform prior on sin(inc)
-        incp = np.degrees(np.arccos(np.radians(unifprior('inc', paramdict, bounddict))))
+        incfunc = lambda i: np.cos(np.radians(i))
+        incp = np.degrees(np.arccos(unifprior('inc', paramdict, bounddict,func=incfunc)))
         pap = unifprior('pa', paramdict, bounddict)
         pabp = unifprior('pab', paramdict, bounddict)
         vsysp = unifprior('vsys', paramdict, bounddict)
@@ -441,7 +443,7 @@ def loglike(params, args, squared=False):
 def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11', nbins=None,
         cores=10, maxr=None, cen=True, weight=10, smearing=True, points=500,
         stellar=False, root=None, verbose=False, disp=True, 
-        fixcent=True, ultra=False, remotedir=None, floor=5, penalty=100):
+        fixcent=True, method='dynesty', remotedir=None, floor=5, penalty=100):
     '''
     Main function for fitting a MaNGA galaxy with a nonaxisymmetric model.
 
@@ -488,9 +490,9 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
             2010. Not currently functional
         fixcent (:obj:`bool`, optional):
             Flag for whether to fix the center velocity bin at 0.
-        ultra (:obj:`bool`, optional):
-            Flag for whether to use `ultranest` rather than `dynesty` for
-            fitting (experimental).
+        method (:obj:`str`, optional):
+            Which fitting method to use. Defaults to `'dynesty'` but can also
+            be `'ultranest'` or `'lsq'`.
         remotedir (:obj:`str`, optional):
             If a directory is given, it will download data from sas into that
             base directory rather than looking for it locally
@@ -508,8 +510,8 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         :class:`~nirvana.data.fitargs.FitArgs`: Object with all of the relevant
         data for the galaxy as well as the parameters used for the fit.
     '''
-    # Check if ultra can be used
-    if ultra and stepsampler is None:
+    # Check if ultranest can be used
+    if method == 'ultranest' and stepsampler is None:
         raise ImportError('Could not import ultranest.  Cannot use ultranest sampler!')
 
     #mock galaxy using stored values
@@ -583,13 +585,13 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     args.getasym()
 
     #open up multiprocessing pool if needed
-    if cores > 1 and not ultra:
+    if cores > 1 and method == 'dynesty':
         pool = mp.Pool(cores)
         pool.size = cores
     else: pool = None
 
     #experimental support for ultranest
-    if ultra:
+    if method == 'ultranest':
         #define names of parameters
         names = ['inc', 'pa', 'pab', 'vsys', 'xc', 'yc']
         for i in range(args.fixcent, nbin+1): names += ['vt'  + str(i)]
@@ -611,7 +613,20 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         sampler.stepsampler = stepsampler.RegionSliceSampler(nsteps = 2*len(names))
         sampler.run()
 
-    else:
+    elif method == 'lsq':
+        #minfunc = lambda x: loglike(x, args)
+        def minfunc(params):
+            velmodel, sigmodel = bisym_model(args, unpack(params, args))
+            velchisq = (velmodel - args.vel)**2 * args.vel_ivar
+            sigchisq = (sigmodel - args.sig)**2 * args.sig_ivar
+            return velchisq + sigchisq
+
+        lsqguess = np.append(args.guess, [np.median(args.sig)] * (args.nbins + args.fixcent))
+        sampler = optimize.least_squares(minfunc, x0=lsqguess, method='trf',
+                  bounds=(args.bounds[:,0], args.bounds[:,1]), verbose=2, diff_step=[.01] * len(lsqguess))
+        args.guess = lsqguess
+
+    elif method == 'dynesty':
         #dynesty sampler with periodic pa and pab
         sampler = dynesty.NestedSampler(loglike, ptform, ndim, nlive=points,
                 periodic=[1,2], pool=pool,
@@ -619,5 +634,8 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         sampler.run_nested()
 
         if pool is not None: pool.close()
+
+    else:
+        raise ValueError('Choose a valid fitting method: dynesty, ultranest, or lsq')
 
     return sampler, args

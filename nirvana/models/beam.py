@@ -80,7 +80,7 @@ def convolve_fft(data, kernel, kernel_fft=False, return_fft=False):
         raise ValueError('Data and kernel must have the same shape.')
     if not np.all(np.isfinite(data)) or not np.all(np.isfinite(kernel)):
         print('**********************************')
-        print((~np.isfinite(data)).sum(),(~np.isfinite(kernel)).sum())
+        print(f'nans in data: {(~np.isfinite(data)).sum()}, nans in kernel: {(~np.isfinite(kernel)).sum()}')
         raise ValueError('Data and kernel must both have valid values.')
 
     datafft = np.fft.fftn(data)
@@ -265,7 +265,7 @@ def construct_beam(psf, aperture, return_fft=False):
 
 
 # TODO: Include higher moments?
-def smear(v, beam, beam_fft=False, sb=None, sig=None, cnvfftw=None):
+def smear(v, beam, beam_fft=False, sb=None, sig=None, cnvfftw=None, verbose=False):
     """
     Get the beam-smeared surface brightness, velocity, and velocity
     dispersion fields.
@@ -324,10 +324,12 @@ def smear(v, beam, beam_fft=False, sb=None, sig=None, cnvfftw=None):
                                     if cnvfftw is None else cnvfftw.fft(beam, shift=True))
 
     # Get the first moment of the beam-smeared intensity distribution
+    if verbose: print('Convolving surface brightness...')
     mom0 = _cnv(np.ones(v.shape, dtype=float) if sb is None else sb, bfft, kernel_fft=True)
 #    mom0 = None if sb is None else _cnv(sb, bfft, kernel_fft=True)
 
     # First moment
+    if verbose: print('Convolving velocity field...',sb,v)
     mom1 = _cnv(v if sb is None else sb*v, bfft, kernel_fft=True)
     if mom0 is not None:
         mom1 /= (mom0 + (mom0 == 0.0))
@@ -338,6 +340,7 @@ def smear(v, beam, beam_fft=False, sb=None, sig=None, cnvfftw=None):
 
     # Second moment
     _sig = np.square(v) + np.square(sig)
+    if verbose: print('Convolving velocity dispersion...')
     mom2 = _cnv(_sig if sb is None else sb*_sig, bfft, kernel_fft=True)
     if mom0 is not None:
         mom2 /= (mom0 + (mom0 == 0.0))

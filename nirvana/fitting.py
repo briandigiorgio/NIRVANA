@@ -66,7 +66,7 @@ def bisym_model(args, paramdict, plot=False, relative_pab=True):
 
     #convert angles to polar and normalize radial coorinate
     inc, pa, pab = np.radians([paramdict['inc'], paramdict['pa'], paramdict['pab']])
-    if not relative_pab: pab = (pab - pa) % (2*np.pi)
+    #if not relative_pab: pab = (pab - pa) % (2*np.pi)
     r, th = projected_polar(args.grid_x-paramdict['xc'], args.grid_y-paramdict['yc'], pa, inc)
 
     #interpolate the velocity arrays over full coordinates
@@ -161,8 +161,8 @@ def unpack(params, args, jump=None, bound=False, relative_pab=True):
         paramdict['inc'],paramdict['pa'],paramdict['pab'],paramdict['vsys'],paramdict['xc'],paramdict['yc'] = params[:args.nglobs]
 
     #adjust pab if necessary
-    if not relative_pab:
-        paramdict['pab'] = (paramdict['pab'] + paramdict['pa']) % 360
+    #if not relative_pab:
+    #    paramdict['pab'] = (paramdict['pab'] + paramdict['pa']) % 360
 
     #figure out what indices to get velocities from
     start = args.nglobs
@@ -442,7 +442,7 @@ def loglike(params, args, squared=False):
 
 def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11', nbins=None,
         cores=10, maxr=None, cen=True, weight=10, smearing=True, points=500,
-        stellar=False, root=None, verbose=False, disp=True, 
+        stellar=False, root=None, verbose=False, disp=True, mock=None,
         fixcent=True, method='dynesty', remotedir=None, floor=5, penalty=100):
     '''
     Main function for fitting a MaNGA galaxy with a nonaxisymmetric model.
@@ -515,17 +515,20 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         raise ImportError('Could not import ultranest.  Cannot use ultranest sampler!')
 
     #mock galaxy using stored values
-    if plate == 0:
-        mock = np.load('mockparams.npy', allow_pickle=True)[ifu]
-        print('Using mock:', mock['name'])
-        params = [mock['inc'], mock['pa'], mock['pab'], mock['vsys'], mock['vts'], mock['v2ts'], mock['v2rs'], mock['sig']]
-        args = Kinematics.mock(56,*params)
-        cnvfftw = ConvolveFFTW(args.spatial_shape)
-        smeared = smear(args.remap('vel'), args.beam_fft, beam_fft=True, sig=args.remap('sig'), sb=args.remap('sb'), cnvfftw=cnvfftw)
-        args.sb  = args.bin(smeared[0])
-        args.vel = args.bin(smeared[1])
-        args.sig = args.bin(smeared[2])
-        args.fwhm  = 2.44
+    #if plate == 0:
+    #    mock = np.load('mockparams.npy', allow_pickle=True)[ifu]
+    #    print('Using mock:', mock['name'])
+    #    params = [mock['inc'], mock['pa'], mock['pab'], mock['vsys'], mock['vts'], mock['v2ts'], mock['v2rs'], mock['sig']]
+    #    args = Kinematics.mock(56,*params)
+    #    cnvfftw = ConvolveFFTW(args.spatial_shape)
+    #    smeared = smear(args.remap('vel'), args.beam_fft, beam_fft=True, sig=args.remap('sig'), sb=args.remap('sb'), cnvfftw=cnvfftw)
+    #    args.sb  = args.bin(smeared[0])
+    #    args.vel = args.bin(smeared[1])
+    #    args.sig = args.bin(smeared[2])
+    #    args.fwhm  = 2.44
+    if mock is not None:
+        args, params = mock
+        args.vel, args.sig = bisym_model(args, params)
 
     #get info on galaxy and define bins and starting guess
     else:

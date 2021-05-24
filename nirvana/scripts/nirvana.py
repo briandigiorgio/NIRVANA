@@ -8,10 +8,12 @@ import argparse
 import pickle
 import os
 from glob import glob
+import numpy as np
 
 from nirvana.fitting import fit
 from nirvana.output import imagefits
 from nirvana.data.manga import MaNGAGlobalPar
+from nirvana.plotting import fileprep
 
 def parse_args(options=None):
 
@@ -55,8 +57,8 @@ def parse_args(options=None):
                         help='Fit the position of the center')
     parser.add_argument('--free', dest='fixcent', default=True, action='store_false',
                         help='Allow the center vel bin to be free')
-    parser.add_argument('--fits', default=False, action='store_true',
-                        help='Save results as a much smaller FITS file instead')
+    parser.add_argument('--nofits', dest='fits', default=True, action='store_false',
+                        help='Save results as a much larger sampler output instead of as a FITS file')
     parser.add_argument('--remote', default=None, 
                         help='Download sas data into this dir instead of local')
     parser.add_argument('--clobber', default=False, action='store_true',
@@ -67,6 +69,8 @@ def parse_args(options=None):
                         help='Relative size of penalty for big 2nd order terms')
     parser.add_argument('--floor', type=float, default=5,
                         help='Error floor to add onto ivars')
+    parser.add_argument('-m', '--mock', type=str, default='',
+                        help='filepath to .fits output to turn into a mock observation and fit')
 
     return parser.parse_args() if options is None else parser.parse_args(options)
 
@@ -100,26 +104,38 @@ def main(args):
         else: args.outfile += '_gas'
         if not args.cen: args.outfile += '_nocen'
         if not args.fixcent: args.outfile += '_freecent'
+        if args.mock: args.outfile += '_mock'
 
     if args.stellar: vftype = 'Stars'
     else: vftype = 'Gas'
 
     fname = args.dir + args.outfile + '.nirv'
-    fitsname = f'{args.dir}nirvana_{plate}-{ifu}_{vftype}.fits'
+    fitsname = f"{args.dir}nirvana_{plate}-{ifu}_{vftype}{'_mock' * bool(args.mock)}.fits"
     galname = args.dir + args.outfile + '.gal'
 
     #check if outfile already exists
-    if not args.clobber and os.path.isfile(fname):
-        raise FileExistsError(f'Output .nirv file already exists. Use --clobber to overwrite it: {fname}')
-    elif not args.clobber and args.fits and os.path.isfile(fitsname):
-        raise FileExistsError(f'Output FITS file already exists. Use --clobber to overwrite it: {fitsname}')
+    if not args.clobber:
+        if os.path.isfile(fname) and not args.fits:
+            raise FileExistsError(f'Output .nirv file already exists. Use --clobber to overwrite it: {fname}')
+        elif args.fits and os.path.isfile(fitsname):
+            raise FileExistsError(f'Output FITS file already exists. Use --clobber to overwrite it: {fitsname}')
+    if args.fits and os.path.isfile(fname):
+        print(f'Output .nirv file found, converting to FITS: {fname} --> {fitsname}')
+        gal = np.load(galname, allow_pickle=True)
+        imagefits(fname, galmeta, gal, outfile=fitsname, remotedir=args.remote) 
+        os.remove(fname)
+        os.remove(galname)
+        return
+
+    if args.mock:
+        gal, params = fileprep(args.mock)
 
     #run fit with supplied args
     samp, gal = fit(plate, ifu, galmeta=galmeta, daptype=args.daptype, dr=args.dr, cores=args.cores, nbins=args.nbins,
                   weight=args.weight, maxr=args.maxr, smearing=args.smearing, root=args.root,
                   verbose=args.verbose, disp=args.disp, points=args.points, 
                   stellar=args.stellar, cen=args.cen, fixcent=args.fixcent,
-                  remotedir=args.remote)
+                  remotedir=args.remote, mock=(gal, params))
 
     #write out with sampler results or just FITS table
     pickle.dump(samp.results, open(fname, 'wb'))

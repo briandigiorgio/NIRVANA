@@ -147,7 +147,7 @@ def maskedarraytofile(array, name=None, fill=0, hdr=None):
     arrayhdu = fits.ImageHDU(array, name=name, header=hdr)
     return arrayhdu
 
-def imagefits(f, galmeta=True, gal=None, outfile=None, padding=20, remotedir=None, outdir='', drpalldir='.', dapalldir='.'):
+def imagefits(f, galmeta=None, gal=None, outfile=None, padding=20, remotedir=None, outdir='', drpalldir='.', dapalldir='.'):
     '''
     Make a fits file for an individual galaxy with its fit parameters and relevant data.
     '''
@@ -174,7 +174,7 @@ def imagefits(f, galmeta=True, gal=None, outfile=None, padding=20, remotedir=Non
               'I','I','S','f4','20f4','20?','20?','I','I','8f4','8f4']
 
     #add parameters to the header
-    if galmeta==True:
+    if galmeta==None:
         drpallfile = glob(drpalldir + '/drpall*')[0]
         galmeta = MaNGAGlobalPar(resdict['plate'], resdict['ifu'], drpall_file=drpallfile)
     hdr = fileio.initialize_primary_header(galmeta)

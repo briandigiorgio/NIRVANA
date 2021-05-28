@@ -33,7 +33,7 @@ from .data.fitargs import FitArgs
 
 from .models.geometry import projected_polar
 
-def bisym_model(args, paramdict, plot=False, relative_pab=True):
+def bisym_model(args, paramdict, plot=False, relative_pab=False):
     '''
     Evaluate a bisymmetric velocity field model for given parameters.
 
@@ -66,7 +66,7 @@ def bisym_model(args, paramdict, plot=False, relative_pab=True):
 
     #convert angles to polar and normalize radial coorinate
     inc, pa, pab = np.radians([paramdict['inc'], paramdict['pa'], paramdict['pab']])
-    #if not relative_pab: pab = (pab - pa) % (2*np.pi)
+    if not relative_pab: pab = (pab - pa) % (2*np.pi)
     r, th = projected_polar(args.grid_x-paramdict['xc'], args.grid_y-paramdict['yc'], pa, inc)
 
     #interpolate the velocity arrays over full coordinates
@@ -116,7 +116,7 @@ def bisym_model(args, paramdict, plot=False, relative_pab=True):
 
     return binvel, binsig
 
-def unpack(params, args, jump=None, bound=False, relative_pab=True):
+def unpack(params, args, jump=None, bound=False, relative_pab=False):
     """
     Utility function to carry around a bunch of values in the Bayesian fit.
 
@@ -161,8 +161,8 @@ def unpack(params, args, jump=None, bound=False, relative_pab=True):
         paramdict['inc'],paramdict['pa'],paramdict['pab'],paramdict['vsys'],paramdict['xc'],paramdict['yc'] = params[:args.nglobs]
 
     #adjust pab if necessary
-    #if not relative_pab:
-    #    paramdict['pab'] = (paramdict['pab'] + paramdict['pa']) % 360
+    if not relative_pab:
+        paramdict['pab'] = (paramdict['pab'] + paramdict['pa']) % 360
 
     #figure out what indices to get velocities from
     start = args.nglobs
@@ -442,8 +442,9 @@ def loglike(params, args, squared=False):
 
 def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11', nbins=None,
         cores=10, maxr=None, cen=True, weight=10, smearing=True, points=500,
-        stellar=False, root=None, verbose=False, disp=True, mock=None,
-        fixcent=True, method='dynesty', remotedir=None, floor=5, penalty=100):
+        stellar=False, root=None, verbose=False, disp=True, 
+        fixcent=True, method='dynesty', remotedir=None, floor=5, penalty=100,
+        mock=None, mock_args=None, mock_params=None):
     '''
     Main function for fitting a MaNGA galaxy with a nonaxisymmetric model.
 
@@ -503,6 +504,19 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
             Penalty to impose in log likelihood if 2nd order velocity profiles
             have too high of a mean value. Forces model to fit dominant
             rotation with 1st order profile
+        mock (:obj:`tuple`, optional):
+            A tuple of the `params` and `args` objects output by
+            :func:`nirvana.plotting.fileprep` to fit instead of real data. Can
+            be used to fit a galaxy with known parameters for testing purposes.
+        mock_args (:obj:`dict`, optional):
+            Dictionary of what arguments to change about the `args` information
+            for :func:`bisym_model` of a mock galaxy. Only takes effect if
+            `mock` is given.
+        mock_params (:obj:`dict`, optional):
+            Dictionary of what parameters to change in the dictionary that
+            specifies the velocity field in  information for
+            :func:`bisym_model' of a mock galaxy. Only takes effect if `mock`
+            is given.
 
     Returns:
         :class:`dynesty.NestedSampler`: Sampler from `dynesty` containing
@@ -528,6 +542,12 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     #    args.fwhm  = 2.44
     if mock is not None:
         args, params = mock
+        #if mock_args is not None:
+        #    for i in mock_args:
+        #        setattr(args, i, mock_args[i])
+        #if mock_params is not None:
+        #    for i in mock_params:
+        #        params[i] = mock_params[i]
         args.vel, args.sig = bisym_model(args, params)
 
     #get info on galaxy and define bins and starting guess
@@ -555,7 +575,7 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
 
     #set bin edges
     if galmeta is not None: 
-        args.phot_inc = galmeta.guess_inclination()
+        if mock is None: args.phot_inc = galmeta.guess_inclination()
         args.reff = galmeta.reff
 
     inc = args.getguess(galmeta=galmeta)[1] if args.phot_inc is None else args.phot_inc

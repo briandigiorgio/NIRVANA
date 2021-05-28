@@ -333,7 +333,7 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
     return args, resdict
 
 def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, cen=True,
-                fixcent=True, save=False, clobber=False, remotedir=None, gal=None, relative_pab=True):
+                fixcent=True, save=False, clobber=False, remotedir=None, gal=None, relative_pab=False):
     """
     Make a summary plot for a `nirvana` output file with MaNGA velocity
     field.

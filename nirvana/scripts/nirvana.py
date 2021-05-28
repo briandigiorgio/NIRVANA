@@ -71,6 +71,8 @@ def parse_args(options=None):
                         help='Error floor to add onto ivars')
     parser.add_argument('-m', '--mock', type=str, default='',
                         help='filepath to .fits output to turn into a mock observation and fit')
+    parser.add_argument('-i', '--mock-inc', type=float, default=0,
+                        help='change the inclination of the mock galaxy')
 
     return parser.parse_args() if options is None else parser.parse_args(options)
 
@@ -105,13 +107,19 @@ def main(args):
         if not args.cen: args.outfile += '_nocen'
         if not args.fixcent: args.outfile += '_freecent'
         if args.mock: args.outfile += '_mock'
+        if args.mock_inc: args.outfile += f'_i{int(args.mock_inc)}'
 
+    print('File name:', args.outfile)
     if args.stellar: vftype = 'Stars'
     else: vftype = 'Gas'
 
     fname = args.dir + args.outfile + '.nirv'
-    fitsname = f"{args.dir}nirvana_{plate}-{ifu}_{vftype}{'_mock' * bool(args.mock)}.fits"
     galname = args.dir + args.outfile + '.gal'
+    fitsname = f"{args.dir}nirvana_{plate}-{ifu}_{vftype}"
+    if args.mock:
+        fitsname += '_mock'
+        if args.mock_inc: fitsname += f'_i{int(args.mock_inc)}'
+    fitsname += '.fits'
 
     #check if outfile already exists
     if not args.clobber:
@@ -127,15 +135,20 @@ def main(args):
         os.remove(galname)
         return
 
-    if args.mock:
-        gal, params = fileprep(args.mock)
+    if args.mock: 
+        mockgal, params = fileprep(args.mock)
+        if args.mock_inc: 
+            params['inc'] = args.mock_inc
+            mockgal.phot_inc = args.mock_inc
+        mock = (mockgal, params)
+    else: mock = None
 
     #run fit with supplied args
     samp, gal = fit(plate, ifu, galmeta=galmeta, daptype=args.daptype, dr=args.dr, cores=args.cores, nbins=args.nbins,
                   weight=args.weight, maxr=args.maxr, smearing=args.smearing, root=args.root,
                   verbose=args.verbose, disp=args.disp, points=args.points, 
                   stellar=args.stellar, cen=args.cen, fixcent=args.fixcent,
-                  remotedir=args.remote, mock=(gal, params))
+                  remotedir=args.remote, mock=mock)
 
     #write out with sampler results or just FITS table
     pickle.dump(samp.results, open(fname, 'wb'))

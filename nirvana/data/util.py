@@ -810,4 +810,111 @@ def find_largest_coherent_region(a):
     indx = uniq_labels != 0
     return labels == uniq_labels[indx][np.argmax(npix[indx])]
 
+def equal_shape(arr1, arr2, fill_value=0):
+    '''
+    Take two 2D arrays and pad them to make them the same shape
 
+    Args:
+        arr1, arr2 (`numpy.ndarray`_):
+            2D arrays that will be padded to be the same shape
+        fill_value (:obj:`float`, optional):
+            Fill value for the padding
+
+    Returns:
+        Tuple of `numpy.ndarray`_s that are padded versions of the input arrays
+    '''
+
+    #check for non 2D arrays
+    if arr1.ndim != 2 or arr2.ndim != 2:
+        raise ValueError('Can only accept 2D arrays')
+
+    #trivial case
+    if arr1.shape == arr2.shape:
+        return arr1, arr2
+    
+    #iterate through axes to pad each one appropriately
+    for i in range(arr1.ndim):
+
+        #figure out which array is smaller on this axis
+        if arr1.shape[i] < arr2.shape[i]:
+            smaller = arr1
+            bigger = arr2
+            order = 'fwd'
+        elif arr1.shape[i] > arr2.shape[i]:
+            smaller = arr2
+            bigger = arr1
+            order = 'rev'
+        else:
+            continue
+        
+        #add padding until appropriate size
+        while smaller.shape[i] != bigger.shape[i]:
+            fill = np.full((1,smaller.shape[1-i]), fill_value)
+            if i: fill = fill.T
+
+            #odd size difference
+            if (bigger.shape[i] - smaller.shape[i])%2:
+                smaller = np.concatenate([smaller, fill], axis=i) 
+
+            #even size difference
+            else:
+                smaller = np.concatenate([fill, smaller, fill], axis=i)
+        
+        if order == 'fwd': arr1, arr2 = [smaller, bigger]
+        elif order == 'rev': arr2, arr1 = [smaller, bigger]
+            
+    return arr1, arr2
+
+def trim_shape(arr1, arr2, fill_value=0):
+    '''
+    Take one 2D array and make it the same shape as the other through trimming
+    and padding
+
+    Args:
+        arr1 (`numpy.ndarray`_):
+            2D array to be reshaped
+        arr2 (`numpy.ndarray`_):
+            2D array with target shape
+        fill_value (:obj:`float`, optional):
+            Fill value for the padding
+
+    Returns:
+        `numpy.ndarray`_: reshaped version of `arr1` with dimensions of `arr2`
+    '''
+
+    #check for non 2D arrays
+    if arr1.ndim != 2 or arr2.ndim != 2:
+        raise ValueError('Can only accept 2D arrays')
+
+    #trivial case
+    if arr1.shape == arr2.shape:
+        return arr1, arr2
+    
+    #iterate through axes to figure out which need to be padded/trimmed
+    for i in range(arr1.ndim):
+
+        #if smaller, pad the array until appropriate size
+        while arr1.shape[i] < arr2.shape[i]:
+            fill = np.full((1, arr1.shape[1-i]), fill_value)
+            if i: fill = fill.T
+
+            #odd size difference
+            if (arr2.shape[i] - arr1.shape[i])%2:
+                arr1 = np.concatenate([arr1, fill], axis=i) 
+
+            #even size difference
+            else:
+                arr1 = np.concatenate([fill, arr1, fill], axis=i)
+                
+        #if bigger, trim down the outside
+        while arr1.shape[i] > arr2.shape[i]:
+
+            #odd size difference
+            if (arr1.shape[i] - arr2.shape[i])%2:
+                arr1 = arr1.take(range(arr1.shape[i]-1),i)
+
+            #even size difference
+            else:
+                arr1 = arr1.take(range(arr1.shape[i]-1),i)
+        
+    return arr1

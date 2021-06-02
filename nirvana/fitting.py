@@ -30,6 +30,7 @@ from .models.beam import smear, ConvolveFFTW
 from .data.manga import MaNGAGasKinematics, MaNGAStellarKinematics
 from .data.kinematics import Kinematics
 from .data.fitargs import FitArgs
+from .data.util import trim_shape
 
 from .models.geometry import projected_polar
 
@@ -444,7 +445,7 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         cores=10, maxr=None, cen=True, weight=10, smearing=True, points=500,
         stellar=False, root=None, verbose=False, disp=True, 
         fixcent=True, method='dynesty', remotedir=None, floor=5, penalty=100,
-        mock=None, mock_args=None, mock_params=None):
+        mock=None):
     '''
     Main function for fitting a MaNGA galaxy with a nonaxisymmetric model.
 
@@ -508,15 +509,6 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
             A tuple of the `params` and `args` objects output by
             :func:`nirvana.plotting.fileprep` to fit instead of real data. Can
             be used to fit a galaxy with known parameters for testing purposes.
-        mock_args (:obj:`dict`, optional):
-            Dictionary of what arguments to change about the `args` information
-            for :func:`bisym_model` of a mock galaxy. Only takes effect if
-            `mock` is given.
-        mock_params (:obj:`dict`, optional):
-            Dictionary of what parameters to change in the dictionary that
-            specifies the velocity field in  information for
-            :func:`bisym_model' of a mock galaxy. Only takes effect if `mock`
-            is given.
 
     Returns:
         :class:`dynesty.NestedSampler`: Sampler from `dynesty` containing
@@ -528,27 +520,25 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     if method == 'ultranest' and stepsampler is None:
         raise ImportError('Could not import ultranest.  Cannot use ultranest sampler!')
 
-    #mock galaxy using stored values
-    #if plate == 0:
-    #    mock = np.load('mockparams.npy', allow_pickle=True)[ifu]
-    #    print('Using mock:', mock['name'])
-    #    params = [mock['inc'], mock['pa'], mock['pab'], mock['vsys'], mock['vts'], mock['v2ts'], mock['v2rs'], mock['sig']]
-    #    args = Kinematics.mock(56,*params)
-    #    cnvfftw = ConvolveFFTW(args.spatial_shape)
-    #    smeared = smear(args.remap('vel'), args.beam_fft, beam_fft=True, sig=args.remap('sig'), sb=args.remap('sb'), cnvfftw=cnvfftw)
-    #    args.sb  = args.bin(smeared[0])
-    #    args.vel = args.bin(smeared[1])
-    #    args.sig = args.bin(smeared[2])
-    #    args.fwhm  = 2.44
     if mock is not None:
-        args, params = mock
-        #if mock_args is not None:
-        #    for i in mock_args:
-        #        setattr(args, i, mock_args[i])
-        #if mock_params is not None:
-        #    for i in mock_params:
-        #        params[i] = mock_params[i]
+        args, params, residnum = mock
         args.vel, args.sig = bisym_model(args, params)
+        if residnum:
+            plt.figure(figsize=(12,4))
+            plt.subplot(131)
+            plt.imshow(args.remap('vel'), cmap='jet')
+            try:
+                residlib = np.load('residlib.dict', allow_pickle=True)
+                vel2d = args.remap('vel')
+                resid = trim_shape(residlib[residnum], vel2d)
+                plt.subplot(132)
+                plt.imshow(resid, cmap='jet')
+                newvel = vel2d + resid
+                args.vel = args.bin(newvel)
+                args.remask(resid.mask)
+            except:
+                print('Could not apply residual correctly. Check that residlib.dict is in the appropriate place')
+
 
     #get info on galaxy and define bins and starting guess
     else:

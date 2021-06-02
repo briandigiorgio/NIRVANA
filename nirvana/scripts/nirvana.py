@@ -73,6 +73,8 @@ def parse_args(options=None):
                         help='filepath to .fits output to turn into a mock observation and fit')
     parser.add_argument('-i', '--mock-inc', type=float, default=0,
                         help='change the inclination of the mock galaxy')
+    parser.add_argument('--resid', type=str, default='',
+                        help='Resuidual from residlib to add on top of vel')
 
     return parser.parse_args() if options is None else parser.parse_args(options)
 
@@ -108,6 +110,7 @@ def main(args):
         if not args.fixcent: args.outfile += '_freecent'
         if args.mock: args.outfile += '_mock'
         if args.mock_inc: args.outfile += f'_i{int(args.mock_inc)}'
+        if args.resid: args.outfile += f'_r{args.resid}'
 
     print('File name:', args.outfile)
     if args.stellar: vftype = 'Stars'
@@ -119,6 +122,7 @@ def main(args):
     if args.mock:
         fitsname += '_mock'
         if args.mock_inc: fitsname += f'_i{int(args.mock_inc)}'
+        if args.resid: fitsname += f'_r{args.resid}'
     fitsname += '.fits'
 
     #check if outfile already exists
@@ -140,7 +144,7 @@ def main(args):
         if args.mock_inc: 
             params['inc'] = args.mock_inc
             mockgal.phot_inc = args.mock_inc
-        mock = (mockgal, params)
+        mock = (mockgal, params, args.resid)
     else: mock = None
 
     #run fit with supplied args

@@ -888,7 +888,7 @@ def trim_shape(arr1, arr2, fill_value=0):
 
     #trivial case
     if arr1.shape == arr2.shape:
-        return arr1, arr2
+        return arr1
     
     #iterate through axes to figure out which need to be padded/trimmed
     for i in range(arr1.ndim):

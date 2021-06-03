@@ -524,20 +524,15 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         args, params, residnum = mock
         args.vel, args.sig = bisym_model(args, params)
         if residnum:
-            plt.figure(figsize=(12,4))
-            plt.subplot(131)
-            plt.imshow(args.remap('vel'), cmap='jet')
             try:
                 residlib = np.load('residlib.dict', allow_pickle=True)
                 vel2d = args.remap('vel')
                 resid = trim_shape(residlib[residnum], vel2d)
-                plt.subplot(132)
-                plt.imshow(resid, cmap='jet')
                 newvel = vel2d + resid
                 args.vel = args.bin(newvel)
                 args.remask(resid.mask)
             except:
-                print('Could not apply residual correctly. Check that residlib.dict is in the appropriate place')
+                raise ValueError('Could not apply residual correctly. Check that residlib.dict is in the appropriate place')
 
 
     #get info on galaxy and define bins and starting guess

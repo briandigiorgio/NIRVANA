@@ -140,7 +140,7 @@ def main(args):
         return
 
     if args.mock: 
-        mockgal, params = fileprep(args.mock)
+        mockgal, params = fileprep(args.mock, remotedir=args.remote)
         if args.mock_inc: 
             params['inc'] = args.mock_inc
             mockgal.phot_inc = args.mock_inc

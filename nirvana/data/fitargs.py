@@ -205,7 +205,7 @@ class FitArgs:
         return self.guess
 
     def setbounds(self, incpad=20, papad=30, vsyspad=30, cenpad=2, velpad = 1.5,
-            velmax=400, sigmax=300):
+            velmax=400, sigmax=300, incgauss=False):
         '''
         Set the bounds for the prior of the fit.
 
@@ -231,6 +231,9 @@ class FitArgs:
             sigmax (:obj:`float`, optional):
                 Maximum allowed value for the velocity dispersion values
                 regardless of what the data says.
+            incgauss (:obj:`bool`, optional):
+                If `True`, will treat `incpad` as the standard deviation of a
+                Gaussian prior rather than bounds of a uniform prior.
         '''
 
         try: theta0 = self.guess
@@ -243,7 +246,8 @@ class FitArgs:
 
         #prior bounds defined based off of guess
         bounds = np.zeros((ndim, 2))
-        bounds[0] = (max(inc - incpad, 5), min(inc + incpad, 85))
+        if incgauss: bounds[0] = (inc, incpad)
+        else: bounds[0] = (max(inc - incpad, 5), min(inc + incpad, 85))
         bounds[1] = (theta0[1] - papad, theta0[1] + papad)
         bounds[2] = (0, 180) #uninformed
         bounds[3] = (theta0[3] - vsyspad, theta0[3] + vsyspad)

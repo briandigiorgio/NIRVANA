@@ -304,8 +304,9 @@ def ptform(params, args, gaussprior=False):
     #uniform priors defined by bounds
     else:
         #uniform prior on sin(inc)
-        incfunc = lambda i: np.cos(np.radians(i))
-        incp = np.degrees(np.arccos(unifprior('inc', paramdict, bounddict,func=incfunc)))
+        #incfunc = lambda i: np.cos(np.radians(i))
+        #incp = np.degrees(np.arccos(unifprior('inc', paramdict, bounddict,func=incfunc)))
+        incp = stats.norm.ppf(paramdict['inc'], *bounddict['inc'])
         pap = unifprior('pa', paramdict, bounddict)
         pabp = unifprior('pab', paramdict, bounddict)
         vsysp = unifprior('vsys', paramdict, bounddict)
@@ -589,7 +590,7 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     print(f'{nbin + args.fixcent} radial bins, {ndim} parameters')
     
     #prior bounds and asymmetry defined based off of guess
-    args.setbounds()
+    args.setbounds(incgauss=True)
     args.getasym()
 
     #open up multiprocessing pool if needed

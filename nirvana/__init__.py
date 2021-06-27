@@ -1,5 +1,5 @@
 
-__version__ = '0.1.1'
+__version__ = '0.1.2dev'
 __license__ = 'BSD3'
 __author__ = 'Brian DiGiorgio'
 __maintainer__ = 'Brian DiGiorgio'

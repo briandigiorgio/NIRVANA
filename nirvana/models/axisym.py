@@ -661,9 +661,8 @@ class AxisymmetricDisk:
         self.kin = kin
         self.x = self.kin.grid_x
         self.y = self.kin.grid_y
-        # TODO: This should be changed for binned data. I.e., we should be
-        # weighting by the *unbinned* surface-brightness map.
-        self.sb = self.kin.remap('sb').filled(0.0) if sb_wgt else None
+#        self.sb = self.kin.remap('sb').filled(0.0) if sb_wgt else None
+        self.sb = self.kin.grid_sb if sb_wgt else None
         self.beam_fft = self.kin.beam_fft
         self.vel_gpm = np.logical_not(self.kin.vel_mask)
         self.sig_gpm = None if self.dc is None else np.logical_not(self.kin.sig_mask)

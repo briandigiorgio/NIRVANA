@@ -23,6 +23,8 @@ def remote_data_file(filename=None):
     root = os.path.join(data_file(), 'remote')
     return root if filename is None else os.path.join(root, filename)
 
+# TODO: It's super annoying that these file names do not include the plate
+# number...
 def remote_drp_test_images():
     return ['12704.png', '12703.png']
 

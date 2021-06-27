@@ -75,6 +75,88 @@ def projected_polar(x, y, pa, inc):
     yd /= np.cos(inc)
     return np.sqrt(xd**2 + yd**2), np.arctan2(-yd,xd) % (2*np.pi)
 
+
+def polygon_winding_number(polygon, point):
+    """
+    Determine the winding number of a 2D polygon about a point.
+    
+    The code does **not** check if the polygon is simple (no interesecting line
+    segments).  Algorithm taken from Numerical Recipes Section 21.4.
+
+    Args:
+        polygon (`numpy.ndarray`_):
+            An Nx2 array containing the x,y coordinates of a polygon.
+            The points should be ordered either counter-clockwise or
+            clockwise.
+        point (`numpy.ndarray`_):
+            One or more points for the winding number calculation.
+            Must be either a 2-element array for a single (x,y) pair,
+            or an Nx2 array with N (x,y) points.
+
+    Returns:
+        :obj:`int`, `numpy.ndarray`: The winding number of each point with
+        respect to the provided polygon. Points inside the polygon have winding
+        numbers of 1 or -1; see :func:`point_inside_polygon`.
+
+    Raises:
+        ValueError:
+            Raised if ``polygon`` is not 2D, if ``polygon`` does not have two
+            columns, or if the last axis of ``point`` does not have 2 and only 2
+            elements.
+    """
+    # Check input shape is for 2D only
+    if len(polygon.shape) != 2:
+        raise ValueError('Polygon must be an Nx2 array.')
+    if polygon.shape[1] != 2:
+        raise ValueError('Polygon must be in two dimensions.')
+    _point = np.atleast_2d(point)
+    if _point.shape[1] != 2:
+        raise ValueError('Point must contain two elements.')
+
+    # Get the winding number
+    nvert = polygon.shape[0]
+    npnt = _point.shape[0]
+
+    dl = np.roll(polygon, 1, axis=0)[None,:,:] - _point[:,None,:]
+    dr = polygon[None,:,:] - point[:,None,:]
+    dx = dl[...,0]*dr[...,1] - dl[...,1]*dr[...,0]
+
+    indx_l = dl[...,1] > 0
+    indx_r = dr[...,1] > 0
+
+    wind = np.zeros((npnt, nvert), dtype=int)
+    wind[indx_l & np.logical_not(indx_r) & (dx < 0)] = -1
+    wind[np.logical_not(indx_l) & indx_r & (dx > 0)] = 1
+
+    return np.sum(wind, axis=1)[0] if point.ndim == 1 else np.sum(wind, axis=1)
+
+
+def point_inside_polygon(polygon, point):
+    """
+    Determine if one or more points is inside the provided polygon.
+
+    Primarily a wrapper for :func:`polygon_winding_number`, that
+    returns True for each point that is inside the polygon.
+
+    Args:
+        polygon (`numpy.ndarray`_):
+            An Nx2 array containing the x,y coordinates of a polygon.
+            The points should be ordered either counter-clockwise or
+            clockwise.
+        point (`numpy.ndarray`_):
+            One or more points for the winding number calculation.
+            Must be either a 2-element array for a single (x,y) pair,
+            or an Nx2 array with N (x,y) points.
+
+    Returns:
+        :obj:`bool`, `numpy.ndarray`: Boolean indicating whether or not each
+        point is within the polygon.
+    """
+    return np.absolute(polygon_winding_number(polygon, point)) == 1
+
+
+# TODO: The rest of these functions should probably be in their own module
+
 def asymmetry(args, pa, vsys, xc=0, yc=0):
     '''
     Calculate asymmetry parameter and maps for major/minor axis reflection.
@@ -137,3 +219,5 @@ def fig2data(fig):
     # canvas.tostring_argb give pixmap in ARGB mode. Roll the ALPHA channel to have it in RGBA mode
     buf = np.roll(buf, 3, axis=2)
     return buf
+
+

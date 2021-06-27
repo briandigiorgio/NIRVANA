@@ -151,7 +151,16 @@ def test_files():
     assert files[0].split('-')[0] == 'drpall', 'Order of files changed'
     assert files[2].split('.')[0] == '12704', 'Image file name changed'
 
-if __name__ == '__main__':
-    test_files()
+
+@requires_remote
+def test_sbholes():
+    maps_file = remote_data_file('manga-8138-12704-MAPS-{0}.fits.gz'.format(dap_test_daptype))
+
+    kin = manga.MaNGAGasKinematics(maps_file, flux_bound=(0, 100))
+    sb = kin.remap('sb')
+
+    _sb = util.gaussian_fill(sb)
+
+    assert numpy.sum(_sb - sb.filled(0.0) > 0) > 250, 'Number of fixed spaxels changed.'
 
 

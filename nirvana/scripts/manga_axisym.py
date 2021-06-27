@@ -88,6 +88,13 @@ def parse_args(options=None):
                              '(ignored if dispersion not being fit).')
     parser.add_argument('--min_unmasked', default=None, type=int,
                         help='Minimum number of unmasked spaxels required to continue fit.')
+    parser.add_argument('--max_flux', default=None, type=float,
+                        help='Maximum flux to include in the surface-brightness weighting.')
+    parser.add_argument('--sb_fill_sig', default=None, type=float,
+                        help='Fill the surface-brightness map used for constructing the '
+                             'beam-smeared model using an iterative Gaussian smoothing '
+                             'operation.  This parameter both turns this on and sets the size of '
+                             'the circular Gaussian smoothing kernel in spaxels.')
     parser.add_argument('--coherent', default=False, action='store_true',
                         help='After the initial rejection of S/N and error limits, find the '
                              'largest coherent region of adjacent spaxels and only fit that '
@@ -122,6 +129,8 @@ def main(args):
     #  - Set the output root name
     oroot = f'nirvana-manga-axisym-{args.plate}-{args.ifu}-{args.tracer}'
 
+    flux_bound = (None, args.max_flux)
+
     #---------------------------------------------------------------------------
     # Read the data to fit
     if args.tracer == 'Gas':
@@ -131,7 +140,8 @@ def main(args):
                                                      analysis_path=args.analysis,
                                                      maps_path=args.root,
                                                      ignore_psf=not args.smear, covar=args.covar,
-                                                     positive_definite=True)
+                                                     positive_definite=True, flux_bound=flux_bound,
+                                                     sb_fill=args.sb_fill_sig)
     elif args.tracer == 'Stars':
         kin = manga.MaNGAStellarKinematics.from_plateifu(args.plate, args.ifu,
                                                          daptype=args.daptype, dr=args.dr,
@@ -140,7 +150,8 @@ def main(args):
                                                          analysis_path=args.analysis,
                                                          maps_path=args.root,
                                                          ignore_psf=not args.smear,
-                                                         covar=args.covar, positive_definite=True)
+                                                         covar=args.covar, positive_definite=True,
+                                                         sb_fill=args.sb_fill_sig)
     else:
         # NOTE: Should never get here given the check above.
         raise ValueError(f'Unknown tracer: {args.tracer}')

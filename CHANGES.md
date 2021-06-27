@@ -1,5 +1,16 @@
-0.0.1dev
+
+0.1.1dev
 --------
+
+ - Include `PowerExp` 1D model
+ - Allow the surface-brightness used during the model construction to be
+   defined separately from the binned surface-brightness data.  This is
+   useful for modeling the stellar kinematics.
+ - Allow the surface-brightness masks to be patched by a Gaussian
+   smoothing algorithm to fill surface-brightness holes.
+
+0.1.0
+-----
 
  - Initial version
  - Add beam-smearing

@@ -252,6 +252,10 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
         elif type(f) == np.ndarray: chains = f
         elif type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler: chains = f.results
 
+        if gal is None and '.nirv' in f and os.path.isfile(f[:-5] + '.gal'):
+            gal = f[:-5] + '.gal'
+        if type(gal) == str: gal = np.load(gal, allow_pickle=True)
+
         #parse the automatically generated filename
         if plate is None or ifu is None:
             fname = re.split('/', f[:-5])[-1]
@@ -307,6 +311,7 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
 
     #get appropriate number of edges  by looking at length of meds
     nbins = (len(meds) - args.nglobs - fixcent)/4
+    print(nbins, len(meds), args.nglobs, fixcent)
     if not nbins.is_integer(): 
         raise ValueError('Dynesty output array has a bad shape.')
     else: nbins = int(nbins)
@@ -321,13 +326,14 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
     else:
         args.edges = resdict['bin_edges'][~resdict['velmask']]
 
+    print(args.edges)
     args.getguess(galmeta=galmeta)
     args.getasym()
 
     return args, resdict
 
 def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, cen=True,
-                fixcent=True, save=False, clobber=False, remotedir=None, gal=None):
+                fixcent=True, save=False, clobber=False, remotedir=None, gal=None, relative_pab=False):
     """
     Make a summary plot for a `nirvana` output file with MaNGA velocity
     field.
@@ -385,7 +391,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
     args, resdict = fileprep(f, plate, ifu, smearing, stellar, maxr, cen, fixcent, remotedir=remotedir, gal=gal)
 
     #generate velocity models
-    velmodel, sigmodel = bisym_model(args,resdict,plot=True,relative_pab=False)
+    velmodel, sigmodel = bisym_model(args,resdict,plot=True,relative_pab=relative_pab)
     vel_r = args.remap('vel')
     sig_r = np.sqrt(args.remap('sig_phys2')) if hasattr(args, 'sig_phys2') else args.remap('sig')
 

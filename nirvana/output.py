@@ -88,39 +88,50 @@ def dictformatting(d, drp=None, dap=None, padding=20, fill=-9999, drpalldir='.',
 
     return data
 
-def makealltable(dicts, outfile=None, padding=20):
+def makealltable(fname='', dir='.', vftype='', outfile=None, padding=20):
     '''
     Take a list of dictionaries from extractdir and turn them into an astropy table (and a fits file if a filename is given).
     '''
 
     #load dapall and drpall
-    drp = fits.open('/data/manga/spectro/redux/MPL-10/drpall-v3_0_1.fits')[1].data
-    dap = fits.open('/data/manga/spectro/analysis/MPL-10/dapall-v3_0_1-3.0.1.fits')[1].data
+    drp = fits.open('/data/manga/spectro/redux/MPL-11/drpall-v3_1_1.fits')[1].data
+    dap = fits.open('/data/manga/spectro/analysis/MPL-11/dapall-v3_1_1-3.1.0.fits')[1].data
+
+    fs = glob(f'{dir}/{fname}*{vftype}.fits')
+    if len(fs) == 0:
+        raise FileNotFoundError(f'No matching FITS files found in directory "{dir}"')
+    else:
+        print(len(fs), 'files found...')
+
+    tables = []
+    for f in tqdm(fs):
+        try: 
+            fi = fits.open(f)
+            tables += [fi[1].data]
+            fi.close()
+        except Exception as e: print(f, 'failed:', e)
 
     #make names and dtypes for columns
     names = None
     i = 0
     while names is None:
-        try: names = list(dicts[i].keys()) + ['velmask','sigmask','drpindex','dapindex']
+        try: 
+            names = list(tables[i].names)
+            dtype = tables[i].dtype
         except: i += 1
 
-    dtypes = ['f4','f4','f4','f4','f4','f4','20f4','20f4','20f4','20f4',
-              'f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4',
-              '20f4','20f4','20f4','20f4','20f4','20f4','20f4','20f4',
-              'I','I','S','f4','20?','20?','I','I']
+    data = np.zeros(len(tables), dtype=dtype)
+    for i in range(len(tables)):
+        data[i] = tables[i]
+    t = Table(data)
 
-    data = []
-    for d in dicts: data += [dictformatting(d, drp, dap, padding=padding)]
+    #apparently numpy doesn't handle its own uint and bool dtypes correctly
+    #so this is to fix them
+    for k in ['plate', 'ifu', 'drpindex', 'dapindex']:
+        t[k] += 2**31
+    for k in ['velmask', 'sigmask']:
+        t[k] //= 71
 
-    t = Table(names=names, dtype=dtypes)
-    for d in data: t.add_row(d)
-
-    #rearrange columns
-    t = t['plate','ifu','type','drpindex','dapindex',
-          'xc','yc','inc','pa','pab','vsys','vt','v2t','v2r','sig','velmask','sigmask',
-          'xcl','ycl','incl','pal','pabl','vsysl','vtl','v2tl','v2rl','sigl',
-          'xcu','ycu','incu','pau','pabu','vsysu','vtu','v2tu','v2ru','sigu','a_rc']
-    
     #write if desired
     if outfile is not None: t.write(outfile, format='fits', overwrite=True)
     return t
@@ -136,7 +147,7 @@ def maskedarraytofile(array, name=None, fill=0, hdr=None):
     arrayhdu = fits.ImageHDU(array, name=name, header=hdr)
     return arrayhdu
 
-def imagefits(f, galmeta=True, gal=None, outfile=None, padding=20, remotedir=None, outdir='', drpalldir='.', dapalldir='.'):
+def imagefits(f, galmeta=None, gal=None, outfile=None, padding=20, remotedir=None, outdir='', drpalldir='.', dapalldir='.'):
     '''
     Make a fits file for an individual galaxy with its fit parameters and relevant data.
     '''
@@ -163,7 +174,7 @@ def imagefits(f, galmeta=True, gal=None, outfile=None, padding=20, remotedir=Non
               'I','I','S','f4','20f4','20?','20?','I','I','8f4','8f4']
 
     #add parameters to the header
-    if galmeta==True:
+    if galmeta==None:
         drpallfile = glob(drpalldir + '/drpall*')[0]
         galmeta = MaNGAGlobalPar(resdict['plate'], resdict['ifu'], drpall_file=drpallfile)
     hdr = fileio.initialize_primary_header(galmeta)

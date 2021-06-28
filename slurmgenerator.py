@@ -6,14 +6,27 @@ import sys
 from subprocess import run
 from astropy.io import fits
 import time
+from argparse import ArgumentParser
+
+parser = ArgumentParser()
+parser.add_argument('-n' ,'--nnodes', type=int, default=30,
+                    help='Number of nodes to take up')
+parser.add_argument('-r', '--reverse', default=False, action='store_true',
+                    help='Whether to run galaxies in reverse order')
+parser.add_argument('-t', '--hours', type=int, default=12,
+                    help='Max number of hours to run. Only applies to reverse')
+parser.add_argument('--start', type=int, default=0,
+                    help='Index of DRPall file to start at')
+parser.add_argument('--stop', type=int, default=-1,
+                    help='Index of DRPall file to stop at')
+args = parser.parse_args()
 
 if __name__ == '__main__':
     drp = fits.open('/home/bdigiorg/drpall-v3_1_1.fits')[1].data
+    lendrp = len(drp['plate'])
 
-    nnodes = 1
-    start = 0
-    stop = 1
-    galpernode = (stop-start)//nnodes
+    args.stop = lendrp if args.stop == -1 else args.stop
+    galpernode = (args.stop - args.start)//args.nnodes
     print(galpernode, 'galaxies per file')
 
     rootdir = '/data/users/bdigiorg/'
@@ -21,10 +34,15 @@ if __name__ == '__main__':
     remotedir = '/data/users/bdigiorg/download/'
     progressdir = '/data/users/bdigiorg/progress/'
 
-    plates = drp['plate'][start:stop]
-    ifus = np.array(drp['ifudsgn'], dtype=int)[start:stop]
+    plates = drp['plate'][args.start:args.stop]
+    ifus = np.array(drp['ifudsgn'], dtype=int)[args.start:args.stop]
+    if args.reverse:
+        plates = plates[::-1]
+        ifus = ifus[::-1]
+        timelimit = f'#SBATCH --time={args.hours}:00:00'
+    else: timelimit = ''
 
-    for i in range(nnodes):
+    for i in range(args.nnodes):
         platesi = plates[galpernode * i:galpernode * (i+1)]
         ifusi = ifus[galpernode * i:galpernode * (i+1)]
         fname = f'/home/bdigiorg/slurms/nirvana_{platesi[0]}-{platesi[-1]}.slurm'
@@ -33,16 +51,17 @@ if __name__ == '__main__':
         with open(fname, 'a') as f:
             f.write(f'\
 #!/bin/bash \n\
-#SBATCH --job-name={platesi[0]}-{platesi[-1]}_nirvana \n\
+#SBATCH --job-name={args.reverse * "r"}{platesi[0]}-{platesi[-1]}_nirvana \n\
 #SBATCH --partition=windfall \n\
 #SBATCH --account=windfall \n\
-#SBATCH --mail-type=END,FAIL,REQUEUE \n\
+#SBATCH --mail-type=END,FAIL,{"REQUEUE" * (1-args.reverse)} \n\
 #SBATCH --mail-user=bdigiorg@ucsc.edu \n\
 #SBATCH --ntasks=1 \n\
 #SBATCH --cpus-per-task=40 \n\
 #SBATCH --nodes=1 \n\
 #SBATCH --requeue \n \n\
-#SBATCH --output=/data/users/bdigiorg/logs/nirvana_{platesi[0]}-{platesi[-1]}.log \n\
+#SBATCH --output=/data/users/bdigiorg/logs/nirvana_{args.reverse * "r"}{platesi[0]}-{platesi[-1]}.log \n\
+{timelimit} \n\
 \
 pwd; hostname; date \n\n\
 \

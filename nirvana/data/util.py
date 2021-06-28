@@ -8,9 +8,13 @@ import warnings
 from IPython import embed
 
 import numpy as np
-from scipy import sparse, linalg, stats, special, ndimage
+from scipy import sparse, linalg, stats, special, ndimage, spatial
+# Only used for debugging...
+from matplotlib import pyplot
 
 from astropy.stats import sigma_clip
+
+from ..models import geometry
 
 # TODO: Add a set of weights?
 def get_map_bin_transformations(spatial_shape=None, binid=None):
@@ -809,5 +813,93 @@ def find_largest_coherent_region(a):
     uniq_labels, npix = np.unique(labels, return_counts=True)
     indx = uniq_labels != 0
     return labels == uniq_labels[indx][np.argmax(npix[indx])]
+
+
+def gaussian_fill(img, sigma=1., mask=None, threshold=0.1, maxiter=None, debug=False):
+    """
+    Fill masked image regions by Gaussian smoothing the valid pixels.
+
+    Args:
+        img (`numpy.ndarray`_, `numpy.ma.MaskedArray`_):
+            Image to fill.  If a `numpy.ndarray`_ and ``mask`` is None, a
+            warning is issued and a copy of the input array is returned.
+        sigma (:obj:`float`, optional):
+            The sigma of the circular smoothing kernel.
+        mask (`numpy.ndarray`_, optional):
+            The image mask.  Can be None if the input is a
+            `numpy.ma.MaskedArray`_.  If None and the input image is a
+            `numpy.ndarray`_, a warning is issued and a copy of the input array
+            is returned.
+        threshold (:obj:`float`, optional):
+            Minimum fraction of a pixel contributing to a masked pixel to be
+            used when replacing the input value.
+        maxiter (:obj:`int`, optional):
+            Maximum number of smooth-replace iterations.  If None, the
+            iterations will continue until all masked pixels within the convex
+            hull of the unmasked input pixels are filled.
+        debug (:obj:`bool`, optional):
+            Show plots as the function progresses for debugging
+
+    Returns:
+        `numpy.ndarray`_:  The filled image.
+    """
+    # Check input
+    if maxiter is not None and maxiter < 1:
+        raise ValueError('Provided maxiter must be None or >0.')
+    # Set image
+    _img = img.copy() if isinstance(img, np.ma.MaskedArray) \
+            else np.ma.MaskedArray(img.copy(), mask=mask)
+    if mask is not None:
+        _img[mask] = np.ma.masked
+    if not np.any(np.ma.getmaskarray(_img)):
+        # Nothing masked, so return
+        warnings.warn('Input image is not masked.  Returning copy of input image data.')
+        return _img.data.copy()
+
+    # Get the coordinates of the image pixels
+    x, y = np.meshgrid(np.arange(_img.shape[1]), np.arange(_img.shape[0]))
+    # Select the masked pixels
+    bpm = np.ma.getmaskarray(_img)
+    bcoo = np.column_stack((x[bpm], y[bpm]))
+    # ... and the unmasked ones
+    gpm = np.logical_not(bpm)
+    gcoo = np.column_stack((x[gpm], y[gpm]))
+    # Get the polygon defining the convex hull of the unmasked pixels
+    hull = spatial.ConvexHull(gcoo).vertices
+
+    if debug:
+        pyplot.imshow(_img, origin='lower')
+        pyplot.plot(gcoo[hull,0], gcoo[hull,1], color='C3')
+        pyplot.title('Input')
+        pyplot.show()
+
+    # Iteratively fill the masked input pixels
+    niter = 0
+    while np.any(geometry.point_inside_polygon(gcoo[hull], bcoo)) \
+            and (maxiter is None or niter < maxiter):
+        niter += 1
+
+        # Convolve the image
+        fimg = ndimage.gaussian_filter(_img.filled(0.0), sigma)
+        # ... and its normalization
+        mimg = ndimage.gaussian_filter(-np.ma.getmaskarray(_img).astype(float)+1, sigma)
+
+        # Select the input masked pixels that have a normalization above the
+        # threshold
+        _gpm = np.ma.getmaskarray(_img) & (mimg > threshold)
+        # Fill those pixels
+        _img[_gpm] = fimg[_gpm] / mimg[_gpm]
+
+        if debug:
+            pyplot.imshow(_img, origin='lower')
+            pyplot.plot(gcoo[hull,0], gcoo[hull,1], color='C3')
+            pyplot.title(f'Iteration {niter}')
+            pyplot.show()
+
+        # Update the coordinates of the remaining masked pixels
+        bpm = np.ma.getmaskarray(_img)
+        bcoo = np.column_stack((x[bpm], y[bpm]))
+
+    return _img.filled(0.0)
 
 

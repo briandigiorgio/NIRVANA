@@ -590,7 +590,8 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     print(f'{nbin + args.fixcent} radial bins, {ndim} parameters')
     
     #prior bounds and asymmetry defined based off of guess
-    args.setbounds(incgauss=True)
+    #args.setbounds()
+    args.setbounds(incpad=3, incgauss=True)
     args.getasym()
 
     #open up multiprocessing pool if needed

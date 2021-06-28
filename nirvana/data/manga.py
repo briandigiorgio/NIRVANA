@@ -25,7 +25,7 @@ import matplotlib.image as img
 from astropy.io import fits
 from astropy.wcs import WCS
 
-from .util import get_map_bin_transformations, impose_positive_definite
+from .util import get_map_bin_transformations, impose_positive_definite, gaussian_fill
 from .kinematics import Kinematics
 from .meta import GlobalPar
 from ..util.bitmask import BitMask
@@ -910,6 +910,18 @@ class MaNGAGasKinematics(MaNGAKinematics):
             determine which spaxels should be masked. For MaNGA data, the
             primary distinction is whether or not you flag everything or if
             you only flag the spaxels marked as ``DONOTUSE``.
+        flux_bound (:obj:`tuple`, optional):
+            A two-tuple providing bounds for the flux measurements.  If None, no
+            bounds are imposed.  If the first or second element of the tuple is
+            None, no lower or upper bound, respectively, is applied to the data.
+            Any flux measurement outside of provided bounds are masked.
+        sb_fill (:obj:`float`, optional):
+            Use :func:`~nirvana.data.util.gaussian_fill` to fill masked regions
+            of the surface-brightness map within the MaNGA hexagon.  The value
+            provided is the sigma of the circular Gaussian smoothing kernel (in
+            spaxels) used by the mask-replacement algorithm.  If None, the
+            surface-brightness image is not altered.  This is *only* applied to
+            the data used in the model construction.
         covar (:obj:`bool`, optional):
             Construct the covariance matrices for the map data.
         positive_definite (:obj:`bool`, optional):
@@ -921,7 +933,8 @@ class MaNGAGasKinematics(MaNGAKinematics):
             Suppress printed output.
     """
     def __init__(self, maps_file, cube_file=None, image_file=None, psf_ext='RPSF', line='Ha-6564',
-                 mask_flags='any', covar=False, positive_definite=False, quiet=False):
+                 mask_flags='any', flux_bound=None, sb_fill=None, covar=False,
+                 positive_definite=False, quiet=False):
 
         if not os.path.isfile(maps_file):
             raise FileNotFoundError(f'File does not exist: {maps_file}')
@@ -941,6 +954,10 @@ class MaNGAGasKinematics(MaNGAKinematics):
         # be used with this package, but anyway...)
         bintype = maps_file.split('.fits')[0].split('-')[-3]
         coo_ext = 'BIN_LWSKYCOO' if 'VOR' in bintype else 'SPX_SKYCOO'
+
+        # NOTE: The gas effectively doesn't have the same choice as the stellar
+        # kinematics in terms of passing the unbinned spaxel surface-brigthness
+        # because the unbinned line flux is not contained within the VOR files.
 
         # Read the kinematic maps
         # TODO: Switch from print to a logger
@@ -1001,6 +1018,17 @@ class MaNGAGasKinematics(MaNGAKinematics):
         if not quiet:
             print('Done')
 
+        # Mask flux values outside the provided bounds.  This is to deal with
+        # *very* aberrant flux measurements that were not masked by the MaNGA
+        # DAP.
+        if flux_bound is not None:
+            if flux_bound[0] is not None:
+                sb_mask[sb < flux_bound[0]] = True
+            if flux_bound[1] is not None:
+                sb_mask[sb > flux_bound[1]] = True
+
+        grid_sb = None if sb_fill is None else gaussian_fill(sb, sigma=sb_fill, mask=sb_mask)
+
         if covar:
             if not quiet:
                 print('Building covariance matrices ... ')
@@ -1019,8 +1047,9 @@ class MaNGAGasKinematics(MaNGAKinematics):
                          sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sb_covar=sb_covar, sb_anr=sb_anr,
                          sig=sig, sig_ivar=sig_ivar, sig_mask=sig_mask, sig_covar=sig_covar,
                          sig_corr=sig_corr, psf_name=psf_name, psf=psf, binid=binid, grid_x=grid_x, 
-                         grid_y=grid_y, grid_wcs=wcs, reff=reff , fwhm=fwhm, image=image, 
-                         phot_inc=phot_inc, maxr=maxr, positive_definite=positive_definite)
+                         grid_y=grid_y, grid_sb=grid_sb, grid_wcs=wcs, reff=reff, fwhm=fwhm,
+                         image=image, phot_inc=phot_inc, maxr=maxr,
+                         positive_definite=positive_definite)
 
 
 class MaNGAStellarKinematics(MaNGAKinematics):
@@ -1047,11 +1076,35 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             determine which spaxels should be masked. For MaNGA data, the
             primary distinction is whether or not you flag everything or if
             you only flag the spaxels marked as ``DONOTUSE``.
+        unbinned_sb (:obj:`bool`, optional):
+            For binned data, use the unbinned spaxel surface-brightness for
+            model construction.  See the ``grid_sb`` parameter in base class
+            (:class:`~nirvana.data.kinematics.Kinematics`).  If False, the
+            binned surface-brightness is used.
+        sb_fill (:obj:`float`, optional):
+            Use :func:`~nirvana.data.util.gaussian_fill` to fill masked regions
+            of the surface-brightness map within the MaNGA hexagon.  The value
+            provided is the sigma of the circular Gaussian smoothing kernel (in
+            spaxels) used by the mask-replacement algorithm.  If None, the
+            surface-brightness image is not altered.  This is *only* applied to
+            the data used in the model construction; i.e., if ``unbinned_sb`` is
+            False, and an ``sb_fill`` value is provided, the binned
+            surface-brightness values are smoothed and passed to the ``grid_sb``
+            argument of the :class:`~nirvana.data.kinematics.Kinematics` base
+            class.
+        covar (:obj:`bool`, optional):
+            Construct the covariance matrices for the map data.
+        positive_definite (:obj:`bool`, optional):
+            Force the construction of the covariance matrix to be positive
+            definite. Practically speaking, this should generally be False if
+            the covariance matrix is going to be inverted and used in
+            chi-square/Gaussian likelihood calculations.
         quiet (:obj:`bool`, optional):
             Suppress printed output.
     """
     def __init__(self, maps_file, cube_file=None, image_file=None, psf_ext='GPSF',
-                 mask_flags='any', covar=False, positive_definite=False, quiet=False):
+                 mask_flags='any', unbinned_sb=True, sb_fill=None, covar=False,
+                 positive_definite=False, quiet=False):
 
         if not os.path.isfile(maps_file):
             raise FileNotFoundError(f'File does not exist: {maps_file}')
@@ -1082,6 +1135,9 @@ class MaNGAStellarKinematics(MaNGAKinematics):
             binid = hdu['BINID'].data[1]
             grid_x = hdu['SPX_SKYCOO'].data[0]
             grid_y = hdu['SPX_SKYCOO'].data[1]
+            grid_sb = hdu['SPX_MFLUX'].data if unbinned_sb else None
+            grid_sb_mask = np.logical_not((grid_sb > 0) & (hdu['SPX_MFLUX_IVAR'].data > 0)) \
+                            if unbinned_sb else None
             sb = hdu[flux_ext].data
             sb_ivar = hdu['{0}_IVAR'.format(flux_ext)].data
             sb_mask = np.logical_not((sb > 0) & (sb_ivar > 0))
@@ -1121,6 +1177,12 @@ class MaNGAStellarKinematics(MaNGAKinematics):
         if not quiet:
             print('Done')
 
+        if sb_fill is not None:
+            if not unbinned_sb:
+                grid_sb = sb.copy()
+                grid_sb_mask = sb_mask.copy()
+            grid_sb = gaussian_fill(grid_sb, sigma=sb_fill, mask=grid_sb_mask)
+
         if covar:
             if not quiet:
                 print('Building covariance matrices ... ')
@@ -1139,10 +1201,14 @@ class MaNGAStellarKinematics(MaNGAKinematics):
                          sb=sb, sb_ivar=sb_ivar, sb_mask=sb_mask, sb_covar=sb_covar, sig=sig, 
                          sig_ivar=sig_ivar, sig_mask=sig_mask, sig_covar=sig_covar,
                          sig_corr=sig_corr, psf_name=psf_name, psf=psf, binid=binid, grid_x=grid_x, 
-                         grid_y=grid_y, grid_wcs=wcs, reff=reff, fwhm=fwhm, image=image,
-                         phot_inc=phot_inc, maxr=maxr, positive_definite=positive_definite)
+                         grid_y=grid_y, grid_sb=grid_sb, grid_wcs=wcs, reff=reff, fwhm=fwhm,
+                         image=image, phot_inc=phot_inc, maxr=maxr,
+                         positive_definite=positive_definite)
 
 
+# TODO: 
+#    - Need to correct this to use the redshift used by the DAP
+#    - Keep the mngtarg3 targetting bit so that we can check the ancillary program.
 class MaNGAGlobalPar(GlobalPar):
     """
     Provides MaNGA-specific implementation of global parameters.

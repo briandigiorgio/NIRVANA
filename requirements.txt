@@ -1,5 +1,6 @@
 # Package dependencies for nirvana
 setuptools>=46.1
+wheel>=0.36         # Needed for pydl
 ipython>=7.14
 numpy>=1.18.4
 scipy>=1.6

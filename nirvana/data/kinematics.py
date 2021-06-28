@@ -142,6 +142,15 @@ class Kinematics(FitArgs):
             The on-sky Cartesian :math:`y` coordinates of *each*
             element in the data grid. See the description of
             ``grid_x``.
+        grid_sb (`numpy.array`_, optional):
+            The relative surface brightness of the kinematic tracer over the
+            full coordinate grid.  If None, this is either assumed to be unity
+            or set by the provided ``sb``.  When fitting the data with, e.g., 
+            :class:`~nirvana.model.axisym.AxisymmetricDisk` via the ``sb_wgt``
+            parameter in its fitting method, this will be the weighting used.
+            The relevance of this array is to enable the weighting used in
+            constructing the model velocity field to be *unbinned* for otherwise
+            binned kinematic data.
         grid_wcs (`astropy.wcs.WCS`_, optional):
             World coordinate system for the on-sky grid. Currently, this is
             only used for output files.
@@ -169,8 +178,8 @@ class Kinematics(FitArgs):
     def __init__(self, vel, vel_ivar=None, vel_mask=None, vel_covar=None, x=None, y=None, sb=None,
                  sb_ivar=None, sb_mask=None, sb_covar=None, sb_anr=None, sig=None, sig_ivar=None,
                  sig_mask=None, sig_covar=None, sig_corr=None, psf_name=None, psf=None,
-                 aperture=None, binid=None, grid_x=None, grid_y=None, grid_wcs=None, reff=None,
-                 fwhm=None, bordermask=None, image=None, phot_inc=None, maxr=None,
+                 aperture=None, binid=None, grid_x=None, grid_y=None, grid_sb=None, grid_wcs=None,
+                 reff=None, fwhm=None, bordermask=None, image=None, phot_inc=None, maxr=None,
                  positive_definite=False, quiet=False):
 
         # Check shape of input arrays
@@ -184,7 +193,7 @@ class Kinematics(FitArgs):
         if vel.shape[1] != self.nimg:
             raise ValueError('Input arrays to Kinematics must be square.')
         for a in [vel_ivar, vel_mask, x, y, sb, sb_ivar, sb_mask, sig, sig_ivar, sig_mask,
-                  sig_corr, psf, aperture, binid, grid_x, grid_y]:
+                  sig_corr, psf, aperture, binid, grid_x, grid_y, grid_sb]:
             if a is not None and a.shape != vel.shape:
                 raise ValueError('All arrays provided to Kinematics must have the same shape.')
         if (x is None and y is not None) or (x is not None and y is None):
@@ -244,6 +253,11 @@ class Kinematics(FitArgs):
                      'sig_ivar', 'sig_mask', 'sig_corr', 'bordermask','sb_anr']:
             if getattr(self, attr) is not None:
                 setattr(self, attr, getattr(self, attr).ravel()[self.bin_indx])
+
+        # Set the surface-brightness grid.  This needs to be after the
+        # unraveling of the attributes done in the lines above so that I can use
+        # self.remap in the case that grid_sb is not provided directly.
+        self.grid_sb = self.remap('sb').filled(0.0) if grid_sb is None else grid_sb
 
         # Calculate the square of the astrophysical velocity
         # dispersion. This is just the square of the velocity

@@ -156,7 +156,7 @@ def point_inside_polygon(polygon, point):
 
 # TODO: The rest of these functions should probably be in their own module
 
-def asymmetry(args, pa, vsys, xc=0, yc=0):
+def asymmetry(args, pa, vsys, xc=0, yc=0, maxd=.5):
     '''
     Calculate global asymmetry parameter and map of asymmetry.
 

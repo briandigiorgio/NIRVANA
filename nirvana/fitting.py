@@ -432,7 +432,7 @@ def loglike(params, args, squared=False):
 
     #apply a penalty to llike if 2nd order terms are too large
     if hasattr(args, 'penalty') and args.penalty:
-        vtm = paramdict['vt'].mean()
+        vtm  = paramdict['vt' ].mean()
         v2tm = paramdict['v2t'].mean()
         v2rm = paramdict['v2r'].mean()
 

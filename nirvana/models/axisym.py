@@ -18,7 +18,7 @@ from astropy.io import fits
 
 from .oned import HyperbolicTangent, Exponential, ExpBase, Const, PolyEx
 from .geometry import projected_polar, deriv_projected_polar
-from .beam import smear
+from .beam import ConvolveFFTW, smear
 from .util import cov_err
 from ..data.scatter import IntrinsicScatter
 from ..data.util import impose_positive_definite, cinv, inverse, find_largest_coherent_region
@@ -296,14 +296,33 @@ class AxisymmetricDisk:
         self.np = self.nbp + self.rc.np
         if self.dc is not None:
             self.np += self.dc.np
-        # Initialize the parameters
-        self.par = self.guess_par()
+        # Initialize the parameters (see reinit function)
         self.par_err = None
         # Flag which parameters are freely fit
         self.free = np.ones(self.np, dtype=bool)
         self.nfree = np.sum(self.free)
+        # This call to reinit adds the workspace attributes
+        self.reinit()
 
-        # Workspace
+    def __repr__(self):
+        """
+        Provide the representation of the object when written to the screen.
+        """
+        # Collect the attributes relevant to construction of a model
+        attr = [n for n in ['par', 'x', 'y', 'sb', 'beam_fft'] if getattr(self, n) is not None]
+        return f'<{self.__class__.__name__}: Defined attr - {",".join(attr)}>'
+
+    def reinit(self):
+        """
+        Reinitialize the object.
+
+        This resets the model parameters to the guess parameters and erases any
+        existing data used to construct the models.  Note that, just like when
+        instantiating a new object, any calls to :func:`model` after
+        reinitialization will require at least the coordinates (``x`` and ``y``)
+        to be provided to successfully calculate the model.
+        """
+        self.par = self.guess_par()
         self.x = None
         self.y = None
         self.beam_fft = None
@@ -311,6 +330,7 @@ class AxisymmetricDisk:
         self.sb = None
         self.vel_gpm = None
         self.sig_gpm = None
+        self.cnvfftw = None
 
     def guess_par(self):
         """
@@ -427,37 +447,130 @@ class AxisymmetricDisk:
             raise ValueError('Must provide {0} or {1} parameters.'.format(self.np, self.nfree))
         self.par[self.free] = par.copy()
 
-    def _init_coo(self, x, y, beam, is_fft):
+    def _init_coo(self, x, y):
         """
-        Initialize the coordinate arrays and beam-smearing kernel.
+        Initialize the coordinate arrays.
+
+        .. warning::
+            
+            Input coordinate data types are all converted to `numpy.float64`_.
+            This is always true, even though it actually only needed for use of
+            :class:`~nirvana.models.beam.ConvolveFFTW`.
 
         Args:
             x (`numpy.ndarray`_):
-                The 2D x-coordinates at which to evaluate the model.
+                The 2D x-coordinates at which to evaluate the model.  If not
+                None, replace the existing :attr:`x` with this array.
             y (`numpy.ndarray`_):
-                The 2D y-coordinates at which to evaluate the model.
+                The 2D y-coordinates at which to evaluate the model.  If not
+                None, replace the existing :attr:`y` with this array.
+
+        Raises:
+            ValueError:
+                Raised if the shapes of :attr:`x` and :attr:`y` are not the same.
+        """
+        if x is None and y is None:
+            # Nothing to do
+            return
+
+        # Define it and check it
+        if x is not None:
+            self.x = x.astype(float)
+        if y is not None:
+            self.y = y.astype(float)
+        if self.x.shape != self.y.shape:
+            raise ValueError('Input coordinates must have the same shape.')
+
+    def _init_sb(self, sb):
+        """
+        Initialize the surface brightness array.
+
+        .. warning::
+            
+            Input surface-brightness data types are all converted to
+            `numpy.float64`_.  This is always true, even though it actually only
+            needed for use of :class:`~nirvana.models.beam.ConvolveFFTW`.
+
+        Args:
+            sb (`numpy.ndarray`_):
+                2D array with the surface brightness of the object.  If not
+                None, replace the existing :attr:`sb` with this array.
+
+        Raises:
+            ValueError:
+                Raised if the shapes of :attr:`sb` and :attr:`x` are not the same.
+        """
+        if sb is None:
+            # Nothing to do
+            return
+
+        # Check it makes sense to define the surface brightness
+        if self.x is None:
+            raise ValueError('Input coordinates must be instantiated first!')
+
+        # Define it and check it
+        self.sb = sb.astype(float)
+        if self.sb.shape != self.x.shape:
+            raise ValueError('Input coordinates must have the same shape.')
+
+    def _init_beam(self, beam, is_fft, cnvfftw):
+        """
+        Initialize the beam-smearing kernel and the convolution method.
+
+        Args:
             beam (`numpy.ndarray`_):
                 The 2D rendering of the beam-smearing kernel, or its Fast
-                Fourier Transform (FFT).
+                Fourier Transform (FFT).  If not None, replace existing
+                :attr:`beam_fft` with this array (or its FFT, depending on the
+                provided ``is_fft``).
             is_fft (:obj:`bool`):
                 The provided ``beam`` object is already the FFT of the
                 beam-smearing kernel.
+            cnvfftw (:class:`~nirvana.models.beam.ConvolveFFTW`):
+                An object that expedites the convolutions using FFTW/pyFFTW.  If
+                provided, the shape *must* match :attr:``beam_fft`` (after this
+                is potentially updated by the provided ``beam``).  If None, a
+                new :class:`~nirvana.models.beam.ConvolveFFTW` instance is
+                constructed to perform the convolutions.  If the class cannot be
+                constructed because the user doesn't have pyfftw installed, then
+                the convolutions fall back to the numpy routines.
         """
-        if x is not None:
-            self.x = x
-        if y is not None:
-            self.y = y
-        if beam is not None:
-            self.beam_fft = beam if is_fft else np.fft.fftn(np.fft.ifftshift(beam))
+        if beam is None:
+            # Nothing to do
+            return
 
-        if self.x.shape != self.y.shape:
-            raise ValueError('Input coordinates must have the same shape.')
-        if self.beam_fft is not None:
-            if self.x.ndim != 2:
-                raise ValueError('To perform convolution, must provide 2d coordinate arrays.')
-            if self.beam_fft.shape != self.x.shape:
-                raise ValueError('Currently, convolution requires the beam map to have the same '
-                                 'shape as the coordinate maps.')
+        # Check it makes sense to define the beam
+        if self.x is None:
+            raise ValueError('Input coordinates must be instantiated first!')
+        if self.x.ndim != 2:
+            raise ValueError('To perform convolution, must provide 2d coordinate arrays.')
+
+        # Assign the beam and check it
+        self.beam_fft = beam if is_fft else np.fft.fftn(np.fft.ifftshift(beam))
+        if self.beam_fft.shape != self.x.shape:
+            raise ValueError('Currently, convolution requires the beam map to have the same '
+                                'shape as the coordinate maps.')
+
+        # Convolutions will be performed, try to setup the ConvolveFFTW
+        # object (self.cnvfftw).
+        if cnvfftw is None:
+            if self.cnvfftw is not None and self.cnvfftw.shape == self.beam_fft.shape:
+                # ConvolveFFTW is ready to go
+                return
+
+            try:
+                self.cnvfftw = ConvolveFFTW(self.kin.spatial_shape)
+            except:
+                warnings.warn('Could not instantiate ConvolveFFTW; proceeding with numpy '
+                              'FFT/convolution routines.')
+                self.cnvfftw = None
+        else:
+            # A cnvfftw was provided, check it
+            if not isinstance(cnvfftw, ConvolveFFTW):
+                raise TypeError('Provided cnvfftw must be a ConvolveFFTW instance.')
+            if cnvfftw.shape != self.kin.spatial_shape:
+                raise ValueError('cnvfftw shape does not match kinematics.')
+            self.cnvfftw = cnvfftw
 
     def _init_par(self, p0, fix):
         """
@@ -466,11 +579,12 @@ class AxisymmetricDisk:
 
         Args:
             p0 (`numpy.ndarray`_):
-                The initial parameters for the model. Length must be
-                :attr:`np`.
+                The initial parameters for the model.  Can be None.  Length must
+                be :attr:`np`, if not None.
             fix (`numpy.ndarray`_):
                 A boolean array selecting the parameters that should be fixed
-                during the model fit.
+                during the model fit.  Can be None.  Length must be :attr:`np`,
+                if not None.
         """
         if p0 is None:
             p0 = self.guess_par()
@@ -485,10 +599,26 @@ class AxisymmetricDisk:
         self.free = _free
         self.nfree = np.sum(self.free)
 
-    def model(self, par=None, x=None, y=None, beam=None, is_fft=False, cnvfftw=None,
+    def model(self, par=None, x=None, y=None, sb=None, beam=None, is_fft=False, cnvfftw=None,
               ignore_beam=False):
         """
         Evaluate the model.
+
+        Note that arguments passed to this function overwrite any existing
+        attributes of the object, and subsequent calls to this function will
+        continue to use existing attributes, unless they are overwritten.  For
+        example, if ``beam`` is provided here, it overwrites any existing
+        :attr:`beam_fft` and any subsequent calls to ``model`` **that do not
+        provide a new** ``beam`` will use the existing :attr:`beam_fft`.  To
+        remove all internal attributes to get a "clean" instantiation, either
+        define a new :class:`AxisymmetricDisk` instance or use :func:`reinit`.
+
+        .. warning::
+            
+            Input coordinates and surface-brightness data types are all
+            converted to `numpy.float64`_.  This is always true, even though it
+            actually only needed for use of
+            :class:`~nirvana.models.beam.ConvolveFFTW`.
 
         Args:
             par (`numpy.ndarray`_, optional):
@@ -502,6 +632,14 @@ class AxisymmetricDisk:
             y (`numpy.ndarray`_, optional):
                 The 2D y-coordinates at which to evaluate the model. If not
                 provided, the internal :attr:`y` is used.
+            sb (`numpy.ndarray`_, optional):
+                2D array with the surface brightness of the object. This is used
+                to weight the convolution of the kinematic fields according to
+                the luminosity distribution of the object.  Must have the same
+                shape as ``x``. If None, the convolution is unweighted.  If a
+                convolution is not performed (either ``beam`` or
+                :attr:`beam_fft` are not available, or ``ignore_beam`` is True),
+                this array is ignored.
             beam (`numpy.ndarray`_, optional):
                 The 2D rendering of the beam-smearing kernel, or its Fast
                 Fourier Transform (FFT). If not provided, the internal
@@ -521,10 +659,19 @@ class AxisymmetricDisk:
             `numpy.ndarray`_, :obj:`tuple`: The velocity field model, and the
             velocity dispersion field model, if the latter is included
         """
-        if x is not None or y is not None or beam is not None:
-            self._init_coo(x, y, beam, is_fft)
+        # Initialize the coordinates (this does nothing if both x and y are None)
+        self._init_coo(x, y)
+        # Initialize the surface brightness (this does nothing if sb is None)
+        self._init_sb(sb)
+        # Initialize the convolution kernel (this does nothing if beam is None)
+        self._init_beam(beam, is_fft, cnvfftw)
+        if self.beam_fft is not None and not ignore_beam:
+            # Initialize the surface brightness, only if it would be used
+            self._init_sb(sb)
+        # Check that the model can be calculated
         if self.x is None or self.y is None:
             raise ValueError('No coordinate grid defined.')
+        # Reset the parameter values
         if par is not None:
             self._set_par(par)
 
@@ -541,7 +688,7 @@ class AxisymmetricDisk:
             # Only fitting the velocity field
             return vel if self.beam_fft is None or ignore_beam \
                         else smear(vel, self.beam_fft, beam_fft=True, sb=self.sb,
-                                   cnvfftw=cnvfftw)[1]
+                                   cnvfftw=self.cnvfftw)[1]
 
         # Fitting both the velocity and velocity-dispersion field
         ps = pe
@@ -549,7 +696,7 @@ class AxisymmetricDisk:
         sig = self.dc.sample(r, par=self.par[ps:pe])
         return (vel, sig) if self.beam_fft is None or ignore_beam \
                         else smear(vel, self.beam_fft, beam_fft=True, sb=self.sb, sig=sig,
-                                   cnvfftw=cnvfftw)[1:]
+                                   cnvfftw=self.cnvfftw)[1:]
 
     def deriv_model(self, par=None, x=None, y=None, beam=None, is_fft=False, cnvfftw=None,
                     ignore_beam=False):
@@ -738,7 +885,7 @@ class AxisymmetricDisk:
             sfom = np.array([]) if self.dc is None else self._s_chisqr(sig)
         return (vfom, sfom) if sep else np.append(vfom, sfom)
 
-    def _fit_prep(self, kin, p0, fix, scatter, sb_wgt, assume_posdef_covar, ignore_covar):
+    def _fit_prep(self, kin, p0, fix, scatter, sb_wgt, assume_posdef_covar, ignore_covar, cnvfftw):
         """
         Prepare the object for fitting the provided kinematic data.
 
@@ -746,42 +893,52 @@ class AxisymmetricDisk:
             kin (:class:`~nirvana.data.kinematics.Kinematics`):
                 The object providing the kinematic data to be fit.
             p0 (`numpy.ndarray`_):
-                The initial parameters for the model. Length must be
-                :attr:`np`.
+                The initial parameters for the model.  Can be None.  Length must
+                be :attr:`np`, if not None.
             fix (`numpy.ndarray`_):
                 A boolean array selecting the parameters that should be fixed
-                during the model fit.
-            scatter (:obj:`float`, optional):
-                Introduce a fixed intrinsic-scatter term into the model. This
-                single value is added in quadrature to all measurement errors
-                in the calculation of the merit function. If no errors are
-                available, this has the effect of renormalizing the
-                unweighted merit function by 1/scatter.
+                during the model fit.  Can be None.  Length must be :attr:`np`,
+                if not None.
+            scatter (:obj:`float`, array-like):
+                Introduce a fixed intrinsic-scatter term into the model. The 
+                scatter is added in quadrature to all measurement errors in the
+                calculation of the merit function. If no errors are available,
+                this has the effect of renormalizing the unweighted merit
+                function by 1/scatter.  Can be None, which means no intrinsic
+                scatter is added.  If both velocity and velocity dispersion are
+                being fit, this can be a single number applied to both datasets
+                or a 2-element vector that provides different intrinsic scatter
+                measurements for each kinematic moment (ordered velocity then
+                velocity dispersion).
             sb_wgt (:obj:`bool`):
                 Flag to use the surface-brightness data provided by ``kin``
                 to weight the model when applying the beam-smearing.
-            assume_posdef_covar (:obj:`bool`, optional):
+            assume_posdef_covar (:obj:`bool`):
                 If the :class:`~nirvana.data.kinematics.Kinematics` includes
                 covariance matrices, this forces the code to proceed assuming
                 the matrices are positive definite.
-            ignore_covar (:obj:`bool`, optional):
+            ignore_covar (:obj:`bool`):
                 If the :class:`~nirvana.data.kinematics.Kinematics` includes
                 covariance matrices, ignore them and just use the inverse
                 variance.
+            cnvfftw (:class:`~nirvana.models.beam.ConvolveFFTW`):
+                An object that expedites the convolutions using FFTW/pyFFTW.  If
+                provided, the shape *must* match ``kin.spatial_shape``.  If
+                None, a new :class:`~nirvana.models.beam.ConvolveFFTW` instance
+                is constructed to perform the convolutions.  If the class cannot
+                be constructed because the user doesn't have pyfftw installed,
+                then the convolutions fall back to the numpy routines.
         """
+        # Initialize the fit parameters
         self._init_par(p0, fix)
+        # Initialize the data to fit
         self.kin = kin
-        self.x = self.kin.grid_x
-        self.y = self.kin.grid_y
-#        self.sb = self.kin.remap('sb').filled(0.0) if sb_wgt else None
-        self.sb = self.kin.grid_sb if sb_wgt else None
-        self.beam_fft = self.kin.beam_fft
+        self._init_coo(self.kin.grid_x, self.kin.grid_y)
+        self._init_sb(self.kin.grid_sb if sb_wgt else None)
         self.vel_gpm = np.logical_not(self.kin.vel_mask)
         self.sig_gpm = None if self.dc is None else np.logical_not(self.kin.sig_mask)
-
-#        print(f'N good vel: {np.sum(self.vel_gpm)}')
-#        if self.sig_gpm is not None:
-#            print(f'N good sig: {np.sum(self.sig_gpm)}')
+        # Initialize the beam kernel
+        self._init_beam(self.kin.beam_fft, True, cnvfftw)
 
         # Determine which errors were provided
         self.has_err = self.kin.vel_ivar is not None if self.dc is None \
@@ -873,8 +1030,11 @@ class AxisymmetricDisk:
         """
         return self._chisqr if self.has_err or self.has_covar else self._resid
 
+    # TODO: Include an argument here that allows the PSF convolution to be
+    # toggled, regardless of whether or not the `kin` object has the beam
+    # defined.
     def lsq_fit(self, kin, sb_wgt=False, p0=None, fix=None, lb=None, ub=None, scatter=None,
-                verbose=0, assume_posdef_covar=False, ignore_covar=True):
+                verbose=0, assume_posdef_covar=False, ignore_covar=True, cnvfftw=None):
         """
         Use `scipy.optimize.least_squares`_ to fit the model to the provided
         kinematics.
@@ -884,12 +1044,21 @@ class AxisymmetricDisk:
         matrix constructed as a by-product of the least-squares fit) are
         saved to :attr:`par_err`.
 
+        .. warning::
+
+            Currently, this class *does not construct a model of the
+            surface-brightness distribution*.  Instead, any weighting of the
+            model during convolution with the beam profile uses the as-observed
+            surface-brightness distribution, instead of a model of the intrinsic
+            surface brightness distribution.
+
         Args:
             kin (:class:`~nirvana.data.kinematics.Kinematics`):
                 Object with the kinematic data to fit.
             sb_wgt (:obj:`bool`, optional):
-                Flag to use the surface-brightness data provided by ``kin``
-                to weight the model when applying the beam-smearing.
+                Flag to use the surface-brightness data provided by ``kin`` to
+                weight the model when applying the beam-smearing.  **See the
+                warning above**.
             p0 (`numpy.ndarray`_, optional):
                 The initial parameters for the model. Length must be
                 :attr:`np`.
@@ -906,13 +1075,17 @@ class AxisymmetricDisk:
                 are used (see :func:`par_bounds`). The length of the vector
                 must match the total number of parameters, even if some of
                 the parameters are fixed.
-            scatter (:obj:`float`, `numpy.ndarray`_, optional):
-                Introduce a fixed intrinsic-scatter term into the model. This
-                single value per kinematic moment (v, sigma) is added in
-                quadrature to all measurement errors in the calculation of
-                the merit function. If no errors are available, this has the
-                effect of renormalizing the unweighted merit function by
-                1/scatter.
+            scatter (:obj:`float`, array-like, optional):
+                Introduce a fixed intrinsic-scatter term into the model. The 
+                scatter is added in quadrature to all measurement errors in the
+                calculation of the merit function. If no errors are available,
+                this has the effect of renormalizing the unweighted merit
+                function by 1/scatter.  Can be None, which means no intrinsic
+                scatter is added.  If both velocity and velocity dispersion are
+                being fit, this can be a single number applied to both datasets
+                or a 2-element vector that provides different intrinsic scatter
+                measurements for each kinematic moment (ordered velocity then
+                velocity dispersion).
             verbose (:obj:`int`, optional):
                 Verbosity level to pass to `scipy.optimize.least_squares`_.
             assume_posdef_covar (:obj:`bool`, optional):
@@ -923,9 +1096,17 @@ class AxisymmetricDisk:
                 If the :class:`~nirvana.data.kinematics.Kinematics` includes
                 covariance matrices, ignore them and just use the inverse
                 variance.
+            cnvfftw (:class:`~nirvana.models.beam.ConvolveFFTW`, optional):
+                An object that expedites the convolutions using FFTW/pyFFTW.  If
+                provided, the shape *must* match ``kin.spatial_shape``.  If
+                None, a new :class:`~nirvana.models.beam.ConvolveFFTW` instance
+                is constructed to perform the convolutions.  If the class cannot
+                be constructed because the user doesn't have pyfftw installed,
+                then the convolutions fall back to the numpy routines.
         """
         # Prepare to fit the data.
-        self._fit_prep(kin, p0, fix, scatter, sb_wgt, assume_posdef_covar, ignore_covar)
+        self._fit_prep(kin, p0, fix, scatter, sb_wgt, assume_posdef_covar, ignore_covar,
+                       cnvfftw)
         # Get the method used to generate the figure-of-merit.
         fom = self._get_fom()
         # Parameter boundaries

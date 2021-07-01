@@ -34,6 +34,10 @@ class Func1D:
         raise NotImplementedError('Sample function not defined for {0}!'.format(
                                     self.__class__.__name__))
 
+    def deriv_sample(self, x, par=None, check=False):
+        raise NotImplementedError('Sample function and parameter derivatives not defined for '
+                                  '{0}!'.format(self.__class__.__name__))
+
     def ddx(self, x, par=None, check=False):
         raise NotImplementedError('Function derivative not defined for {0}!'.format(
                                     self.__class__.__name__))
@@ -387,7 +391,35 @@ class HyperbolicTangent(Func1D):
         """
         if par is not None:
             self._set_par(par)
-        return self.par[0]*np.tanh(np.asarray(x)/self.par[1])
+        return self.par[0]*np.tanh(np.atleast_1d(x)/self.par[1])
+
+    def deriv_sample(self, x, par=None, check=False):
+        """
+        Calculate the function and its derivative w.r.t. the parameters.
+
+        Args:
+            x (array-like):
+                Locations at which to sample the function.
+            par (array-like, optional):
+                The function parameters. If None, the current values
+                of :attr:`par` are used. Must have a length of
+                :attr:`np`.
+            check (:obj:`bool`, optional):
+                Ignored. Only included for a uniform interface with
+                other subclasses of :class:`Func1D`.
+
+        Returns:
+            :obj:`tuple`: Two `numpy.ndarray`_ objects: (1) the function
+            evaluated at each ``x`` value and (2) the derivative of the function
+            with respect to each parameter.  The object with the derivatives has
+            one more dimension than the function data, with a length that is the
+            number of functional parameters.
+        """
+        if par is not None:
+            self._set_par(par)
+        _x = np.atleast_1d(x)/self.par[1]
+        f = self.par[0]*np.tanh(_x)
+        return f, np.stack((f/self.par[0], -self.par[0]*_x/self.par[1]/np.cosh(_x)**2), axis=-1)
 
     def ddx(self, x, par=None):
         """
@@ -396,7 +428,7 @@ class HyperbolicTangent(Func1D):
         """
         if par is not None:
             self._set_par(par)
-        sech2 = (1./numpy.cosh(np.asarray(x)/self.par[1]))**2
+        sech2 = 1./np.cosh(np.atleast_1d(x)/self.par[1])**2
         return self.par[0] * sech2 / self.par[1]
 
     def d2dx2(self, x, par=None):
@@ -406,8 +438,8 @@ class HyperbolicTangent(Func1D):
         """
         if par is not None:
             self._set_par(par)
-        xh = np.asarray(x)/self.hrot
-        sech2 = (1./numpy.cosh(xh))**2
+        xh = np.atleast_1d(x)/self.par[1]
+        sech2 = 1./np.cosh(xh)**2
         return -2. * self.par[0] * sech2 * np.tanh(xh) / self.par[1]**2 
 
 
@@ -490,7 +522,7 @@ class PolyEx(Func1D):
         """
         if par is not None:
             self._set_par(par)
-        s = np.asarray(x)/self.par[1]
+        s = np.atleast_1d(x)/self.par[1]
         return self.par[0] * (1 - np.exp(-s)) * (1 + self.par[2] * s)
 
     def ddx(self, x, par=None):
@@ -500,7 +532,7 @@ class PolyEx(Func1D):
         """
         if par is not None:
             self._set_par(par)
-        s = np.asarray(x)/self.par[1]
+        s = np.atleast_1d(x)/self.par[1]
         return self.par[0] * (np.exp(-s) * (1 + self.par[2]*(s-1)) + self.par[2]) / self.par[1]
 
     def d2dx2(self, x, par=None):
@@ -510,7 +542,7 @@ class PolyEx(Func1D):
         """
         if par is not None:
             self._set_par(par)
-        s = np.asarray(x)/self.par[1]
+        s = np.atleast_1d(x)/self.par[1]
         return -self.par[0] * np.exp(-s) * (1+ self.par[2]*(s-2)) / self.par[1]**2 
 
 
@@ -585,7 +617,35 @@ class Exponential(Func1D):
         """
         if par is not None:
             self._set_par(par)
-        return self.par[0]*np.exp(-np.asarray(x)/self.par[1])
+        return self.par[0]*np.exp(-np.atleast_1d(x)/self.par[1])
+
+    def deriv_sample(self, x, par=None, check=False):
+        """
+        Calculate the function and its derivative w.r.t. the parameters.
+
+        Args:
+            x (array-like):
+                Locations at which to sample the function.
+            par (array-like, optional):
+                The function parameters. If None, the current values
+                of :attr:`par` are used. Must have a length of
+                :attr:`np`.
+            check (:obj:`bool`, optional):
+                Ignored. Only included for a uniform interface with
+                other subclasses of :class:`Func1D`.
+
+        Returns:
+            :obj:`tuple`: Two `numpy.ndarray`_ objects: (1) the function
+            evaluated at each ``x`` value and (2) the derivative of the function
+            with respect to each parameter.  The object with the derivatives has
+            one more dimension than the function data, with a length that is the
+            number of functional parameters.
+        """
+        if par is not None:
+            self._set_par(par)
+        _x = np.atleast_1d(x)/self.par[1]
+        f = self.par[0]*np.exp(-_x)
+        return f, np.stack((f/self.par[0], _x*f/self.par[1]), axis=-1)
 
     def ddx(self, x, par=None, check=False):
         """
@@ -677,7 +737,7 @@ class ExpBase(Func1D):
         """
         if par is not None:
             self._set_par(par)
-        return self.par[0]*np.exp(-np.asarray(x)/self.par[1]) + self.par[2]
+        return self.par[0]*np.exp(-np.atleast_1d(x)/self.par[1]) + self.par[2]
 
     def ddx(self, x, par=None, check=False):
         """
@@ -770,7 +830,7 @@ class PowerExp(Func1D):
         """
         if par is not None:
             self._set_par(par)
-        _x = np.asarray(x)
+        _x = np.atleast_1d(x)
         c = (np.e / self.par[1] / self.par[2])**self.par[2]
         return c * self.par[0] * np.exp(-_x/self.par[1]) * _x**self.par[2]
 

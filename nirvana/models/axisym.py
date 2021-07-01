@@ -17,7 +17,7 @@ from matplotlib import pyplot, rc, patches, ticker, colors
 from astropy.io import fits
 
 from .oned import HyperbolicTangent, Exponential, ExpBase, Const, PolyEx
-from .geometry import projected_polar
+from .geometry import projected_polar, deriv_projected_polar
 from .beam import smear
 from .util import cov_err
 from ..data.scatter import IntrinsicScatter
@@ -546,6 +546,118 @@ class AxisymmetricDisk:
         # Fitting both the velocity and velocity-dispersion field
         ps = pe
         pe = ps + self.dc.np
+        sig = self.dc.sample(r, par=self.par[ps:pe])
+        return (vel, sig) if self.beam_fft is None or ignore_beam \
+                        else smear(vel, self.beam_fft, beam_fft=True, sb=self.sb, sig=sig,
+                                   cnvfftw=cnvfftw)[1:]
+
+    def deriv_model(self, par=None, x=None, y=None, beam=None, is_fft=False, cnvfftw=None,
+                    ignore_beam=False):
+        """
+        Evaluate the derivative of the model w.r.t all input parameters.
+
+        Args:
+            par (`numpy.ndarray`_, optional):
+                The list of parameters to use. If None, the internal
+                :attr:`par` is used. Length should be either :attr:`np` or
+                :attr:`nfree`. If the latter, the values of the fixed
+                parameters in :attr:`par` are used.
+            x (`numpy.ndarray`_, optional):
+                The 2D x-coordinates at which to evaluate the model. If not
+                provided, the internal :attr:`x` is used.
+            y (`numpy.ndarray`_, optional):
+                The 2D y-coordinates at which to evaluate the model. If not
+                provided, the internal :attr:`y` is used.
+            beam (`numpy.ndarray`_, optional):
+                The 2D rendering of the beam-smearing kernel, or its Fast
+                Fourier Transform (FFT). If not provided, the internal
+                :attr:`beam_fft` is used.
+            is_fft (:obj:`bool`, optional):
+                The provided ``beam`` object is already the FFT of the
+                beam-smearing kernel.  Ignored if ``beam`` is not provided.
+            cnvfftw (:class:`~nirvana.models.beam.ConvolveFFTW`, optional):
+                An object that expedites the convolutions using
+                FFTW/pyFFTW. If None, the convolution is done using numpy
+                FFT routines.
+            ignore_beam (:obj:`bool`, optional):
+                Ignore the beam-smearing when constructing the model. I.e.,
+                construct the *intrinsic* model.
+
+        Returns:
+            `numpy.ndarray`_, :obj:`tuple`: The velocity field model, and the
+            velocity dispersion field model, if the latter is included
+        """
+        if x is not None or y is not None or beam is not None:
+            self._init_coo(x, y, beam, is_fft)
+        if self.x is None or self.y is None:
+            raise ValueError('No coordinate grid defined.')
+        if par is not None:
+            self._set_par(par)
+
+        # Initialize the derivative arrays needed for the coordinate calculation
+        dx = np.zeros(self.x.shape+(self.np,), dtype=float)
+        dy = np.zeros(self.x.shape+(self.np,), dtype=float)
+        dpa = np.zeros(self.np, dtype=float)
+        dinc = np.zeros(self.np, dtype=float)
+
+        dx[...,0] = -1.
+        dy[...,1] = -1.
+        dpa[2] = np.radians(1.)
+        dinc[3] = np.radians(1.)
+
+        r, theta, dr, dtheta = deriv_projected_polar(self.x - self.par[0], self.y - self.par[1],
+                                                     *np.radians(self.par[2:4]), dxdp=dx, dydp=dy,
+                                                     dpadp=dpa, dincdp=dinc)
+
+        # NOTE: The velocity-field construction does not include the
+        # sin(inclination) term because this is absorbed into the
+        # rotation curve amplitude.
+
+        # Get the parameter index range
+        ps = self.nbp
+        pe = ps + self.rc.np
+
+        # Calculate the rotation speed and its parameter derivatives
+        dvrot = np.zeros(self.x.shape+(self.np,), dtype=float)
+        vrot, dvrot[...,ps:pe] = self.rc.deriv_sample(r, par=self.par[ps:pe])
+        dvrot += self.rc.ddx(r, par=self.par[ps:pe])[...,None]*dr
+
+        # Calculate the line-of-sight velocity and its parameter derivatives
+        cost = np.cos(theta)
+        v = vrot*cost + self.par[4]
+        dv = dvrot*cost[...,None] - (vrot*np.sin(theta))[...,None]*dtheta
+        dv[...,4] = 1.
+
+        if self.dc is None:
+            # Only fitting the velocity field
+            if self.beam_fft is None or ignore_beam:
+                # Not smearing
+                return v, dv
+
+            # Smear both the line-of-sight velocities and the derivatives
+            v = smear(v, self.beam_fft, beam_fft=True, sb=self.sb, cnvfftw=cnvfftw)[1]
+            for i in range(dv.shape[-1]):
+                dv[...,i] = smear(dv[...,i], self.beam_fft, beam_fft=True, sb=self.sb,
+                                  cnvfftw=cnvfftw)[1]
+            return v, dv
+
+        # TODO: propagate derivatives through smearing function!
+
+        # Fitting both the velocity and velocity-dispersion field
+
+        # Get the parameter index range
+        ps = pe
+        pe = ps + self.dc.np
+
+        # Calculate the dispersion profile and its parameter derivatives
+        dsig = np.zeros(self.x.shape+(self.np,), dtype=float)
+        sig, dsig[...,ps:pe] = self.dc.deriv_sample(r, par=self.par[ps:pe])
+        dsig += self.dc.ddx(r, par=self.par[ps:pe])[...,None]*dr
+
+        if self.beam_fft is None or ignore_beam:
+            # Not smearing
+            return v, dv, sig, dsig
+
         sig = self.dc.sample(r, par=self.par[ps:pe])
         return (vel, sig) if self.beam_fft is None or ignore_beam \
                         else smear(vel, self.beam_fft, beam_fft=True, sb=self.sb, sig=sig,

@@ -30,6 +30,64 @@ def test_disk():
     assert numpy.isclose(vel[n//2,n//2], _vel[n//2,n//2]), 'Smearing moved the center.'
 
 
+def test_disk_derivative():
+    disk = AxisymmetricDisk()
+    disk.par[:2] = 0.1       # Ensure that the center is at 0,0
+    disk.par[-1] = 10.       # Put in a quickly rising RC
+
+    # Finite difference test steps
+    #                 x0      y0      pa     inc    vsys   vinf   hv
+    dp = numpy.array([0.0001, 0.0001, 0.001, 0.001, 0.001, 0.001, 0.0001])
+
+    n = 101
+    x = numpy.arange(n, dtype=float)[::-1] - n//2
+    y = numpy.arange(n, dtype=float) - n//2
+    x, y = numpy.meshgrid(x, y)
+
+    v, dv = disk.deriv_model(disk.par, x=x, y=y)
+    vp = numpy.empty(v.shape+(disk.par.size,), dtype=float)
+    p = disk.par.copy()
+    for i in range(disk.par.size):
+        _p = p.copy()
+        _p[i] += dp[i]
+        print(_p)
+        vp[...,i] = disk.model(_p, x=x, y=y)
+    disk._set_par(p)
+
+    fd_dv = (vp - v[...,None])/dp[None,:]
+    for i in range(disk.par.size):
+        assert numpy.allclose(dv[...,i], fd_dv[...,i], rtol=0., atol=1e-4), \
+                f'Finite difference produced different derivative for parameter {i+1}!'
+
+    from matplotlib import pyplot
+
+    beam = gauss2d_kernel(n, 3.)
+
+    _v, _dv = disk.deriv_model(disk.par, x=x, y=y, beam=beam)
+    _vp = numpy.empty(_v.shape+(disk.par.size,), dtype=float)
+    p = disk.par.copy()
+    for i in range(disk.par.size):
+        _p = p.copy()
+        _p[i] += dp[i]
+        print(_p)
+        _vp[...,i] = disk.model(_p, x=x, y=y, beam=beam)
+    disk._set_par(p)
+
+    _fd_dv = (vp - v[...,None])/dp[None,:]
+
+    embed()
+    exit()
+
+
+
+
+    assert numpy.isclose(vel[n//2,n//2], _vel[n//2,n//2]), 'Smearing moved the center.'
+
+
+test_disk_derivative()
+
+
+
 @requires_remote
 def test_lsq_nopsf():
 

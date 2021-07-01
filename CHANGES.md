@@ -8,6 +8,7 @@
    useful for modeling the stellar kinematics.
  - Allow the surface-brightness masks to be patched by a Gaussian
    smoothing algorithm to fill surface-brightness holes.
+ - `AxisymmetriDisk` now uses `ConvolveFFTW` by default.
 
 0.1.0
 -----

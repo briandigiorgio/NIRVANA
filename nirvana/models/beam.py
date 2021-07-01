@@ -94,6 +94,19 @@ class ConvolveFFTW:
     """
     Class to perform convolutions using the FFTW library.
 
+    Speed gains with FFTW depend on allocating a set block in memory that is
+    used repeatedly for the FFT computations.  If you're planning on just
+    convolving one image once, this method is likely slower than the standard
+    approach using `numpy`_ routines (see :func:`convolve_fft`).
+    
+    
+    Instantiation of this object requires the shape of the arrays that will be
+    convolved.  When using this class to perform the convolution, both the
+    convolved image and the convolution kernel must have this same shape.  Also,
+    the instantiation of the memory workspace assumes that both the image to be
+    convolved and the convolution kernel are made up of 64-bit floats.  The
+    methods check the data type and raise an exception if this is not true.
+
     Args:
         shape (:obj:`tuple`):
             Shape of the arrays to be convolved. Any arrays passed to
@@ -105,7 +118,8 @@ class ConvolveFFTW:
     """
     def __init__(self, shape, flags=None):
         if pyfftw is None:
-            raise ImportError('Must install pyfftw to use ConvolveFFTW; run pip install pyfftw.')
+            raise ImportError('pyfftw package must be available to use ConvolveFFTW.  Ensure '
+                              'that both the FFTW library and the PyFFTW interface are installed.')
         # Dimensionality
         self.shape = shape
         self.ndim = len(self.shape)
@@ -151,13 +165,14 @@ class ConvolveFFTW:
 
         Args:
             data (`numpy.ndarray`_):
-                Data to convolve.
+                Data to convolve.  Data type must be `numpy.float64` and shape
+                must match :attr:`shape`.
             kernel (`numpy.ndarray`_):
                 The convolution kernel, which must have the same shape as
-                ``data``. If ``kernel_fft`` is True, this is the FFT of
-                the kernel image; otherwise, this is the direct kernel
-                image with the center of the kernel at the center of the
-                array.
+                ``data``. If ``kernel_fft`` is True, this is the FFT of the
+                kernel image and must have type `numpy.complex128`_; otherwise,
+                this is the direct kernel image with the center of the kernel at
+                the center of the array and must have type `numpy.float64`_.
             kernel_fft (:obj:`bool`, optional):
                 Flag that the provided ``kernel`` array is actually the
                 FFT of the kernel, not its direct image.
@@ -171,13 +186,12 @@ class ConvolveFFTW:
 
         Raises:
             ValueError:
-                Raised if ``data`` and ``kernel`` do not have the expected
-                shape or if any of their values are not finite.
+                Raised if ``data`` and ``kernel`` do not have the expected shape
+                or if any of their values are not finite.
             TypeError:
-                Raised if the data types of either ``data`` or
-                ``kernel`` do not match the expected values
-                (np.float64 for direct data, np.complex128 for
-                Fourier Transform data).
+                Raised if the data types of either ``data`` or ``kernel`` do not
+                match the expected values (numpy.float64 for direct data,
+                numpy.complex128 for Fourier Transform data).
         """
         if not np.all(np.isfinite(data)) or not np.all(np.isfinite(kernel)):
             raise ValueError('Data and kernel must both have valid values.')
@@ -206,7 +220,8 @@ class ConvolveFFTW:
 
         Args:
             data (`numpy.ndarray`_):
-                Data for FFT computation.
+                Data for FFT computation.  Data type must be `numpy.float64` and
+                shape must match :attr:`shape`.
             copy (:obj:`bool`, optional):
                 The result of the FFT is computed using the
                 :attr:`data_fft` workspace. If False, the

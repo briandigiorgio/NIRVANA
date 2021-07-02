@@ -9,6 +9,10 @@
  - Allow the surface-brightness masks to be patched by a Gaussian
    smoothing algorithm to fill surface-brightness holes.
  - `AxisymmetriDisk` now uses `ConvolveFFTW` by default.
+ - Included analytic calculations of derivatives for use with the
+   `AxisymmetricDisk` fits.  Analytic calculations are used by default,
+   but the `lsq_fit` function allows for a fall back to the
+   finite-difference methods provided by `scipy.optimize.least_squares`.
 
 0.1.0
 -----

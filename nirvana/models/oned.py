@@ -10,7 +10,7 @@ from IPython import embed
 import numpy as np
 from scipy import special
 
-from .util import lin_interp
+from .util import lin_interp, deriv_lin_interp, sech2
 
 
 class Func1D:
@@ -58,7 +58,7 @@ class StepFunction(Func1D):
             as those edges.
         par (array-like, optional):
             The values of the step function. Shape must be the same
-            as ``edges``. If None, step levels set by
+            as ``edges``. If None, step levels are set by
             :func:`guess_par`.
         minv (:obj:`float`, optional):
             Uniform lower bound for all steps. If None, set by
@@ -135,7 +135,7 @@ class StepFunction(Func1D):
         if not check:
             return i2
         if not np.all(np.isin(np.arange(self.np-1)+1, np.unique(i2))):
-            raise ValueError('Not all segments of the piece-wise linear function are constrained.')
+            raise ValueError('Not all segments of the step function are constrained.')
 
     def sample(self, x, par=None, check=False):
         """
@@ -159,10 +159,48 @@ class StepFunction(Func1D):
         if par is not None:
             self._set_par(par)
         f = np.full(len(x), self.par[0], dtype=float)
-        i2 = self._sort(x, check)
+        i2 = self._sort(x, check)   # 1-indexed step associated with each x
         indx = (i2 > 0)
         f[indx] = self.par[i2[indx]-1]
         return f
+
+    def deriv_sample(self, x, par=None, check=False):
+        """
+        Calculate the function and its derivative w.r.t. the parameters.
+
+        The derivative of the step function w.r.t. each parameter is 1 in the
+        radial range of the relevant step and 0 elsewhere.
+
+        Args:
+            x (array-like):
+                Locations at which to sample the function.
+            par (array-like, optional):
+                The function parameters. If None, the current values
+                of :attr:`par` are used. Must have a length of
+                :attr:`np`.
+            check (:obj:`bool`, optional):
+                Ignored. Only included for a uniform interface with
+                other subclasses of :class:`Func1D`.
+
+        Returns:
+            :obj:`tuple`: Two `numpy.ndarray`_ objects: (1) the function
+            evaluated at each ``x`` value and (2) the derivative of the function
+            with respect to each parameter.  The object with the derivatives has
+            one more dimension than the function data, with a length that is the
+            number of functional parameters.
+        """
+        if par is not None:
+            self._set_par(par)
+        f = np.full(len(x), self.par[0], dtype=float)
+        df = np.zeros((len(x), self.np), dtype=float)
+        i2 = self._sort(x, check)   # 1-indexed step associated with each x
+        indx = (i2 > 0)
+        f[indx] = self.par[i2[indx]-1]
+        df[np.where(indx)[0],i2[indx]-1] = 1.
+        indx = i2 == 0
+        df[np.where(indx)[0],np.array([0]*np.sum(indx))] = 1.
+        return f, df
+
 
     def ddx(self, x, par=None, check=False):
         """
@@ -271,7 +309,7 @@ class PiecewiseLinear(Func1D):
 
     def sample(self, x, par=None, check=False):
         """
-        Sample the piece-wise linear function.
+        Sample the piecewise linear function.
 
         Args:
             x (array-like):
@@ -285,7 +323,7 @@ class PiecewiseLinear(Func1D):
                 step.
 
         Returns:
-            `numpy.ndarray`_: Values of the step function at each
+            `numpy.ndarray`_: Values of the piecewise function at each
             ``x`` value.
         """
         if par is not None:
@@ -298,6 +336,48 @@ class PiecewiseLinear(Func1D):
         f[i2 == self.np] = self.par[-1]
         return f
 
+    def deriv_sample(self, x, par=None, check=False):
+        """
+        Calculate the function and its derivative w.r.t. the parameters.
+
+        The derivative of the step function w.r.t. each parameter is 1 in the
+        radial range of the relevant step and 0 elsewhere.
+
+        Args:
+            x (array-like):
+                Locations at which to sample the function.
+            par (array-like, optional):
+                The function parameters. If None, the current values
+                of :attr:`par` are used. Must have a length of
+                :attr:`np`.
+            check (:obj:`bool`, optional):
+                Ignored. Only included for a uniform interface with
+                other subclasses of :class:`Func1D`.
+
+        Returns:
+            :obj:`tuple`: Two `numpy.ndarray`_ objects: (1) the function
+            evaluated at each ``x`` value and (2) the derivative of the function
+            with respect to each parameter.  The object with the derivatives has
+            one more dimension than the function data, with a length that is the
+            number of functional parameters.
+        """
+        if par is not None:
+            self._set_par(par)
+        f = np.full(len(x), self.par[0], dtype=float)
+        df = np.zeros((len(x), self.np), dtype=float)
+        i2 = self._sort(x, check)
+        indx = (i2 > 0) & (i2 < self.np)
+        f[indx], _df = deriv_lin_interp(x[indx], self.edges[i2[indx]-1], self.par[i2[indx]-1],
+                                        self.edges[i2[indx]], self.par[i2[indx]])
+        df[indx,i2[indx]-1] = _df[:,0]
+        df[indx,i2[indx]] = _df[:,1]
+        indx = i2 == self.np
+        df[np.where(indx)[0],np.array([self.np-1]*np.sum(indx))] = 1.
+        f[indx] = self.par[-1]
+        indx = i2 == 0
+        df[np.where(indx)[0],np.array([0]*np.sum(indx))] = 1.
+        return f, df
+
     def ddx(self, x, par=None, check=False):
         """
         Sample the derivative of the step function. See
@@ -308,8 +388,8 @@ class PiecewiseLinear(Func1D):
         f = np.zeros(len(x), dtype=float)
         i2 = self._sort(x, check)
         indx = (i2 > 0) & (i2 < self.np)
-        f[indx] = (self.par[i2[indx]] - self.par[i2[indx]-1]) \
-                    / (self.edges[i2[indx]] - self.edges[i2[indx]-1])
+        m = np.diff(self.par)/np.diff(self.edges)
+        f[indx] = m[i2[indx]-1]
         return f
 
     def d2dx2(self, x, par=None, check=False):
@@ -419,7 +499,8 @@ class HyperbolicTangent(Func1D):
             self._set_par(par)
         _x = np.atleast_1d(x)/self.par[1]
         f = self.par[0]*np.tanh(_x)
-        return f, np.stack((f/self.par[0], -self.par[0]*_x/self.par[1]/np.cosh(_x)**2), axis=-1)
+        _sech2 = sech2(_x)
+        return f, np.stack((f/self.par[0], -self.par[0]*_x*_sech2/self.par[1]), axis=-1)
 
     def ddx(self, x, par=None):
         """
@@ -428,8 +509,8 @@ class HyperbolicTangent(Func1D):
         """
         if par is not None:
             self._set_par(par)
-        sech2 = 1./np.cosh(np.atleast_1d(x)/self.par[1])**2
-        return self.par[0] * sech2 / self.par[1]
+        _sech2 = sech2(np.atleast_1d(x)/self.par[1])
+        return self.par[0] * _sech2 / self.par[1]
 
     def d2dx2(self, x, par=None):
         """
@@ -439,8 +520,8 @@ class HyperbolicTangent(Func1D):
         if par is not None:
             self._set_par(par)
         xh = np.atleast_1d(x)/self.par[1]
-        sech2 = 1./np.cosh(xh)**2
-        return -2. * self.par[0] * sech2 * np.tanh(xh) / self.par[1]**2 
+        _sech2 = sech2(xh)
+        return -2. * self.par[0] * _sech2 * np.tanh(xh) / self.par[1]**2 
 
 
 class PolyEx(Func1D):
@@ -524,6 +605,37 @@ class PolyEx(Func1D):
             self._set_par(par)
         s = np.atleast_1d(x)/self.par[1]
         return self.par[0] * (1 - np.exp(-s)) * (1 + self.par[2] * s)
+
+    def deriv_sample(self, x, par=None, check=False):
+        """
+        Calculate the function and its derivative w.r.t. the parameters.
+
+        Args:
+            x (array-like):
+                Locations at which to sample the function.
+            par (array-like, optional):
+                The function parameters. If None, the current values
+                of :attr:`par` are used. Must have a length of
+                :attr:`np`.
+            check (:obj:`bool`, optional):
+                Ignored. Only included for a uniform interface with
+                other subclasses of :class:`Func1D`.
+
+        Returns:
+            :obj:`tuple`: Two `numpy.ndarray`_ objects: (1) the function
+            evaluated at each ``x`` value and (2) the derivative of the function
+            with respect to each parameter.  The object with the derivatives has
+            one more dimension than the function data, with a length that is the
+            number of functional parameters.
+        """
+        if par is not None:
+            self._set_par(par)
+        s = np.atleast_1d(x)/self.par[1]
+        e = np.exp(-s)
+        t = 1 - e
+        a = 1 + self.par[2] * s
+        f = self.par[0] * t * a
+        return f, np.stack((f/self.par[0], -f*s*(e/t + self.par[2]/a)/self.par[1], f*s/a), axis=-1)
 
     def ddx(self, x, par=None):
         """
@@ -739,6 +851,35 @@ class ExpBase(Func1D):
             self._set_par(par)
         return self.par[0]*np.exp(-np.atleast_1d(x)/self.par[1]) + self.par[2]
 
+    def deriv_sample(self, x, par=None, check=False):
+        """
+        Calculate the function and its derivative w.r.t. the parameters.
+
+        Args:
+            x (array-like):
+                Locations at which to sample the function.
+            par (array-like, optional):
+                The function parameters. If None, the current values
+                of :attr:`par` are used. Must have a length of
+                :attr:`np`.
+            check (:obj:`bool`, optional):
+                Ignored. Only included for a uniform interface with
+                other subclasses of :class:`Func1D`.
+
+        Returns:
+            :obj:`tuple`: Two `numpy.ndarray`_ objects: (1) the function
+            evaluated at each ``x`` value and (2) the derivative of the function
+            with respect to each parameter.  The object with the derivatives has
+            one more dimension than the function data, with a length that is the
+            number of functional parameters.
+        """
+        if par is not None:
+            self._set_par(par)
+        _x = np.atleast_1d(x)/self.par[1]
+        f = self.par[0]*np.exp(-_x) + self.par[2]
+        return f, np.stack((np.exp(-_x), _x*(f-self.par[2])/self.par[1], np.ones(_x.shape)),
+                           axis=-1)
+
     def ddx(self, x, par=None, check=False):
         """
         Sample the derivative of the function. See :func:`sample` for
@@ -834,6 +975,39 @@ class PowerExp(Func1D):
         c = (np.e / self.par[1] / self.par[2])**self.par[2]
         return c * self.par[0] * np.exp(-_x/self.par[1]) * _x**self.par[2]
 
+    def deriv_sample(self, x, par=None, check=False):
+        """
+        Calculate the function and its derivative w.r.t. the parameters.
+
+        Args:
+            x (array-like):
+                Locations at which to sample the function.
+            par (array-like, optional):
+                The function parameters. If None, the current values
+                of :attr:`par` are used. Must have a length of
+                :attr:`np`.
+            check (:obj:`bool`, optional):
+                Ignored. Only included for a uniform interface with
+                other subclasses of :class:`Func1D`.
+
+        Returns:
+            :obj:`tuple`: Two `numpy.ndarray`_ objects: (1) the function
+            evaluated at each ``x`` value and (2) the derivative of the function
+            with respect to each parameter.  The object with the derivatives has
+            one more dimension than the function data, with a length that is the
+            number of functional parameters.
+        """
+        if par is not None:
+            self._set_par(par)
+
+        _x = np.atleast_1d(x)
+        xh = _x/self.par[1]
+        c0 = np.e / self.par[1] / self.par[2]
+        c = c0**self.par[2]
+        f = self.par[0] * c * np.exp(-xh) * _x**self.par[2]
+        return f, np.stack((f/self.par[0], f*(xh/self.par[1] - self.par[2]/self.par[1]),
+                            f*(np.log(c0) + np.log(_x) - 1)), axis=-1)
+
     def ddx(self, x, par=None, check=False):
         """
         Sample the derivative of the function. See :func:`sample` for
@@ -917,6 +1091,32 @@ class Const(Func1D):
         if par is not None:
             self._set_par(par)
         return np.full(x.shape, self.par[0], dtype=float)
+
+    def deriv_sample(self, x, par=None, check=False):
+        """
+        Calculate the function and its derivative w.r.t. the parameters.
+
+        Args:
+            x (array-like):
+                Locations at which to sample the function.
+            par (array-like, optional):
+                The function parameters. If None, the current values
+                of :attr:`par` are used. Must have a length of
+                :attr:`np`.
+            check (:obj:`bool`, optional):
+                Ignored. Only included for a uniform interface with
+                other subclasses of :class:`Func1D`.
+
+        Returns:
+            :obj:`tuple`: Two `numpy.ndarray`_ objects: (1) the function
+            evaluated at each ``x`` value and (2) the derivative of the function
+            with respect to each parameter.  The object with the derivatives has
+            one more dimension than the function data, with a length that is the
+            number of functional parameters.
+        """
+        if par is not None:
+            self._set_par(par)
+        return np.ones((x.size,1), dtype=float)
 
     def ddx(self, x, par=None, check=False):
         """

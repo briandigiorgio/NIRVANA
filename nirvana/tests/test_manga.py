@@ -20,29 +20,29 @@ def test_manga_gas_kinematics():
     maps_file = remote_data_file('manga-8138-12704-MAPS-{0}.fits.gz'.format(dap_test_daptype))
     cube_file = remote_data_file('manga-8138-12704-LOGCUBE.fits.gz')
 
-#    kin = manga.MaNGAGasKinematics(maps_file, cube_file=cube_file)
-    kin = manga.MaNGAGasKinematics(maps_file)
-
-    big_shape = tuple([2*s for s in kin.spatial_shape])
-    i, j = numpy.meshgrid(numpy.arange(big_shape[0]) - big_shape[0]//2, 
-                          numpy.arange(big_shape[1]) - big_shape[1]//2,
-                          indexing='ij')
-    c = numpy.column_stack((i.ravel()+1, j.ravel()+1))
-    x, y = map(lambda x : x.reshape(big_shape).T, kin.grid_wcs.all_pix2world(c,1).T)
-
-    hdu = fits.open(maps_file)
-    ra = hdu[0].header['OBJRA']
-    dec = hdu[0].header['OBJDEC']
-
-    _x = (x-ra) * numpy.cos(numpy.radians(dec)) * 3600.
-    _y = (y-dec) * 3600.
-
-    from astropy.coordinates import SkyOffsetFrame, SkyCoord
-    grid = SkyCoord(x, y, unit='deg', frame='icrs')
-    center = SkyCoord(ra, dec, unit='deg', frame='icrs')
-    ax = grid.transform_to(SkyOffsetFrame(origin=center))
-    embed()
-    exit()
+    kin = manga.MaNGAGasKinematics(maps_file, cube_file=cube_file)
+#    kin = manga.MaNGAGasKinematics(maps_file)
+#
+#    big_shape = tuple([2*s for s in kin.spatial_shape])
+#    i, j = numpy.meshgrid(numpy.arange(big_shape[0]) - big_shape[0]//2, 
+#                          numpy.arange(big_shape[1]) - big_shape[1]//2,
+#                          indexing='ij')
+#    c = numpy.column_stack((i.ravel()+1, j.ravel()+1))
+#    x, y = map(lambda x : x.reshape(big_shape).T, kin.grid_wcs.all_pix2world(c,1).T)
+#
+#    hdu = fits.open(maps_file)
+#    ra = hdu[0].header['OBJRA']
+#    dec = hdu[0].header['OBJDEC']
+#
+#    _x = (x-ra) * numpy.cos(numpy.radians(dec)) * 3600.
+#    _y = (y-dec) * 3600.
+#
+#    from astropy.coordinates import SkyOffsetFrame, SkyCoord
+#    grid = SkyCoord(x, y, unit='deg', frame='icrs')
+#    center = SkyCoord(ra, dec, unit='deg', frame='icrs')
+#    ax = grid.transform_to(SkyOffsetFrame(origin=center))
+#    embed()
+#    exit()
 
     _vel = kin.remap('vel', masked=False)
 
@@ -55,7 +55,7 @@ def test_manga_gas_kinematics():
     # leads to differences that are of order the numerical precision.
     assert numpy.allclose(kin.bin(_vel), kin.vel), 'Rebinning is bad'
 
-test_manga_gas_kinematics()
+#test_manga_gas_kinematics()
 
 @requires_remote
 def test_manga_stellar_kinematics():

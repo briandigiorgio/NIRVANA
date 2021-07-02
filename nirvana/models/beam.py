@@ -364,11 +364,11 @@ def smear(v, beam, beam_fft=False, sb=None, sig=None, cnvfftw=None, verbose=Fals
     return mom0, mom1, np.sqrt(mom2)
 
 
-def deriv_smear(v, dv, beam, beam_fft=False, sb=None, dsb=None, sig=None, dsig=None,cnvfftw=None):
+def deriv_smear(v, dv, beam, beam_fft=False, sb=None, dsb=None, sig=None, dsig=None, cnvfftw=None):
     """
     Get the beam-smeared surface brightness, velocity, and velocity
     dispersion fields and their derivatives.
-    
+
     Args:
         v (`numpy.ndarray`_):
             2D array with the discretely sampled velocity field. Must be square.
@@ -458,7 +458,6 @@ def deriv_smear(v, dv, beam, beam_fft=False, sb=None, dsb=None, sig=None, dsig=N
             dmom0[...,i] = _cnv(dsb[...,i], bfft, kernel_fft=True)
 
     inv_mom0 = 1./(mom0 + (mom0 == 0.0))
-    dinv_mom0 = None if dmom0 is None else -dmom0/mom0[...,None]**2
 
     # First moment
     mom1 = _cnv(_sb*v, bfft, kernel_fft=True) * inv_mom0
@@ -479,16 +478,20 @@ def deriv_smear(v, dv, beam, beam_fft=False, sb=None, dsb=None, sig=None, dsig=N
     mom2[mom2 < 0] = 0.0
     _mom2 = np.sqrt(mom2)
     _inv_mom2 = 1./(_mom2 + (_mom2 == 0.0))
-
     dmom2 = dv.copy()
     for i in range(npar):
-        dmom2[...,i] = _cnv(2*_sb*v*dv[...,i], bfft, kernel_fft=True) * inv_mom0
-        dmom2[...,i] -= 2 * mom1 * dmom1[...,i]
+        # dv terms
+        dmom2[...,i] = _cnv(2*_sb*v*dv[...,i], bfft, kernel_fft=True) * inv_mom0 \
+                            - 2 * mom1 * dmom1[...,i]
+        # dsb terms
         if dsb is not None:
             dmom2[...,i] -= mom2 * inv_mom0 * dmom0[...,i]
+        # dsig terms
         if dsig is not None:
             dmom2[...,i] += _cnv(2*_sb*sig*dsig[...,i], bfft, kernel_fft=True) * inv_mom0
+        # sqrt operation
         dmom2[...,i] *= _inv_mom2 / 2
 
     return mom0, mom1, _mom2, dmom0, dmom1, dmom2
+
 

@@ -176,7 +176,7 @@ def impose_positive_definite(mat, min_eigenvalue=1e-10, renormalize=True):
     if not isinstance(mat, sparse.csr_matrix):
         raise TypeError('Must provide a scipy.sparse.csr_matrix to impose_positive_definite.')
     # Get the eigenvalues/eigenvectors
-    # WARNING: I didn't explore why to deeply, but scipy.sparse.linalg.eigs
+    # WARNING: I didn't explore why too deeply, but scipy.sparse.linalg.eigs
     # provided *significantly* different results. They also seem to be worse in
     # the sense that the reconstructed matrix based on the adjusted eigenvalues
     # is more different than input matrix compared to the use of

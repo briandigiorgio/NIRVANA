@@ -66,7 +66,10 @@ def test_disk_derivative_nosig():
 
     # Now include the beam-smearing
     beam = gauss2d_kernel(n, 3.)
-    cnvfftw = ConvolveFFTW(beam.shape)
+    try:
+        cnvfftw = ConvolveFFTW(beam.shape)
+    except:
+        cnvfftw = None
     v, dv = disk.deriv_model(disk.par, x=x, y=y, beam=beam, cnvfftw=cnvfftw)
     vp = numpy.empty(v.shape+(disk.par.size,), dtype=float)
     p = disk.par.copy()
@@ -126,7 +129,10 @@ def test_disk_derivative():
 
     # Now include the beam-smearing
     beam = gauss2d_kernel(n, 3.)
-    cnvfftw = ConvolveFFTW(beam.shape)
+    try:
+        cnvfftw = ConvolveFFTW(beam.shape)
+    except:
+        cnvfftw = None
     v, sig, dv, dsig = disk.deriv_model(disk.par, x=x, y=y, beam=beam, cnvfftw=cnvfftw)
     vp = numpy.empty(v.shape+(disk.par.size,), dtype=float)
     sigp = numpy.empty(v.shape+(disk.par.size,), dtype=float)
@@ -171,7 +177,10 @@ def test_disk_derivative_bin():
     dp = numpy.array([0.0001, 0.0001, 0.001, 0.001, 0.001, 0.001, 0.0001, 0.001, 0.0001])
 
     # Include the beam-smearing
-    cnvfftw = ConvolveFFTW(kin.spatial_shape)
+    try:
+        cnvfftw = ConvolveFFTW(kin.spatial_shape)
+    except:
+        cnvfftw = None
     v, sig, dv, dsig = disk.deriv_model(disk.par, x=kin.grid_x, y=kin.grid_y, sb=kin.grid_sb, 
                                         beam=kin.beam_fft, is_fft=True, cnvfftw=cnvfftw)
     # Now also include the binning

@@ -391,11 +391,6 @@ def dthetady(x, y, r=None):
     indx = r2 == 0.
     if not np.any(indx):
         return x / r2
-#    ax = np.absolute(x)
-#    ay = np.absolute(y)
-#    indx = (ax > tol) & (ay > tol)
-#    if np.all(indx):
-#        return x / r2
 
     # Need special treatment for r==0 elements 
     dtheta = np.zeros(x.shape, dtype=float)

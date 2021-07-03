@@ -340,8 +340,9 @@ class PiecewiseLinear(Func1D):
         """
         Calculate the function and its derivative w.r.t. the parameters.
 
-        The derivative of the step function w.r.t. each parameter is 1 in the
-        radial range of the relevant step and 0 elsewhere.
+        The derivative of the piecewise linear function w.r.t. each parameter is
+        computed by :func:`~nirvana.models.util.deriv_lin_interp` in the
+        relevant radial range and 0 elsewhere.
 
         Args:
             x (array-like):
@@ -499,8 +500,7 @@ class HyperbolicTangent(Func1D):
             self._set_par(par)
         _x = np.atleast_1d(x)/self.par[1]
         f = self.par[0]*np.tanh(_x)
-        _sech2 = sech2(_x)
-        return f, np.stack((f/self.par[0], -self.par[0]*_x*_sech2/self.par[1]), axis=-1)
+        return f, np.stack((f/self.par[0], -self.par[0]*_x*sech2(_x)/self.par[1]), axis=-1)
 
     def ddx(self, x, par=None):
         """
@@ -509,8 +509,7 @@ class HyperbolicTangent(Func1D):
         """
         if par is not None:
             self._set_par(par)
-        _sech2 = sech2(np.atleast_1d(x)/self.par[1])
-        return self.par[0] * _sech2 / self.par[1]
+        return self.par[0] * sech2(np.atleast_1d(x)/self.par[1]) / self.par[1]
 
     def d2dx2(self, x, par=None):
         """
@@ -520,8 +519,7 @@ class HyperbolicTangent(Func1D):
         if par is not None:
             self._set_par(par)
         xh = np.atleast_1d(x)/self.par[1]
-        _sech2 = sech2(xh)
-        return -2. * self.par[0] * _sech2 * np.tanh(xh) / self.par[1]**2 
+        return -2. * self.par[0] * sech2(xh) * np.tanh(xh) / self.par[1]**2 
 
 
 class PolyEx(Func1D):
@@ -661,7 +659,7 @@ class PolyEx(Func1D):
 class ConcentratedRotationCurve(Func1D):
     r"""
     Instantiates a rotation curve that enables a sharp rise that declines to a
-    flat outer rotations speed.
+    constant at large radius.
 
     The four-parameter functional form is:
 
@@ -669,10 +667,10 @@ class ConcentratedRotationCurve(Func1D):
 
         V(x) = V_0 \frac{(1+x)^\beta}{(1+x^{-\gamma})^{1/\gamma}}
 
-    where :math:`x = r/h` for radius :math:`r`.  This equation is provided in
+    where :math:`x = r/h` for radius :math:`r`.  This equation is provided by
     Eqn 8 of Rix et al. (1997, MNRAS, 285, 779) and is very close to Eqn 2 from
     Courteau (1997, AJ, 114, 2402).  The order of the parameter vector
-    is:math:`V_0`, :math:`h`, :math:`\gamma`, and :math:`\beta`.
+    is :math:`V_0`, :math:`h`, :math:`\gamma`, and :math:`\beta`.
 
     Args:
         par (array-like, optional):

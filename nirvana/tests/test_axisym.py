@@ -324,10 +324,10 @@ def test_lsq_with_covar():
     # Set the disk velocity field
     disk = AxisymmetricDisk(rc=rc) #, dc=dc)
     # Fit it with a non-linear least-squares optimizer
-    import time
-    t = time.perf_counter()
+#    import time
+#    t = time.perf_counter()
     disk.lsq_fit(kin, sb_wgt=True)
-    print(f'First fit (no covar): {time.perf_counter()-t} s')
+#    print(f'First fit (no covar): {time.perf_counter()-t} s')
 
     # Rejected based on error-weighted residuals, accounting for intrinsic scatter
     resid = kin.vel - kin.bin(disk.model())
@@ -341,10 +341,10 @@ def test_lsq_with_covar():
     # Refit with new mask, include scatter and covariance
     kin.vel_mask = numpy.logical_not(gpm)
     p0 = disk.par
-    t = time.perf_counter()
+#    t = time.perf_counter()
     disk.lsq_fit(kin, scatter=sig, sb_wgt=True, p0=p0, ignore_covar=False,
                  assume_posdef_covar=True) #, verbose=2)
-    print(f'Second fit (w/ covar): {time.perf_counter()-t} s')
+#    print(f'Second fit (w/ covar): {time.perf_counter()-t} s')
 
     # Reject
     resid = kin.vel - kin.bin(disk.model())

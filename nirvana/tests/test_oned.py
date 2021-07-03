@@ -4,6 +4,10 @@ import numpy
 
 from nirvana.models import oned
 
+
+#TODO: Should abstract these to a generic code that tests the derivatives.
+
+
 def test_step():
     n = 10
     edges = numpy.arange(n, dtype=float)+1

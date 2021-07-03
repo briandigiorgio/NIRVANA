@@ -893,7 +893,8 @@ class AxisymmetricDisk:
 
     def _deriv_resid(self, par, sep=False):
         """
-        Calculate the residuals between the data and the current model.
+        Calculate the derivative of the fit residuals w.r.t. all the *free*
+        model parameters.
 
         Args:
             par (`numpy.ndarray`_, optional):
@@ -901,14 +902,14 @@ class AxisymmetricDisk:
                 :attr:`np` or :attr:`nfree`. If the latter, the values of the
                 fixed parameters in :attr:`par` are used.
             sep (:obj:`bool`, optional):
-                Return separate vectors for the velocity and velocity
-                dispersion residuals, instead of appending them.
+                Return separate vectors for the velocity and velocity dispersion
+                residual derivatives, instead of appending them.
 
         Returns:
-            :obj:`tuple`, `numpy.ndarray`_: Difference between the data and the
-            model for all measurements, either returned as a single vector for
-            all data or as separate vectors for the velocity and velocity
-            dispersion data (based on ``sep``).
+            :obj:`tuple`, `numpy.ndarray`_: Dervatives in the difference between
+            the data and the model for all measurements, either returned as a
+            single array for all data or as separate arrays for the velocity and
+            velocity dispersion data (based on ``sep``).
         """
         self._set_par(par)
         if self.dc is None:
@@ -955,8 +956,8 @@ class AxisymmetricDisk:
 
     def _deriv_chisqr(self, par, sep=False):
         """
-        Calculate the error-normalized residual (close to the signed
-        chi-square metric) between the data and the current model.
+        Calculate the derivatives of the error-normalized residuals (close to
+        the signed chi-square metric) w.r.t. the *free* model parameters.
 
         Args:
             par (`numpy.ndarray`_, optional):
@@ -968,10 +969,11 @@ class AxisymmetricDisk:
                 dispersion residuals, instead of appending them.
 
         Returns:
-            :obj:`tuple`, `numpy.ndarray`_: Difference between the data and the
-            model for all measurements, normalized by their errors, either
-            returned as a single vector for all data or as separate vectors for
-            the velocity and velocity dispersion data (based on ``sep``).
+            :obj:`tuple`, `numpy.ndarray`_: Derivatives of the error-normalized
+            difference between the data and the model for all measurements
+            w.r.t. the *free* model parameters, either returned as a single
+            array for all data or as separate arrays for the velocity and
+            velocity dispersion data (based on ``sep``).
         """
         self._set_par(par)
         vf = self._deriv_v_chisqr_covar if self.has_covar else self._deriv_v_chisqr

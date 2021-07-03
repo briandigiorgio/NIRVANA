@@ -818,15 +818,18 @@ def equal_shape(arr1, arr2, fill_value=0):
     '''
     Take two 2D arrays and pad them to make them the same shape
 
-
     Args:
-        arr1, arr2 (`numpy.ndarray`_):
+        arr1 (`numpy.ndarray`_):
+            2D arrays that will be padded to be the same shape
+        arr2 (`numpy.ndarray`_):
             2D arrays that will be padded to be the same shape
         fill_value (:obj:`float`, optional):
             Fill value for the padding
 
     Returns:
-        Tuple of `numpy.ndarray`_s that are padded versions of the input arrays
+        :obj:`tuple`: Tuple of `numpy.ndarray`_ objects that are padded versions
+        of the input arrays
+
     '''
 
     #check for non 2D arrays

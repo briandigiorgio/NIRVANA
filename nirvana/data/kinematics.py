@@ -142,7 +142,7 @@ class Kinematics(FitArgs):
             The on-sky Cartesian :math:`y` coordinates of *each*
             element in the data grid. See the description of
             ``grid_x``.
-        grid_sb (`numpy.array`_, optional):
+        grid_sb (`numpy.ndarray`_, optional):
             The relative surface brightness of the kinematic tracer over the
             full coordinate grid.  If None, this is either assumed to be unity
             or set by the provided ``sb``.  When fitting the data with, e.g., 

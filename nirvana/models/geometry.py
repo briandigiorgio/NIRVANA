@@ -649,9 +649,8 @@ def reflect(pa, x, y):
             Array of y coordinate positions. Must be the same shape as `x`.
 
     Returns:
-        :obj:`tuple`: Two `numpy.ndarray`_s of the new reflected x and y
+        :obj:`tuple`: Two `numpy.ndarray`_ objects of the new reflected x and y
         coordinates
-
     '''
 
     th = np.radians(90 - pa) #turn position angle into a regular angle

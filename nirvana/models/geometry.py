@@ -9,6 +9,9 @@ from IPython import embed
 import numpy as np
 from scipy.spatial import KDTree
 
+#import warnings
+#warnings.simplefilter('error', RuntimeWarning)
+
 def rotate(x, y, rot, clockwise=False):
     r"""
     Rotate a set of coordinates about :math:`(x,y) = (0,0)`.
@@ -103,7 +106,6 @@ def deriv_rotate(x, y, rot, dxdp=None, dydp=None, drotdp=None, clockwise=False):
         coordinates w.r.t. a set of parameters.
     """
     # Check derivative input
-    # TODO: Is adding this check worth the hit in execution time?
     isNone = [i is None for i in [dxdp, dydp, drotdp]]
     if np.any(isNone) and not np.all(isNone):
         raise ValueError('Must provide all of dxdp, dydp, and drotdp, or none of them.')
@@ -238,7 +240,6 @@ def deriv_projected_polar(x, y, pa, inc, dxdp=None, dydp=None, dpadp=None, dincd
         :math:`[0,2\pi)`.
     """
     # Check derivative input
-    # TODO: Is adding this check worth the hit in execution time?
     isNone = [i is None for i in [dxdp, dydp, dpadp, dincdp]]
     if np.any(isNone) and not np.all(isNone):
         raise ValueError('Must provide all of dxdp, dydp, dpadp, and dincdp, or none of them.')    
@@ -280,9 +281,7 @@ def deriv_projected_polar(x, y, pa, inc, dxdp=None, dydp=None, dpadp=None, dincd
     return r, t, dr, dt
 
 
-# TODO: Need to rethink the limits as x and y go to 0 for both the dr and dtheta
-# functions.
-def drdx(x, y, r=None, tol=1e-10):
+def drdx(x, y, r=None):
     r"""
     Compute the derivative of :math:`r=\sqrt{x^2+y^2}` w.r.t. :math:`x`.
     
@@ -292,10 +291,10 @@ def drdx(x, y, r=None, tol=1e-10):
 
         \frac{\partial r}{\partial x} = \frac{x}{r}
 
-    In the limit where both :math:`x` and :math:`y` approach 0 (in this context,
-    this is set when their absolute values are below ``tol``), or when only
-    :math:`y` approaches 0, this reduces to :math:`x/|x|`.  When :math:`x`
-    approaches 0, this returns 0 for the derivative.
+    In the limit where both :math:`x` and :math:`y` approach 0, this reduces to
+    :math:`\pm 1`, where the sign degeneracy is due to different left/right
+    limits.  This function choose the one-sided limit approaching from the right
+    (:math:`+1`).
 
     Args:
         x (`numpy.ndarray`_):
@@ -305,28 +304,32 @@ def drdx(x, y, r=None, tol=1e-10):
         r (`numpy.ndarray`_, optional):
             Pre-calculated radius.  If None, the radius is calculated using
             ``x`` and ``y``.
-        tol (:obj:`float`, optional):
-            Absolute values of ``x`` and ``y`` below this value are assumed to
-            be identical to 0.
 
     Returns:
         `numpy.ndarray`_: The derivative of :math:`r` w.r.t. :math:`x`.
     """
     _r = np.sqrt(x**2 + y**2) if r is None else r
-    ax = np.absolute(x)
-    ay = np.absolute(y)
-    indx = (ax > tol) & (ay > tol)
-    if np.all(indx):
+    indx = _r == 0.
+    if not np.any(indx):
         return x / _r
 
+    # Need special treatment for r==0 elements 
     dr = np.zeros(x.shape, dtype=float)
+
+    # When both x and r are 0, y is 0 by definition.  The limit of x/r as x,y->0
+    # is +/-1.  For a finite-difference approach you would measure
+    # (sqrt(dx**2)-r)/dx, where r=0.  However, the sign discontinuity is because
+    # different limits are reached if you approach from -x or +x.  This chooses
+    # the one-sided limit approaching from +x.
+    indx &= (x == 0.)
+    dr[indx] = 1.
+    # The rest are computed normally
+    indx = np.logical_not(indx)
     dr[indx] = x[indx] / _r[indx]
-    indx = (ax > 0.) & (((ax < tol) & (ay < tol)) | (ay < tol))
-    dr[indx] = x[indx]/ax[indx]
     return dr
 
 
-def drdy(x, y, r=None, tol=1e-10):
+def drdy(x, y, r=None):
     r"""
     Compute the derivative of :math:`r=\sqrt{x^2+y^2}` w.r.t. :math:`y`.
     
@@ -336,10 +339,10 @@ def drdy(x, y, r=None, tol=1e-10):
 
         \frac{\partial r}{\partial y} = \frac{y}{r}
 
-    In the limit where both :math:`x` and :math:`y` approach 0 (in this context,
-    this is set when their absolute values are below ``tol``), or when only
-    :math:`x` approaches 0, this reduces to :math:`y/|y|`.  When :math:`y`
-    approaches 0, this returns 0 for the derivative.
+    In the limit where both :math:`x` and :math:`y` approach 0, this reduces to
+    :math:`\pm 1`, where the sign degeneracy is due to different left/right
+    limits.  This function choose the one-sided limit approaching from the right
+    (:math:`+1`).
 
     Args:
         x (`numpy.ndarray`_):
@@ -349,17 +352,14 @@ def drdy(x, y, r=None, tol=1e-10):
         r (`numpy.ndarray`_, optional):
             Pre-calculated radius.  If None, the radius is calculated using
             ``x`` and ``y``.
-        tol (:obj:`float`, optional):
-            Absolute values of ``x`` and ``y`` below this value are assumed to
-            be identical to 0.
 
     Returns:
         `numpy.ndarray`_: The derivative of :math:`r` w.r.t. :math:`y`.
     """
-    return drdx(y, x, r=r, tol=tol)
+    return drdx(y, x, r=r)
 
 
-def dthetady(x, y, r=None, tol=1e-10):
+def dthetady(x, y, r=None):
     r"""
     Compute the derivative of :math:`\theta=\tan^{-1}(y/x)` w.r.t. :math:`y`.
     
@@ -369,10 +369,11 @@ def dthetady(x, y, r=None, tol=1e-10):
 
         \frac{\partial \theta}{\partial y} = \frac{x}{r^2}
 
-    In the limit where both :math:`x` and :math:`y` approach 0 (in this context,
-    this is set when their absolute values are below ``tol``), or when only
-    :math:`x` approaches 0, this returns a derivative of 0.  When only :math:`y`
-    approaches 0, this reduces to :math:`1/x`
+    In the limit where both :math:`x` and :math:`y` approach 0, this reduces to
+    :math:`\pm \infinity`, where the sign degeneracy is due to different
+    left/right limits.  This function choose the one-sided limit approaching
+    from the right (:math:`+\infinity`) but replaces the value with a large
+    float (``1e20``).
 
     Args:
         x (`numpy.ndarray`_):
@@ -382,28 +383,38 @@ def dthetady(x, y, r=None, tol=1e-10):
         r (`numpy.ndarray`_, optional):
             Pre-calculated radius.  If None, the radius is calculated using
             ``x`` and ``y``.
-        tol (:obj:`float`, optional):
-            Absolute values of ``x`` and ``y`` below this value are assumed to
-            be identical to 0.
 
     Returns:
         `numpy.ndarray`_: The derivative of :math:`\theta` w.r.t. :math:`y`.
     """
     r2 = x**2 + y**2 if r is None else r**2
-    ax = np.absolute(x)
-    ay = np.absolute(y)
-    indx = (ax > tol) & (ay > tol)
-    if np.all(indx):
+    indx = r2 == 0.
+    if not np.any(indx):
         return x / r2
+#    ax = np.absolute(x)
+#    ay = np.absolute(y)
+#    indx = (ax > tol) & (ay > tol)
+#    if np.all(indx):
+#        return x / r2
 
-    dr = np.zeros(x.shape, dtype=float)
-    dr[indx] = x[indx] / r2[indx]
-    indx = (ay < tol) & (ax > tol)
-    dr[indx] = 1/x[indx]
-    return dr
+    # Need special treatment for r==0 elements 
+    dtheta = np.zeros(x.shape, dtype=float)
+
+    # The limit of x/r^2 as r->0 is +/- infinity.  The sign discontinuity is
+    # because different limits are reached if you approach from -x or +x.  If x
+    # == 0., this chooses the one-sided limit approaching from +x; otherwise, it
+    # uses the value of x to set the sign.
+    _indx = indx & (x == 0.)
+    dtheta[_indx] = 1e20
+    _indx = indx & (x != 0.)
+    dtheta[_indx] = np.sign(x[_indx]) * 1e20
+    # The rest are computed normally
+    _indx = np.logical_not(indx)
+    dtheta[_indx] = x[_indx] / r2[_indx]
+    return dtheta
 
 
-def dthetadx(x, y, r=None, tol=1e-10):
+def dthetadx(x, y, r=None):
     r"""
     Compute the derivative of :math:`\theta=\tan^{-1}(y/x)` w.r.t. :math:`x`.
     
@@ -413,10 +424,11 @@ def dthetadx(x, y, r=None, tol=1e-10):
 
         \frac{\partial \theta}{\partial y} = \frac{-y}{r^2}
 
-    In the limit where both :math:`x` and :math:`y` approach 0 (in this context,
-    this is set when their absolute values are below ``tol``), or when only
-    :math:`y` approaches 0, this returns a derivative of 0.  When only :math:`x`
-    approaches 0, this reduces to :math:`-1/y`
+    In the limit where both :math:`x` and :math:`y` approach 0, this reduces to
+    :math:`\pm \infinity`, where the sign degeneracy is due to different
+    left/right limits.  This function choose the one-sided limit approaching
+    from the right (:math:`+\infinity`) but replaces the value with a large
+    float (``1e20``).
 
     Args:
         x (`numpy.ndarray`_):
@@ -426,14 +438,11 @@ def dthetadx(x, y, r=None, tol=1e-10):
         r (`numpy.ndarray`_, optional):
             Pre-calculated radius.  If None, the radius is calculated using
             ``x`` and ``y``.
-        tol (:obj:`float`, optional):
-            Absolute values of ``x`` and ``y`` below this value are assumed to
-            be identical to 0.
 
     Returns:
         `numpy.ndarray`_: The derivative of :math:`\theta` w.r.t. :math:`x`.
     """
-    return dthetady(-y, x, r=r, tol=tol)
+    return dthetady(-y, x, r=r)
 
 
 def polygon_winding_number(polygon, point):

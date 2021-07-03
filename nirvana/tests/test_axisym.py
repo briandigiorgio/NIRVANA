@@ -83,7 +83,6 @@ def test_disk_derivative_nosig():
         assert numpy.allclose(dv[...,i], fd_dv[...,i], rtol=0., atol=1e-4), \
                 f'Finite difference produced different derivative for parameter {i+1}!'
 
-test_disk_derivative_nosig()
 
 def test_disk_derivative():
     disk = AxisymmetricDisk(rc=HyperbolicTangent(), dc=Exponential())

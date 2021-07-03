@@ -245,7 +245,7 @@ class AxisymmetricDiskGlobalBitMask(BitMask):
     Fit-wide quality flag.
     """
     def __init__(self):
-        # TODO: np.array just used for slicing convenience
+        # NOTE: np.array just used for slicing convenience
         mask_def = np.array([['LOWINC', 'Fit has an erroneously low inclination']])
         super().__init__(mask_def[:,0], descr=mask_def[:,1])
 
@@ -819,8 +819,6 @@ class AxisymmetricDisk:
                                             cnvfftw=self.cnvfftw)
             return v, dv
 
-        # TODO: propagate derivatives through smearing function!
-
         # Fitting both the velocity and velocity-dispersion field
 
         # Get the parameter index range
@@ -852,7 +850,6 @@ class AxisymmetricDisk:
     def _v_chisqr_covar(self, vel):
         return np.dot(self._v_resid(vel), self._v_ucov)
     def _deriv_v_chisqr_covar(self, dvel):
-        # TODO: The transposes here need to be checked!
         return np.dot(self._deriv_v_resid(dvel).T, self._v_ucov).T
 
     def _s_resid(self, sig):
@@ -866,7 +863,6 @@ class AxisymmetricDisk:
     def _s_chisqr_covar(self, sig):
         return np.dot(self._s_resid(sig), self._s_ucov)
     def _deriv_s_chisqr_covar(self, sig, dsig):
-        # TODO: The transposes here need to be checked!
         return np.dot(self._deriv_s_resid(sig, dsig).T, self._s_ucov).T
 
     def _resid(self, par, sep=False):

@@ -13,6 +13,7 @@
    `AxisymmetricDisk` fits.  Analytic calculations are used by default,
    but the `lsq_fit` function allows for a fall back to the
    finite-difference methods provided by `scipy.optimize.least_squares`.
+ - Included additional 1D functions for, e.g., rotation curves.
 
 0.1.0
 -----

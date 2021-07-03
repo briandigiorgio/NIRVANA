@@ -28,6 +28,24 @@ def test_step():
     assert numpy.array_equal(_y[srt], y), 'sorting of input coordinates should not matter'
 
 
+def test_step_ddx():
+    n = 10
+    edges = numpy.arange(n, dtype=float)+1
+    rng = numpy.random.default_rng()
+    steps = rng.uniform(low=0., high=n+2., size=n)
+
+    f = oned.StepFunction(edges, par=steps)
+
+    rng = numpy.random.default_rng()
+    n = 10
+    x = rng.uniform(low=0., high=2., size=n)
+    dx = numpy.full(n, 0.0001, dtype=float)
+    y = f.sample(x)
+    dy = f.ddx(x)
+    fd_dy = (f.sample(x+dx) - y)/dx
+    assert numpy.allclose(dy, fd_dy, rtol=0., atol=1e-4), 'Derivatives are wrong'
+
+
 def test_step_deriv():
     n = 10
     edges = numpy.arange(n, dtype=float)+1
@@ -79,6 +97,24 @@ def test_lin():
     assert numpy.array_equal(_y[srt], y), 'sorting of input coordinates should not matter'
 
 
+def test_lin_ddx():
+    n = 10
+    edges = numpy.arange(n, dtype=float)+1
+    rng = numpy.random.default_rng()
+    anchors = rng.uniform(low=0., high=n+2., size=n)
+
+    f = oned.PiecewiseLinear(edges, par=anchors)
+
+    rng = numpy.random.default_rng()
+    n = 10
+    x = rng.uniform(low=0., high=2., size=n)
+    dx = numpy.full(n, 0.0001, dtype=float)
+    y = f.sample(x)
+    dy = f.ddx(x)
+    fd_dy = (f.sample(x+dx) - y)/dx
+    assert numpy.allclose(dy, fd_dy, rtol=0., atol=1e-4), 'Derivatives are wrong'
+
+
 def test_lin_deriv():
     n = 10
     edges = numpy.arange(n, dtype=float)+1
@@ -115,6 +151,18 @@ def test_tanh():
     assert numpy.isclose(y[0], numpy.tanh(1.)), 'Function changed.'
 
 
+def test_tanh_ddx():
+    f = oned.HyperbolicTangent(par=[1.,1.])
+    rng = numpy.random.default_rng()
+    n = 10
+    x = rng.uniform(low=0., high=2., size=n)
+    dx = numpy.full(n, 0.0001, dtype=float)
+    y = f.sample(x)
+    dy = f.ddx(x)
+    fd_dy = (f.sample(x+dx) - y)/dx
+    assert numpy.allclose(dy, fd_dy, rtol=0., atol=1e-4), 'Derivatives are wrong'
+
+
 def test_tanh_deriv():
     par = numpy.array([1., 1.])
     dp = numpy.array([0.0001, 0.0001])
@@ -138,6 +186,18 @@ def test_plex():
     y = f.sample([1.])
 
     assert numpy.isclose(y[0], 1.1*(1-numpy.exp(-1.))), 'Function changed.'
+
+
+def test_plex_ddx():
+    f = oned.PolyEx(par=[1.,1.,0.1])
+    rng = numpy.random.default_rng()
+    n = 10
+    x = rng.uniform(low=0., high=2., size=n)
+    dx = numpy.full(n, 0.0001, dtype=float)
+    y = f.sample(x)
+    dy = f.ddx(x)
+    fd_dy = (f.sample(x+dx) - y)/dx
+    assert numpy.allclose(dy, fd_dy, rtol=0., atol=1e-4), 'Derivatives are wrong'
 
 
 def test_plex_deriv():
@@ -165,6 +225,18 @@ def test_exp():
     assert numpy.isclose(y[0], numpy.exp(-1.)), 'Function changed.'
 
 
+def test_exp_ddx():
+    f = oned.Exponential(par=[1.,1.])
+    rng = numpy.random.default_rng()
+    n = 10
+    x = rng.uniform(low=0., high=2., size=n)
+    dx = numpy.full(n, 0.0001, dtype=float)
+    y = f.sample(x)
+    dy = f.ddx(x)
+    fd_dy = (f.sample(x+dx) - y)/dx
+    assert numpy.allclose(dy, fd_dy, rtol=0., atol=1e-4), 'Derivatives are wrong'
+
+
 def test_exp_deriv():
     par = numpy.array([1., 1.])
     dp = numpy.array([0.0001, 0.0001])
@@ -188,6 +260,18 @@ def test_expbase():
     y = f.sample([1.])
 
     assert numpy.isclose(y[0], numpy.exp(-1.)+1), 'Function changed.'
+
+
+def test_expbase_ddx():
+    f = oned.ExpBase(par=[1.,1.,1.])
+    rng = numpy.random.default_rng()
+    n = 10
+    x = rng.uniform(low=0., high=2., size=n)
+    dx = numpy.full(n, 0.0001, dtype=float)
+    y = f.sample(x)
+    dy = f.ddx(x)
+    fd_dy = (f.sample(x+dx) - y)/dx
+    assert numpy.allclose(dy, fd_dy, rtol=0., atol=1e-4), 'Derivatives are wrong'
 
 
 def test_expbase_deriv():
@@ -214,10 +298,94 @@ def test_powexp():
     assert numpy.isclose(y[0], 1.), 'Function changed.'
 
 
+def test_powexp_ddx():
+    f = oned.PowerExp(par=[1.,1.,1.])
+    rng = numpy.random.default_rng()
+    n = 10
+    x = rng.uniform(low=0., high=2., size=n)
+    dx = numpy.full(n, 0.00001, dtype=float)
+    y = f.sample(x)
+    dy = f.ddx(x)
+    fd_dy = (f.sample(x+dx) - y)/dx
+    assert numpy.allclose(dy, fd_dy, rtol=0., atol=1e-4), 'Derivatives are wrong'
+
+
 def test_powexp_deriv():
     par = numpy.array([1., 1., 1.])
     dp = numpy.array([0.0001, 0.0001, 0.0001])
     f = oned.PowerExp(par=par)
+    rng = numpy.random.default_rng()
+    n = 10
+    x = rng.uniform(low=0., high=2., size=n)
+    y, dy = f.deriv_sample(x)
+    yp = numpy.zeros((x.size, par.size), dtype=float)
+    for i in range(par.size):
+        _p = par.copy()
+        _p[i] += dp[i]
+        yp[...,i] = f.sample(x, par=_p)
+
+    fd_dy = (yp - y[...,None])/dp[None,:]
+    assert numpy.allclose(dy, fd_dy, rtol=0., atol=1e-4), 'Derivatives are wrong'
+
+
+def test_powlaw():
+    f = oned.PowerLaw(par=[1.,2.])
+    y = f.sample([1.])
+    assert numpy.isclose(y[0], 1.), 'Function changed.'
+
+
+def test_powlaw_ddx():
+    f = oned.PowerLaw(par=[1.,2.])
+    rng = numpy.random.default_rng()
+    n = 10
+    x = rng.uniform(low=0., high=2., size=n)
+    dx = numpy.full(n, 1e-10, dtype=float)
+    y = f.sample(x)
+    dy = f.ddx(x)
+    fd_dy = (f.sample(x+dx) - y)/dx
+    assert numpy.allclose(dy, fd_dy, rtol=0., atol=1e-5), 'Derivatives are wrong'
+
+
+def test_powlaw_deriv():
+    par = numpy.array([1., 2.])
+    dp = numpy.array([0.0001, 0.0001])
+    f = oned.PowerLaw(par=par)
+    rng = numpy.random.default_rng()
+    n = 10
+    x = rng.uniform(low=0., high=2., size=n)
+    y, dy = f.deriv_sample(x)
+    yp = numpy.zeros((x.size, par.size), dtype=float)
+    for i in range(par.size):
+        _p = par.copy()
+        _p[i] += dp[i]
+        yp[...,i] = f.sample(x, par=_p)
+
+    fd_dy = (yp - y[...,None])/dp[None,:]
+    assert numpy.allclose(dy, fd_dy, rtol=0., atol=1e-4), 'Derivatives are wrong'
+
+
+def test_crc():
+    f = oned.ConcentratedRotationCurve(par=[1.,1.,2.,0.1])
+    y = f.sample([1.])
+    assert numpy.isclose(y[0], 2.**0.1 * 2**(-1/2.)), 'Function changed.'
+
+
+def test_crc_ddx():
+    f = oned.ConcentratedRotationCurve(par=[1.,1.,2.,0.1])
+    rng = numpy.random.default_rng()
+    n = 10
+    x = rng.uniform(low=0., high=2., size=n)
+    dx = numpy.full(n, 0.0001, dtype=float)
+    y = f.sample(x)
+    dy = f.ddx(x)
+    fd_dy = (f.sample(x+dx) - y)/dx
+    assert numpy.allclose(dy, fd_dy, rtol=0., atol=1e-4), 'Derivatives are wrong'
+
+
+def test_crc_deriv():
+    par = numpy.array([1.,1.,2.,0.1])
+    dp = numpy.array([0.0001, 0.0001, 0.0001, 0.0001])
+    f = oned.ConcentratedRotationCurve(par=par)
     rng = numpy.random.default_rng()
     n = 10
     x = rng.uniform(low=0., high=2., size=n)

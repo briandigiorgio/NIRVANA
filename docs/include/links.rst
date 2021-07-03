@@ -23,6 +23,7 @@
 
 .. numpy
 
+.. _numpy: https://numpy.org
 .. _numpy.ndarray: https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html
 .. _numpy.ma.MaskedArray: http://numpy.org/doc/stable/reference/maskedarray.baseclass.html
 .. _numpy.recarray: https://numpy.org/doc/stable/reference/generated/numpy.recarray.html
@@ -33,6 +34,8 @@
 .. _numpy.unravel_index: https://numpy.org/doc/stable/reference/generated/numpy.unravel_index.html
 .. _numpy.polynomial.legendre.legvander: https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.legvander.html
 .. _numpy.dtype: https://numpy.org/doc/stable/reference/generated/numpy.dtype.html
+.. _numpy.float64: https://numpy.org/doc/stable/reference/arrays.scalars.html
+.. _numpy.cosh: https://numpy.org/doc/stable/reference/generated/numpy.cosh.html
 
 .. scipy
 

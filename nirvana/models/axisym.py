@@ -17,8 +17,8 @@ from matplotlib import pyplot, rc, patches, ticker, colors
 from astropy.io import fits
 
 from .oned import HyperbolicTangent, Exponential, ExpBase, Const, PolyEx
-from .geometry import projected_polar
-from .beam import ConvolveFFTW, smear
+from .geometry import projected_polar, deriv_projected_polar
+from .beam import ConvolveFFTW, smear, deriv_smear
 from .util import cov_err
 from ..data.scatter import IntrinsicScatter
 from ..data.util import impose_positive_definite, cinv, inverse, find_largest_coherent_region
@@ -27,6 +27,7 @@ from ..util.bitmask import BitMask
 from ..util import plot
 from ..util import fileio
 
+#warnings.simplefilter('error', RuntimeWarning)
 
 def disk_fit_reject(kin, disk, disp=None, vel_mask=None, vel_sigma_rej=5, show_vel=False,
                     vel_plot=None, sig_mask=None, sig_sigma_rej=5, show_sig=False, sig_plot=None,
@@ -244,7 +245,7 @@ class AxisymmetricDiskGlobalBitMask(BitMask):
     Fit-wide quality flag.
     """
     def __init__(self):
-        # TODO: np.array just used for slicing convenience
+        # NOTE: np.array just used for slicing convenience
         mask_def = np.array([['LOWINC', 'Fit has an erroneously low inclination']])
         super().__init__(mask_def[:,0], descr=mask_def[:,1])
 
@@ -454,7 +455,7 @@ class AxisymmetricDisk:
         .. warning::
             
             Input coordinate data types are all converted to `numpy.float64`_.
-            This is always true, even though it actually only needed for use of
+            This is always true, even though this is only needed when using
             :class:`~nirvana.models.beam.ConvolveFFTW`.
 
         Args:
@@ -488,8 +489,8 @@ class AxisymmetricDisk:
         .. warning::
             
             Input surface-brightness data types are all converted to
-            `numpy.float64`_.  This is always true, even though it actually only
-            needed for use of :class:`~nirvana.models.beam.ConvolveFFTW`.
+            `numpy.float64`_.  This is always true, even though this is only
+            needed when using :class:`~nirvana.models.beam.ConvolveFFTW`.
 
         Args:
             sb (`numpy.ndarray`_):
@@ -559,7 +560,7 @@ class AxisymmetricDisk:
                 return
 
             try:
-                self.cnvfftw = ConvolveFFTW(self.kin.spatial_shape)
+                self.cnvfftw = ConvolveFFTW(self.beam_fft.shape)
             except:
                 warnings.warn('Could not instantiate ConvolveFFTW; proceeding with numpy '
                               'FFT/convolution routines.')
@@ -568,8 +569,8 @@ class AxisymmetricDisk:
             # A cnvfftw was provided, check it
             if not isinstance(cnvfftw, ConvolveFFTW):
                 raise TypeError('Provided cnvfftw must be a ConvolveFFTW instance.')
-            if cnvfftw.shape != self.kin.spatial_shape:
-                raise ValueError('cnvfftw shape does not match kinematics.')
+            if cnvfftw.shape != self.beam_fft.shape:
+                raise ValueError('cnvfftw shape does not match beam shape.')
             self.cnvfftw = cnvfftw
 
     def _init_par(self, p0, fix):
@@ -616,8 +617,8 @@ class AxisymmetricDisk:
         .. warning::
             
             Input coordinates and surface-brightness data types are all
-            converted to `numpy.float64`_.  This is always true, even though it
-            actually only needed for use of
+            converted to `numpy.float64`_.  This is always true, even though
+            this is only needed when using
             :class:`~nirvana.models.beam.ConvolveFFTW`.
 
         Args:
@@ -698,27 +699,171 @@ class AxisymmetricDisk:
                         else smear(vel, self.beam_fft, beam_fft=True, sb=self.sb, sig=sig,
                                    cnvfftw=self.cnvfftw)[1:]
 
-    def _v_resid(self, model_vel):
-        return self.kin.vel[self.vel_gpm] - model_vel[self.vel_gpm]
+    def deriv_model(self, par=None, x=None, y=None, sb=None, beam=None, is_fft=False, cnvfftw=None,
+                    ignore_beam=False):
+        """
+        Evaluate the derivative of the model w.r.t all input parameters.
 
-    def _v_chisqr(self, model_vel):
-        return self._v_resid(model_vel) / self._v_err[self.vel_gpm]
+        Note that arguments passed to this function overwrite any existing
+        attributes of the object, and subsequent calls to this function will
+        continue to use existing attributes, unless they are overwritten.  For
+        example, if ``beam`` is provided here, it overwrites any existing
+        :attr:`beam_fft` and any subsequent calls to ``model`` **that do not
+        provide a new** ``beam`` will use the existing :attr:`beam_fft`.  To
+        remove all internal attributes to get a "clean" instantiation, either
+        define a new :class:`AxisymmetricDisk` instance or use :func:`reinit`.
 
-    def _v_chisqr_covar(self, model_vel):
-        return np.dot(self._v_resid(model_vel), self._v_ucov)
+        .. warning::
+            
+            Input coordinates and surface-brightness data types are all
+            converted to `numpy.float64`_.  This is always true, even though
+            this is only needed when using
+            :class:`~nirvana.models.beam.ConvolveFFTW`.
 
-#    def _v_chisqr_covar(self, model_vel):
-#        dv = self._v_resid(model_vel)
-#        return np.sqrt(np.dot(dv, np.dot(self._v_icov, dv)))
+        Args:
+            par (`numpy.ndarray`_, optional):
+                The list of parameters to use. If None, the internal
+                :attr:`par` is used. Length should be either :attr:`np` or
+                :attr:`nfree`. If the latter, the values of the fixed
+                parameters in :attr:`par` are used.
+            x (`numpy.ndarray`_, optional):
+                The 2D x-coordinates at which to evaluate the model. If not
+                provided, the internal :attr:`x` is used.
+            y (`numpy.ndarray`_, optional):
+                The 2D y-coordinates at which to evaluate the model. If not
+                provided, the internal :attr:`y` is used.
+            sb (`numpy.ndarray`_, optional):
+                2D array with the surface brightness of the object. This is used
+                to weight the convolution of the kinematic fields according to
+                the luminosity distribution of the object.  Must have the same
+                shape as ``x``. If None, the convolution is unweighted.  If a
+                convolution is not performed (either ``beam`` or
+                :attr:`beam_fft` are not available, or ``ignore_beam`` is True),
+                this array is ignored.
+            beam (`numpy.ndarray`_, optional):
+                The 2D rendering of the beam-smearing kernel, or its Fast
+                Fourier Transform (FFT). If not provided, the internal
+                :attr:`beam_fft` is used.
+            is_fft (:obj:`bool`, optional):
+                The provided ``beam`` object is already the FFT of the
+                beam-smearing kernel.  Ignored if ``beam`` is not provided.
+            cnvfftw (:class:`~nirvana.models.beam.ConvolveFFTW`, optional):
+                An object that expedites the convolutions using
+                FFTW/pyFFTW. If None, the convolution is done using numpy
+                FFT routines.
+            ignore_beam (:obj:`bool`, optional):
+                Ignore the beam-smearing when constructing the model. I.e.,
+                construct the *intrinsic* model.
 
-    def _s_resid(self, model_sig):
-        return self.kin.sig_phys2[self.sig_gpm] - model_sig[self.sig_gpm]**2
+        Returns:
+            `numpy.ndarray`_, :obj:`tuple`: The velocity field model, and the
+            velocity dispersion field model, if the latter is included
+        """
+        # Initialize the coordinates (this does nothing if both x and y are None)
+        self._init_coo(x, y)
+        # Initialize the surface brightness (this does nothing if sb is None)
+        self._init_sb(sb)
+        # Initialize the convolution kernel (this does nothing if beam is None)
+        self._init_beam(beam, is_fft, cnvfftw)
+        if self.beam_fft is not None and not ignore_beam:
+            # Initialize the surface brightness, only if it would be used
+            self._init_sb(sb)
+        # Check that the model can be calculated
+        if self.x is None or self.y is None:
+            raise ValueError('No coordinate grid defined.')
+        # Reset the parameter values
+        if par is not None:
+            self._set_par(par)
 
-    def _s_chisqr(self, model_sig):
-        return self._s_resid(model_sig) / self._s_err[self.sig_gpm]
+        # Initialize the derivative arrays needed for the coordinate calculation
+        dx = np.zeros(self.x.shape+(self.np,), dtype=float)
+        dy = np.zeros(self.x.shape+(self.np,), dtype=float)
+        dpa = np.zeros(self.np, dtype=float)
+        dinc = np.zeros(self.np, dtype=float)
 
-    def _s_chisqr_covar(self, model_sig):
-        return np.dot(self._s_resid(model_sig), self._s_ucov)
+        dx[...,0] = -1.
+        dy[...,1] = -1.
+        dpa[2] = np.radians(1.)
+        dinc[3] = np.radians(1.)
+
+        r, theta, dr, dtheta = deriv_projected_polar(self.x - self.par[0], self.y - self.par[1],
+                                                     *np.radians(self.par[2:4]), dxdp=dx, dydp=dy,
+                                                     dpadp=dpa, dincdp=dinc)
+
+        # NOTE: The velocity-field construction does not include the
+        # sin(inclination) term because this is absorbed into the
+        # rotation curve amplitude.
+
+        # Get the parameter index range
+        ps = self.nbp
+        pe = ps + self.rc.np
+
+        # Calculate the rotation speed and its parameter derivatives
+        dvrot = np.zeros(self.x.shape+(self.np,), dtype=float)
+        vrot, dvrot[...,ps:pe] = self.rc.deriv_sample(r, par=self.par[ps:pe])
+        dvrot += self.rc.ddx(r, par=self.par[ps:pe])[...,None]*dr
+
+        # Calculate the line-of-sight velocity and its parameter derivatives
+        cost = np.cos(theta)
+        v = vrot*cost + self.par[4]
+        dv = dvrot*cost[...,None] - (vrot*np.sin(theta))[...,None]*dtheta
+        dv[...,4] = 1.
+
+        if self.dc is None:
+            # Only fitting the velocity field
+            if self.beam_fft is None or ignore_beam:
+                # Not smearing
+                return v, dv
+            # Smear and propagate through the derivatives
+            _, v, _, _, dv, _ = deriv_smear(v, dv, self.beam_fft, beam_fft=True, sb=self.sb,
+                                            cnvfftw=self.cnvfftw)
+            return v, dv
+
+        # Fitting both the velocity and velocity-dispersion field
+
+        # Get the parameter index range
+        ps = pe
+        pe = ps + self.dc.np
+
+        # Calculate the dispersion profile and its parameter derivatives
+        dsig = np.zeros(self.x.shape+(self.np,), dtype=float)
+        sig, dsig[...,ps:pe] = self.dc.deriv_sample(r, par=self.par[ps:pe])
+        dsig += self.dc.ddx(r, par=self.par[ps:pe])[...,None]*dr
+
+        if self.beam_fft is None or ignore_beam:
+            # Not smearing
+            return v, sig, dv, dsig
+
+        # Smear and propagate through the derivatives
+        _, v, sig, _, dv, dsig = deriv_smear(v, dv, self.beam_fft, beam_fft=True, sb=self.sb,
+                                             sig=sig, dsig=dsig, cnvfftw=self.cnvfftw)
+        return v, sig, dv, dsig
+
+    def _v_resid(self, vel):
+        return self.kin.vel[self.vel_gpm] - vel[self.vel_gpm]
+    def _deriv_v_resid(self, dvel):
+        return -dvel[np.ix_(self.vel_gpm, self.free)]
+    def _v_chisqr(self, vel):
+        return self._v_resid(vel) / self._v_err[self.vel_gpm]
+    def _deriv_v_chisqr(self, dvel):
+        return self._deriv_v_resid(dvel) / self._v_err[self.vel_gpm, None]
+    def _v_chisqr_covar(self, vel):
+        return np.dot(self._v_resid(vel), self._v_ucov)
+    def _deriv_v_chisqr_covar(self, dvel):
+        return np.dot(self._deriv_v_resid(dvel).T, self._v_ucov).T
+
+    def _s_resid(self, sig):
+        return self.kin.sig_phys2[self.sig_gpm] - sig[self.sig_gpm]**2
+    def _deriv_s_resid(self, sig, dsig):
+        return -2 * sig[self.sig_gpm,None] * dsig[np.ix_(self.sig_gpm, self.free)]
+    def _s_chisqr(self, sig):
+        return self._s_resid(sig) / self._s_err[self.sig_gpm]
+    def _deriv_s_chisqr(self, sig, dsig):
+        return self._deriv_s_resid(sig, dsig) / self._s_err[self.sig_gpm, None]
+    def _s_chisqr_covar(self, sig):
+        return np.dot(self._s_resid(sig), self._s_ucov)
+    def _deriv_s_chisqr_covar(self, sig, dsig):
+        return np.dot(self._deriv_s_resid(sig, dsig).T, self._s_ucov).T
 
     def _resid(self, par, sep=False):
         """
@@ -734,8 +879,10 @@ class AxisymmetricDisk:
                 dispersion residuals, instead of appending them.
 
         Returns:
-            `numpy.ndarray`_: Difference between the data and the model for
-            all measurements.
+            :obj:`tuple`, `numpy.ndarray`_: Difference between the data and the
+            model for all measurements, either returned as a single vector for
+            all data or as separate vectors for the velocity and velocity
+            dispersion data (based on ``sep``).
         """
         self._set_par(par)
         vel, sig = (self.kin.bin(self.model()), None) if self.dc is None \
@@ -743,6 +890,38 @@ class AxisymmetricDisk:
         vfom = self._v_resid(vel)
         sfom = numpy.array([]) if self.dc is None else self._s_resid(sig)
         return (vfom, sfom) if sep else np.append(vfom, sfom)
+
+    def _deriv_resid(self, par, sep=False):
+        """
+        Calculate the derivative of the fit residuals w.r.t. all the *free*
+        model parameters.
+
+        Args:
+            par (`numpy.ndarray`_, optional):
+                The list of parameters to use. Length should be either
+                :attr:`np` or :attr:`nfree`. If the latter, the values of the
+                fixed parameters in :attr:`par` are used.
+            sep (:obj:`bool`, optional):
+                Return separate vectors for the velocity and velocity dispersion
+                residual derivatives, instead of appending them.
+
+        Returns:
+            :obj:`tuple`, `numpy.ndarray`_: Dervatives in the difference between
+            the data and the model for all measurements, either returned as a
+            single array for all data or as separate arrays for the velocity and
+            velocity dispersion data (based on ``sep``).
+        """
+        self._set_par(par)
+        if self.dc is None:
+            vel, dvel = self.kin.deriv_bin(*self.deriv_model())
+            return (self._deriv_v_resid(dvel), numpy.array([])) \
+                        if sep else self._deriv_v_resid(dvel)
+
+        vel, sig, dvel, dsig = self.deriv_model()
+        vel, dvel = self.kin.deriv_bin(vel, dvel)
+        sig, dsig = self.kin.deriv_bin(sig, dsig)
+        resid = (self._deriv_v_resid(vel), self._deriv_s_resid(sig, dsig))
+        return resid if sep else np.vstack(resid)
 
     def _chisqr(self, par, sep=False):
         """
@@ -759,8 +938,10 @@ class AxisymmetricDisk:
                 dispersion residuals, instead of appending them.
 
         Returns:
-            `numpy.ndarray`_: Difference between the data and the model for
-            all measurements, normalized by their errors.
+            :obj:`tuple`, `numpy.ndarray`_: Difference between the data and the
+            model for all measurements, normalized by their errors, either
+            returned as a single vector for all data or as separate vectors for
+            the velocity and velocity dispersion data (based on ``sep``).
         """
         self._set_par(par)
         vel, sig = (self.kin.bin(self.model()), None) if self.dc is None \
@@ -772,6 +953,40 @@ class AxisymmetricDisk:
             vfom = self._v_chisqr(vel)
             sfom = np.array([]) if self.dc is None else self._s_chisqr(sig)
         return (vfom, sfom) if sep else np.append(vfom, sfom)
+
+    def _deriv_chisqr(self, par, sep=False):
+        """
+        Calculate the derivatives of the error-normalized residuals (close to
+        the signed chi-square metric) w.r.t. the *free* model parameters.
+
+        Args:
+            par (`numpy.ndarray`_, optional):
+                The list of parameters to use. Length should be either
+                :attr:`np` or :attr:`nfree`. If the latter, the values of the
+                fixed parameters in :attr:`par` are used.
+            sep (:obj:`bool`, optional):
+                Return separate vectors for the velocity and velocity
+                dispersion residuals, instead of appending them.
+
+        Returns:
+            :obj:`tuple`, `numpy.ndarray`_: Derivatives of the error-normalized
+            difference between the data and the model for all measurements
+            w.r.t. the *free* model parameters, either returned as a single
+            array for all data or as separate arrays for the velocity and
+            velocity dispersion data (based on ``sep``).
+        """
+        self._set_par(par)
+        vf = self._deriv_v_chisqr_covar if self.has_covar else self._deriv_v_chisqr
+        if self.dc is None:
+            vel, dvel = self.kin.deriv_bin(*self.deriv_model())
+            return (vf(dvel), numpy.array([])) if sep else vf(dvel)
+
+        sf = self._deriv_s_chisqr_covar if self.has_covar else self._deriv_s_chisqr
+        vel, sig, dvel, dsig = self.deriv_model()
+        vel, dvel = self.kin.deriv_bin(vel, dvel)
+        sig, dsig = self.kin.deriv_bin(sig, dsig)
+        chisqr = (vf(dvel), sf(sig, dsig))
+        return chisqr if sep else np.vstack(chisqr)
 
     def _fit_prep(self, kin, p0, fix, scatter, sb_wgt, assume_posdef_covar, ignore_covar, cnvfftw):
         """
@@ -918,11 +1133,18 @@ class AxisymmetricDisk:
         """
         return self._chisqr if self.has_err or self.has_covar else self._resid
 
+    def _get_jac(self):
+        """
+        Return the Jacobian function to use given the availability of errors.
+        """
+        return self._deriv_chisqr if self.has_err or self.has_covar else self._deriv_resid
+
     # TODO: Include an argument here that allows the PSF convolution to be
     # toggled, regardless of whether or not the `kin` object has the beam
     # defined.
     def lsq_fit(self, kin, sb_wgt=False, p0=None, fix=None, lb=None, ub=None, scatter=None,
-                verbose=0, assume_posdef_covar=False, ignore_covar=True, cnvfftw=None):
+                verbose=0, assume_posdef_covar=False, ignore_covar=True, cnvfftw=None,
+                analytic_jac=True):
         """
         Use `scipy.optimize.least_squares`_ to fit the model to the provided
         kinematics.
@@ -991,12 +1213,25 @@ class AxisymmetricDisk:
                 is constructed to perform the convolutions.  If the class cannot
                 be constructed because the user doesn't have pyfftw installed,
                 then the convolutions fall back to the numpy routines.
+            analytic_jac (:obj:`bool`, optional):
+                Use the analytic calculation of the Jacobian matrix during the
+                fit optimization.  If False, the Jacobian is calculated using
+                finite-differencing methods provided by
+                `scipy.optimize.least_squares`_.
         """
         # Prepare to fit the data.
         self._fit_prep(kin, p0, fix, scatter, sb_wgt, assume_posdef_covar, ignore_covar,
                        cnvfftw)
-        # Get the method used to generate the figure-of-merit.
+        
+        # Get the method used to generate the figure-of-merit and the Jacobian
+        # matrix.
         fom = self._get_fom()
+        # If the analytic Jacobian matrix is not used, the derivative of the
+        # merit function wrt each parameter is determined by a 1% change in each
+        # parameter.
+        jac_kwargs = {'jac': self._get_jac()} if analytic_jac \
+                        else {'diff_step': np.full(self.np, 0.01, dtype=float)[self.free]}
+
         # Parameter boundaries
         _lb, _ub = self.par_bounds()
         if lb is None:
@@ -1006,13 +1241,11 @@ class AxisymmetricDisk:
         if len(lb) != self.np or len(ub) != self.np:
             raise ValueError('Length of one or both of the bound vectors is incorrect.')
 
-        # This means the derivative of the merit function wrt each parameter is
-        # determined by a 1% change in each parameter.
-        diff_step = np.full(self.np, 0.01, dtype=float)
         # Run the optimization
         result = optimize.least_squares(fom, self.par[self.free], method='trf',
                                         bounds=(lb[self.free], ub[self.free]), 
-                                        diff_step=diff_step[self.free], verbose=verbose)
+                                        verbose=verbose, **jac_kwargs)
+
         # Save the best-fitting parameters
         self._set_par(result.x)
         try:

@@ -142,7 +142,7 @@ class Kinematics(FitArgs):
             The on-sky Cartesian :math:`y` coordinates of *each*
             element in the data grid. See the description of
             ``grid_x``.
-        grid_sb (`numpy.array`_, optional):
+        grid_sb (`numpy.ndarray`_, optional):
             The relative surface brightness of the kinematic tracer over the
             full coordinate grid.  If None, this is either assumed to be unity
             or set by the provided ``sb``.  When fitting the data with, e.g., 
@@ -245,12 +245,13 @@ class Kinematics(FitArgs):
         self.grid_x = grid_x
         self.grid_y = grid_y
         self.grid_wcs = grid_wcs
-        self.binid, self.nspax, self.bin_indx, self.grid_indx, self.bin_inverse, self.bin_transform \
+        self.binid, self.nspax, self.bin_indx, self.grid_indx, self.bin_inverse, \
+            self.bin_transform \
                 = get_map_bin_transformations(spatial_shape=self.spatial_shape, binid=binid)
 
         # Unravel and select the valid values for all arrays
         for attr in ['x', 'y', 'sb', 'sb_ivar', 'sb_mask', 'vel', 'vel_ivar', 'vel_mask', 'sig', 
-                     'sig_ivar', 'sig_mask', 'sig_corr', 'bordermask','sb_anr']:
+                     'sig_ivar', 'sig_mask', 'sig_corr', 'bordermask', 'sb_anr']:
             if getattr(self, attr) is not None:
                 setattr(self, attr, getattr(self, attr).ravel()[self.bin_indx])
 
@@ -521,19 +522,25 @@ class Kinematics(FitArgs):
         # array...
         return _data if masked else _data.filled(d.dtype.type(fill_value))
 
+    # TODO: Include an optional weight map.  E.g., to mimic the luminosity
+    # weighting of the kinematics in data.
     def bin(self, data):
         """
-        Provided a set of mapped data, rebin it to match the internal
-        vectors.
+        Provided a set of mapped data, rebin it to match the internal vectors.
 
+        This method is most often used to bin maps of model data to match the
+        binning of the kinematic data.  The operation takes the average of
+        ``data`` within a bin defined by the kinematic data.  For unbinned data,
+        this operation simply selects and reorders the data from the input map
+        to match the internal vectors with the kinematic data.
+        
         Args:
             data (`numpy.ndarray`_):
-                Data to rebin. Shape must match
-                :attr:`spatial_shape`.
+                Data to rebin. Shape must match :attr:`spatial_shape`.
 
         Returns:
-            `numpy.ndarray`_: A vector with the data rebinned to
-            match the number of unique measurements available.
+            `numpy.ndarray`_: A vector with the data rebinned to match the
+            number of unique measurements available.
 
         Raises:
             ValueError:
@@ -543,6 +550,52 @@ class Kinematics(FitArgs):
             raise ValueError('Data to rebin has incorrect shape; expected {0}, found {1}.'.format(
                               self.spatial_shape, data.shape))
         return self.bin_transform.dot(data.ravel())
+
+    # TODO: Include an optional weight map.  E.g., to mimic the luminosity
+    # weighting of the kinematics in data.
+    def deriv_bin(self, data, deriv):
+        """
+        Provided a set of mapped data, rebin it to match the internal vectors.
+
+        This method is most often used to bin maps of model data to match the
+        binning of the kinematic data.  The operation takes the average of
+        ``data`` within a bin defined by the kinematic data.  For unbinned data,
+        this operation simply selects and reorders the data from the input map
+        to match the internal vectors with the kinematic data.
+
+        This method is identical to :func:`bin`, except that it allows for
+        propagation of derivatives of the provided model with respect to its
+        parameters.  The propagation of derivatives for any single parameter is
+        identical to calling :func:`bin` on that derivative map.
+        
+        Args:
+            data (`numpy.ndarray`_):
+                Data to rebin. Shape must match :attr:`spatial_shape`.
+            deriv (`numpy.ndarray`_):
+                If the input data is a kinematic model, this provides the
+                derivatives of model w.r.t. its parameters.  The first two axes
+                of the array must have a shape that matches
+                :attr:`spatial_shape`.
+
+        Returns:
+            :obj:`tuple`: Two `numpy.ndarray`_ arrays.  The first provides the
+            vector with the data rebinned to match the number of unique
+            measurements available, and the second is a 2D array with the binned
+            derivatives for each model parameter.
+
+        Raises:
+            ValueError:
+                Raised if the spatial shapes of the input arrays are incorrect.
+        """
+        if data.shape != self.spatial_shape:
+            raise ValueError('Data to rebin has incorrect shape; expected {0}, found {1}.'.format(
+                              self.spatial_shape, data.shape))
+        if deriv.shape[:2] != self.spatial_shape:
+            raise ValueError('Derivative shape is incorrect; expected {0}, found {1}.'.format(
+                              self.spatial_shape, deriv.shape[:2]))
+        return self.bin_transform.dot(data.ravel()), \
+                    np.stack(tuple([self.bin_transform.dot(deriv[...,i].ravel())
+                                    for i in range(deriv.shape[-1])]), axis=-1)
 
     def unique(self, data):
         """

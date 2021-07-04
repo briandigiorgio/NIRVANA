@@ -1032,6 +1032,10 @@ class MaNGAGasKinematics(MaNGAKinematics):
         if covar:
             if not quiet:
                 print('Building covariance matrices ... ')
+
+            # NOTE: None of the covariance matrices are forced to be
+            # positive-definite here.  This is left to the base Kinematics
+            # instantiation.
             sb_gpm, sb_covar = manga_map_covar(np.ma.MaskedArray(sb_ivar, mask=sb_mask),
                                                binid=binid, positive_definite=False, fill=True)
             vel_gpm, vel_covar = manga_map_covar(np.ma.MaskedArray(vel_ivar, mask=vel_mask),

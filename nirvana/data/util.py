@@ -16,6 +16,11 @@ from astropy.stats import sigma_clip
 
 from ..models import geometry
 
+
+# TODO: Build a Covariance class the pulls in all the covariance methods.  This
+# would make all the assume_posdef_covar, etc, stuff easier.
+
+
 # TODO: Add a set of weights?
 def get_map_bin_transformations(spatial_shape=None, binid=None):
     r"""
@@ -224,7 +229,7 @@ def is_positive_definite(mat, quiet=True):
     notpos = np.logical_not(w > 0)
     if not quiet:
         if np.any(notpos):
-            warnings.warn('{0} eigenvalues are not positive!')
+            warnings.warn(f'{np.sum(notpos)} eigenvalues are not positive!')
             print('{0:>6} {1:>8}'.format('Index', 'EigenVal'))
             for i in np.where(notpos)[0]:
                 print('{0:>6} {1:8.2e}'.format(i, w[i]))
@@ -731,6 +736,15 @@ def growth_lim(a, lim, fac=1.0, midpoint=None, default=[0., 1.]):
 
 def atleast_one_decade(lim):
     """
+    Increase a provided set of limits so that they span at least one decade.
+
+    Args:
+        lim (array-like):
+            A two-element object with, respectively, the lower and upper limits
+            on a range.
+    
+    Returns:
+        :obj:`list`: The adjusted lower and upper limits on the range.
     """
     lglim = np.log10(lim)
     if int(lglim[1]) - int(np.ceil(lglim[0])) > 0:
@@ -814,6 +828,7 @@ def find_largest_coherent_region(a):
     indx = uniq_labels != 0
     return labels == uniq_labels[indx][np.argmax(npix[indx])]
 
+
 def equal_shape(arr1, arr2, fill_value=0):
     '''
     Take two 2D arrays and pad them to make them the same shape
@@ -873,6 +888,7 @@ def equal_shape(arr1, arr2, fill_value=0):
             
     return arr1, arr2
 
+
 def trim_shape(arr1, arr2, fill_value=0):
     '''
     Take one 2D array and make it the same shape as the other through trimming
@@ -926,6 +942,7 @@ def trim_shape(arr1, arr2, fill_value=0):
                 arr1 = arr1.take(range(arr1.shape[i]-1),i)
         
     return arr1
+
 
 def gaussian_fill(img, sigma=1., mask=None, threshold=0.1, maxiter=None, debug=False):
     """

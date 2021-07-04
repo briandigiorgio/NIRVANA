@@ -29,9 +29,9 @@ from ..util import fileio
 
 #warnings.simplefilter('error', RuntimeWarning)
 
-def disk_fit_reject(kin, disk, disp=None, vel_mask=None, vel_sigma_rej=5, show_vel=False,
-                    vel_plot=None, sig_mask=None, sig_sigma_rej=5, show_sig=False, sig_plot=None,
-                    rej_flag='REJ_RESID', verbose=False):
+def disk_fit_reject(kin, disk, disp=None, ignore_covar=True, vel_mask=None, vel_sigma_rej=5,
+                    show_vel=False, vel_plot=None, sig_mask=None, sig_sigma_rej=5, show_sig=False,
+                    sig_plot=None, rej_flag='REJ_RESID', verbose=False):
     """
     Reject kinematic data based on the error-weighted residuals with respect
     to a disk model.
@@ -43,6 +43,9 @@ def disk_fit_reject(kin, disk, disp=None, vel_mask=None, vel_sigma_rej=5, show_v
 
     Note that you can both show the QA plots and have them written to a file
     (e.g., ``show_vel`` can be True and ``vel_plot`` can provide a file).
+
+    .. warning::
+        This function currently always ignores covariance!
     
     Args:
         kin (:class:`~nirvana.data.kinematics.Kinematics`):
@@ -53,6 +56,8 @@ def disk_fit_reject(kin, disk, disp=None, vel_mask=None, vel_sigma_rej=5, show_v
             Flag to include the velocity dispersion rejection in the
             iteration. If None, rejection is included if ``kin`` has velocity
             dispersion data and ``disk`` has a disperion parameterization.
+        ignore_covar (:obj:`bool`, optional):
+            If ``kin`` provides the covariance between measurements, ignore it.
         vel_mask (`numpy.ndarray`_):
             Bitmask used to track velocity rejections.
         vel_sigma_rej (:obj:`float`, optional):
@@ -86,6 +91,17 @@ def disk_fit_reject(kin, disk, disp=None, vel_mask=None, vel_sigma_rej=5, show_v
         the model. If the dispersion is not included in the rejection, the
         last two objects returned are both None.
     """
+
+    # Check input
+    if disp is None:
+        disp = kin.sig is not None and disk.dc is not None
+    if disp and (kin.sig is None or disk.dc is None):
+        raise ValueError('Cannot include dispersion if there is no dispersion data or if the '
+                         'dispersion data were not fit by the model.')
+    use_covar = not ignore_covar and kin.vel_covar is not None
+    if disp:
+        use_covar = use_covar and kin.sig_phys2_covar is not None
+
     # Instantiate the bitmask.
     # TODO: This is cheap to redo everytime, but could also make it a part of
     # the AxisymmetricDisk class...
@@ -98,8 +114,9 @@ def disk_fit_reject(kin, disk, disp=None, vel_mask=None, vel_sigma_rej=5, show_v
     # scatter
     vmod = models[0] if len(models) == 2 else models
     resid = kin.vel - kin.bin(vmod)
-    err = np.sqrt(inverse(kin.vel_ivar))
-    scat = IntrinsicScatter(resid, err=err, gpm=disk.vel_gpm, npar=disk.nfree)
+    v_err_kwargs = {'covar': kin.vel_covar} if use_covar \
+                        else {'err': np.sqrt(inverse(kin.vel_ivar))}
+    scat = IntrinsicScatter(resid, gpm=disk.vel_gpm, npar=disk.nfree, **v_err_kwargs)
     vel_sig, vel_rej, vel_gpm = scat.iter_fit(sigma_rej=vel_sigma_rej, fititer=5, verbose=_verbose)
     # Incorporate into mask
     if vel_mask is not None and np.any(vel_rej):
@@ -111,8 +128,6 @@ def disk_fit_reject(kin, disk, disp=None, vel_mask=None, vel_sigma_rej=5, show_v
     if vel_plot is not None:
         scat.show(ofile=vel_plot)
 
-    if disp is None:
-        disp = kin.sig is not None and disk.dc is not None
     if not disp:
         # Not rejecting dispersion so we're done
         return vel_rej, vel_sig, None, None
@@ -120,8 +135,9 @@ def disk_fit_reject(kin, disk, disp=None, vel_mask=None, vel_sigma_rej=5, show_v
     # Reject based on error-weighted residuals, accounting for intrinsic
     # scatter
     resid = kin.sig_phys2 - kin.bin(models[1])**2
-    err = np.sqrt(inverse(kin.sig_phys2_ivar))
-    scat = IntrinsicScatter(resid, err=err, gpm=disk.sig_gpm, npar=disk.nfree)
+    sig_err_kwargs = {'covar': kin.sig_phys2_covar} if use_covar \
+                        else {'err': np.sqrt(inverse(kin.sig_phys2_ivar))}
+    scat = IntrinsicScatter(resid, gpm=disk.sig_gpm, npar=disk.nfree, **sig_err_kwargs)
     sig_sig, sig_rej, sig_gpm = scat.iter_fit(sigma_rej=sig_sigma_rej, fititer=5, verbose=_verbose)
     # Incorporate into mask
     if sig_mask is not None and np.any(sig_rej):
@@ -136,18 +152,30 @@ def disk_fit_reject(kin, disk, disp=None, vel_mask=None, vel_sigma_rej=5, show_v
 
 
 # TODO: Consolidate this function with the one above
-def disk_fit_resid_dist(kin, disk, disp=None, vel_mask=None, show_vel=False, vel_plot=None,
-                        sig_mask=None, show_sig=False, sig_plot=None):
+def disk_fit_resid_dist(kin, disk, disp=None, ignore_covar=True, vel_mask=None, show_vel=False,
+                        vel_plot=None, sig_mask=None, show_sig=False, sig_plot=None, debug=False):
     """
     """
+    # Check input
+    if disp is None:
+        disp = kin.sig is not None and disk.dc is not None
+    if disp and (kin.sig is None or disk.dc is None):
+        raise ValueError('Cannot include dispersion if there is no dispersion data or if the '
+                         'dispersion data were not fit by the model.')
+    use_covar = not ignore_covar and kin.vel_covar is not None
+    if disp:
+        use_covar = use_covar and kin.sig_phys2_covar is not None
+
     # Get the models
     models = disk.model()
 
     # Show the error-normalized distributions for the velocity-field residuals
     vmod = models[0] if len(models) == 2 else models
     resid = kin.vel - kin.bin(vmod)
-    err = np.sqrt(inverse(kin.vel_ivar))
-    scat = IntrinsicScatter(resid, err=err, gpm=disk.vel_gpm, npar=disk.nfree)
+    v_err_kwargs = {'covar': kin.vel_covar} if use_covar \
+                        else {'err': np.sqrt(inverse(kin.vel_ivar))}
+
+    scat = IntrinsicScatter(resid, gpm=disk.vel_gpm, npar=disk.nfree, **v_err_kwargs)
     scat.sig = 0. if disk.scatter is None else disk.scatter[0]
     scat.rej = np.zeros(resid.size, dtype=bool) if vel_mask is None else vel_mask > 0
     # Show and/or plot the result, if requested
@@ -165,8 +193,9 @@ def disk_fit_resid_dist(kin, disk, disp=None, vel_mask=None, show_vel=False, vel
 
     # Show the error-normalized distributions for the dispersion residuals
     resid = kin.sig_phys2 - kin.bin(models[1])**2
-    err = np.sqrt(inverse(kin.sig_phys2_ivar))
-    scat = IntrinsicScatter(resid, err=err, gpm=disk.sig_gpm, npar=disk.nfree)
+    sig_err_kwargs = {'covar': kin.sig_phys2_covar} if use_covar \
+                        else {'err': np.sqrt(inverse(kin.sig_phys2_ivar))}
+    scat = IntrinsicScatter(resid, gpm=disk.sig_gpm, npar=disk.nfree, **sig_err_kwargs)
     scat.sig = 0. if disk.scatter is None else disk.scatter[1]
     scat.rej = np.zeros(resid.size, dtype=bool) if sig_mask is None else sig_mask > 0
     # Show and/or plot the result, if requested
@@ -1094,21 +1123,15 @@ class AxisymmetricDisk:
         if self.has_covar:
             # Construct the matrices used to calculate the merit function in
             # the presence of covariance.
+            vel_pd_covar = self.kin.vel_covar[np.ix_(self.vel_gpm,self.vel_gpm)]
+            sig_pd_covar = None if self.dc is None \
+                            else self.kin.sig_phys2_covar[np.ix_(self.vel_gpm,self.vel_gpm)]
             if not assume_posdef_covar:
                 # Force the matrices to be positive definite
                 print('Forcing vel covar to be pos-def')
-                vel_pd_covar = impose_positive_definite(self.kin.vel_covar[
-                                                                np.ix_(self.vel_gpm,self.vel_gpm)])
-                # TODO: This needs to be fixed to be for sigma**2, not sigma
+                vel_pd_covar = impose_positive_definite(vel_pd_covar)
                 print('Forcing sig covar to be pos-def')
-                sig_pd_covar = None if self.dc is None \
-                                    else impose_positive_definite(self.kin.sig_covar[
-                                                                np.ix_(self.sig_gpm,self.sig_gpm)])
-                
-            else:
-                vel_pd_covar = self.kin.vel_covar[np.ix_(self.vel_gpm,self.vel_gpm)]
-                sig_pd_covar = None if self.dc is None \
-                                else self.kin.sig_covar[np.ix_(self.vel_gpm,self.vel_gpm)]
+                sig_pd_covar = None if self.dc is None else impose_positive_definite(sig_pd_covar)
 
             if self.scatter is not None:
                 # A diagonal matrix with only positive values is, by
@@ -1769,7 +1792,9 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
 
     #-------------------------------------------------------------------
     # Velocity Dispersion
-    sig_lim = np.power(10.0, growth_lim(np.ma.log10(np.ma.append(s_map, smod_map)), 0.80, 1.05))
+    sig_lim = np.power(10.0, growth_lim(np.ma.log10(s_map), 0.80, 1.05)) if smod_map is None \
+                else np.power(10.0, growth_lim(np.ma.log10(np.ma.append(s_map, smod_map)),
+                                               0.80, 1.05))
     sig_lim = atleast_one_decade(sig_lim)
 
     ax = plot.init_ax(fig, [0.215, 0.580, 0.19, 0.19])
@@ -1809,25 +1834,27 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
     cax.text(-0.05, 1.1, 'V', ha='right', va='center', transform=cax.transAxes)
 
     #-------------------------------------------------------------------
-    # Velocity Dispersion
-    sig_lim = np.power(10.0, growth_lim(np.ma.log10(np.ma.append(s_map, smod_map)), 0.80, 1.05))
-    sig_lim = atleast_one_decade(sig_lim)
-
+    # Velocity Dispersion Model
     ax = plot.init_ax(fig, [0.410, 0.580, 0.19, 0.19])
-    cax = fig.add_axes([0.440, 0.57, 0.15, 0.005])
-    cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
     ax.set_ylim(skylim)
     ax.xaxis.set_major_formatter(ticker.NullFormatter())
     ax.yaxis.set_major_formatter(ticker.NullFormatter())
     ax.add_patch(patches.Circle((0.1, 0.1), fwhm/np.diff(skylim)[0]/2, transform=ax.transAxes,
                                 facecolor='0.7', edgecolor='k', zorder=4))
-    im = ax.imshow(smod_map, origin='lower', interpolation='nearest', cmap='viridis',
-                   extent=extent, norm=colors.LogNorm(vmin=sig_lim[0], vmax=sig_lim[1]), zorder=4)
     # Mark the fitted dynamical center
     ax.scatter(disk.par[0], disk.par[1], marker='+', color='k', s=40, lw=1, zorder=5)
-    cb = fig.colorbar(im, cax=cax, orientation='horizontal', format=logformatter)
-    cax.text(-0.05, 0.1, r'$\sigma$', ha='right', va='center', transform=cax.transAxes)
+    if disk.dc is None:
+        ax.text(0.5, 0.3, 'No velocity dispersion model', ha='center', va='center',
+                transform=ax.transAxes)
+    else:
+        im = ax.imshow(smod_map, origin='lower', interpolation='nearest', cmap='viridis',
+                       extent=extent, norm=colors.LogNorm(vmin=sig_lim[0], vmax=sig_lim[1]),
+                       zorder=4)
+        cax = fig.add_axes([0.440, 0.57, 0.15, 0.005])
+        cax.tick_params(which='both', direction='in')
+        cb = fig.colorbar(im, cax=cax, orientation='horizontal', format=logformatter)
+        cax.text(-0.05, 0.1, r'$\sigma$', ha='right', va='center', transform=cax.transAxes)
 
     #-------------------------------------------------------------------
     # Velocity Model Residuals
@@ -1852,22 +1879,25 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
 
     #-------------------------------------------------------------------
     # Velocity Dispersion Residuals
-    s_resid = s_map - smod_map
-    s_res_lim = growth_lim(s_resid, 0.80, 1.15, midpoint=0.0)
-
     ax = plot.init_ax(fig, [0.605, 0.580, 0.19, 0.19])
-    cax = fig.add_axes([0.635, 0.57, 0.15, 0.005])
-    cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
     ax.set_ylim(skylim)
     ax.xaxis.set_major_formatter(ticker.NullFormatter())
     ax.yaxis.set_major_formatter(ticker.NullFormatter())
     ax.add_patch(patches.Circle((0.1, 0.1), fwhm/np.diff(skylim)[0]/2, transform=ax.transAxes,
                                 facecolor='0.7', edgecolor='k', zorder=4))
-    im = ax.imshow(s_resid, origin='lower', interpolation='nearest', cmap='RdBu_r',
-                   extent=extent, vmin=s_res_lim[0], vmax=s_res_lim[1], zorder=4)
-    cb = fig.colorbar(im, cax=cax, orientation='horizontal') #, format=logformatter)
-    cax.text(-0.05, 0.1, r'$\Delta\sigma$', ha='right', va='center', transform=cax.transAxes)
+    if disk.dc is None:
+        ax.text(0.5, 0.3, 'No velocity dispersion model', ha='center', va='center',
+                transform=ax.transAxes)
+    else:
+        s_resid = s_map - smod_map
+        s_res_lim = growth_lim(s_resid, 0.80, 1.15, midpoint=0.0)
+        im = ax.imshow(s_resid, origin='lower', interpolation='nearest', cmap='RdBu_r',
+                    extent=extent, vmin=s_res_lim[0], vmax=s_res_lim[1], zorder=4)
+        cax = fig.add_axes([0.635, 0.57, 0.15, 0.005])
+        cax.tick_params(which='both', direction='in')
+        cb = fig.colorbar(im, cax=cax, orientation='horizontal') #, format=logformatter)
+        cax.text(-0.05, 0.1, r'$\Delta\sigma$', ha='right', va='center', transform=cax.transAxes)
 
     #-------------------------------------------------------------------
     # Velocity Model Chi-square
@@ -1895,25 +1925,29 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
 
     #-------------------------------------------------------------------
     # Velocity Dispersion Model Chi-square
-    s_chi = np.ma.divide(np.absolute(s_resid), s_err_map)
-    s_chi_lim = np.power(10.0, growth_lim(np.ma.log10(s_chi), 0.90, 1.15))
-    s_chi_lim = atleast_one_decade(s_chi_lim)
-
     ax = plot.init_ax(fig, [0.800, 0.580, 0.19, 0.19])
-    cax = fig.add_axes([0.830, 0.57, 0.15, 0.005])
-    cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
     ax.set_ylim(skylim)
     ax.xaxis.set_major_formatter(ticker.NullFormatter())
     ax.yaxis.set_major_formatter(ticker.NullFormatter())
     ax.add_patch(patches.Circle((0.1, 0.1), fwhm/np.diff(skylim)[0]/2, transform=ax.transAxes,
                                 facecolor='0.7', edgecolor='k', zorder=4))
-    im = ax.imshow(s_chi, origin='lower', interpolation='nearest', cmap='viridis',
-                   extent=extent, norm=colors.LogNorm(vmin=s_chi_lim[0], vmax=s_chi_lim[1]),
-                   zorder=4)
-    cb = fig.colorbar(im, cax=cax, orientation='horizontal', format=logformatter)
-    cax.text(-0.02, 0.4, r'$|\Delta \sigma|/\epsilon$', ha='right', va='center',
-             transform=cax.transAxes)
+    if disk.dc is None:
+        ax.text(0.5, 0.3, 'No velocity dispersion model', ha='center', va='center',
+                transform=ax.transAxes)
+    else:
+        s_chi = np.ma.divide(np.absolute(s_resid), s_err_map)
+        s_chi_lim = np.power(10.0, growth_lim(np.ma.log10(s_chi), 0.90, 1.15))
+        s_chi_lim = atleast_one_decade(s_chi_lim)
+
+        cax = fig.add_axes([0.830, 0.57, 0.15, 0.005])
+        cax.tick_params(which='both', direction='in')
+        im = ax.imshow(s_chi, origin='lower', interpolation='nearest', cmap='viridis',
+                    extent=extent, norm=colors.LogNorm(vmin=s_chi_lim[0], vmax=s_chi_lim[1]),
+                    zorder=4)
+        cb = fig.colorbar(im, cax=cax, orientation='horizontal', format=logformatter)
+        cax.text(-0.02, 0.4, r'$|\Delta \sigma|/\epsilon$', ha='right', va='center',
+                transform=cax.transAxes)
 
     #-------------------------------------------------------------------
     # Intrinsic Velocity Model
@@ -1938,32 +1972,36 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
 
     #-------------------------------------------------------------------
     # Intrinsic Velocity Dispersion
-    sig_lim = np.power(10.0, growth_lim(np.ma.log10(np.ma.append(s_map, smod_map)), 0.80, 1.05))
-    sig_lim = atleast_one_decade(sig_lim)
-
     ax = plot.init_ax(fig, [0.800, 0.110, 0.19, 0.19])
-    cax = fig.add_axes([0.830, 0.10, 0.15, 0.005])
-    cax.tick_params(which='both', direction='in')
     ax.set_xlim(skylim[::-1])
     ax.set_ylim(skylim)
     ax.xaxis.set_major_formatter(ticker.NullFormatter())
     ax.yaxis.set_major_formatter(ticker.NullFormatter())
-    im = ax.imshow(smod_intr_map, origin='lower', interpolation='nearest', cmap='viridis',
-                   extent=extent, norm=colors.LogNorm(vmin=sig_lim[0], vmax=sig_lim[1]), zorder=4)
     # Mark the fitted dynamical center
     ax.scatter(disk.par[0], disk.par[1], marker='+', color='k', s=40, lw=1, zorder=5)
-    cb = fig.colorbar(im, cax=cax, orientation='horizontal', format=logformatter)
-    cax.text(-0.05, 0.1, r'$\sigma$', ha='right', va='center', transform=cax.transAxes)
+    if disk.dc is None:
+        ax.text(0.5, 0.3, 'No velocity dispersion model', ha='center', va='center',
+                transform=ax.transAxes)
+    else:
+        im = ax.imshow(smod_intr_map, origin='lower', interpolation='nearest', cmap='viridis',
+                       extent=extent, norm=colors.LogNorm(vmin=sig_lim[0], vmax=sig_lim[1]),
+                       zorder=4)
+        cax = fig.add_axes([0.830, 0.10, 0.15, 0.005])
+        cax.tick_params(which='both', direction='in')
+        cb = fig.colorbar(im, cax=cax, orientation='horizontal', format=logformatter)
+        cax.text(-0.05, 0.1, r'$\sigma$', ha='right', va='center', transform=cax.transAxes)
 
+    #-------------------------------------------------------------------
     # Annotate with the intrinsic scatter included
     ax.text(0.00, -0.2, r'V scatter, $\epsilon_v$:', ha='left', va='center',
             transform=ax.transAxes, fontsize=10)
     ax.text(1.00, -0.2, f'{vsct:.1f}', ha='right', va='center', transform=ax.transAxes,
             fontsize=10)
-    ax.text(0.00, -0.3, r'$\sigma^2$ scatter, $\epsilon_{\sigma^2}$:', ha='left', va='center',
-            transform=ax.transAxes, fontsize=10)
-    ax.text(1.00, -0.3, f'{ssct:.1f}', ha='right', va='center', transform=ax.transAxes,
-            fontsize=10)
+    if disk.dc is not None:
+        ax.text(0.00, -0.3, r'$\sigma^2$ scatter, $\epsilon_{\sigma^2}$:', ha='left', va='center',
+                transform=ax.transAxes, fontsize=10)
+        ax.text(1.00, -0.3, f'{ssct:.1f}', ha='right', va='center', transform=ax.transAxes,
+                fontsize=10)
 
     #-------------------------------------------------------------------
     # SDSS image
@@ -2074,12 +2112,13 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
     vrot_indx = vrot_nbin > 5
     if not np.any(vrot_indx):
         vrot_indx = vrot_nbin > 0
-    sprof_indx = sprof_nbin > 5
-    if not np.any(sprof_indx):
-        sprof_indx = sprof_nbin > 0
+    if disk.dc is not None:
+        sprof_indx = sprof_nbin > 5
+        if not np.any(sprof_indx):
+            sprof_indx = sprof_nbin > 0
 
     concat_r = binr[vrot_indx] if np.any(vrot_indx) else np.array([])
-    if np.any(sprof_indx):
+    if disk.dc is not None and np.any(sprof_indx):
         concat_r = np.append(concat_r, binr[sprof_indx])
     if len(concat_r) == 0:
         warnings.warn('No valid bins of velocity or sigma data.  Skipping radial bin plots!')
@@ -2212,16 +2251,81 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
 
 
 def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponential', fitdisp=True,
-                    max_vel_err=None, max_sig_err=None, min_vel_snr=None, min_sig_snr=None,
-                    fix_cen=False, fix_inc=False, min_unmasked=None, select_coherent=False,
-                    verbose=0):
+                    ignore_covar=True, assume_posdef_covar=True, max_vel_err=None,
+                    max_sig_err=None, min_vel_snr=None, min_sig_snr=None, fix_cen=False,
+                    fix_inc=False, min_unmasked=None, select_coherent=False, verbose=0):
     """
-    add doc string...
+    Iteratively fit kinematic data with an axisymmetric disk model.
 
-    select_coherent means ignore small disjointed regions separated from the
-    main group of data.
+    .. todo::
+        - Explain algorithm iteration steps
+        - Enable more rotation curve and dispersion profile functions.
+        - Allow guess RC and DC parameters and bounds to be input, or switch to
+          requiring the 1D model class instances to be provided, like in
+          :class:`~nirvana.models.axisym.AxisymmetricDisk`.
+
+    Args:
+        galmeta (:class:`~nirvana.data.meta.GlobalPar`):
+            Object with metadata for the galaxy to be fit.
+        kin (:class:`~nirvana.data.kinematics.Kinematics`):
+            Object with the data to be fit
+        rctype (:obj:`str`, optional):
+            Functional form for the rotation curve.  Must be "HyperbolicTangent"
+            or "PolyEx".
+        dctype (:obj:`str`, optional):
+            Functional form for the dispersion profile.  Must be "Exponential",
+            "ExpBase", or "Const".
+        fitdisp (:obj:`bool`, optional):
+            Fit the velocity dispersion data if it is available in ``kin``.
+        ignore_covar (:obj:`bool`, optional):
+            If ``kin`` provides the covariance between measurements, ignore it
+            and fit the data assuming there is no covariance.
+        assume_posdef_covar (:obj:`bool`, optional):
+            If ``kin`` provides the covariance between measurements, assume the
+            covariance matrices are positive definite.
+        max_vel_err (:obj:`float`, optional):
+            Mask measurements with velocity errors larger than this value.  If
+            None, there is no upper limit on the allowed velocity error.
+        max_sig_err (:obj:`float`, optional):
+            Mask measurements with velocity dispersion errors larger than this
+            value.  If None, there is no upper limit on the allowed velocity
+            dispersion error.
+        min_vel_snr (:obj:`float`, optional):
+            Mask velocity measurements for spectra below this S/N.  If None,
+            there is no lower S/N limit on the allowed velocities.
+        min_sig_snr (:obj:`float`, optional):
+            Mask velocity dispersion measurements for spectra below this S/N.
+            If None, there is no lower S/N limit on the allowed velocity
+            dispersions.
+        fix_cen (:obj:`bool`, optional):
+            Fix the dynamical center of the fit to 0,0 in the final fit
+            iteration.
+        fix_inc (:obj:`bool`, optional):
+            Fix the kinematic inclination of the fit to estimate provided by the
+            :func:`~nirvana.data.meta.GlobalPar.guess_inclination` method of
+            ``galmeta``.
+        min_unmasked (:obj:`int`, optional):
+            The minimum of velocity measurements (and velocity dispersion
+            measurements, if they are available and being fit) required to
+            proceed with the fit, after applying all masking.
+        select_coherent (:obj:`bool`, optional):
+            After masking the measurement values, mask any measurements that are
+            not included in the largest coherent region of adjacent
+            measurements.  See
+            :func:`~nirvana.data.util.find_largest_coherent_region`.
+        verbose (:obj:`int`, optional):
+            Verbosity level: 0=only status output written to terminal; 1=show 
+            fit result QA plot; 2=full output
+
+    Returns:
+        :obj:`tuple`: Returns 5 objects: (1) the
+        :class:`~nirvana.models.axisym.AxisymmetricDisk` instance used during
+        the fit, (2) a `numpy.ndarray`_ with the input guess parameters, (3) a
+        boolean `numpy.ndarray`_ selecting the parameters that were fixed during
+        the fit, (4) a `numpy.ndarray`_ with the bad-pixel mask for the velocity
+        measurements used in the fit, and (5) a `numpy.ndarray`_ with the
+        bad-pixel mask for the velocity dispersion measurements used in the fit.
     """
-
     # Running in "debug" mode
     debug = verbose > 1
 
@@ -2309,7 +2413,7 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
 
     if np.all(vel_mask > 0):
         raise ValueError('All velocity measurements masked!')
-    if np.all(sig_mask > 0):
+    if sig_mask is not None and np.all(sig_mask > 0):
         raise ValueError('All velocity dispersion measurements masked!')
 
     if min_unmasked is not None:
@@ -2362,7 +2466,8 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     print('Running fit iteration 1')
     # TODO: sb_wgt is always true throughout. Make this a command-line
     # parameter?
-    disk.lsq_fit(kin, sb_wgt=True, p0=p0, fix=fix, lb=lb, ub=ub, verbose=verbose)
+    disk.lsq_fit(kin, sb_wgt=True, p0=p0, fix=fix, lb=lb, ub=ub, ignore_covar=True, #ignore_covar,
+                 assume_posdef_covar=assume_posdef_covar, verbose=verbose)
     # Show
     if verbose > 0:
         axisym_fit_plot(galmeta, kin, disk, fix=fix) 
@@ -2374,8 +2479,9 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     #     measurements are bogus.
     print('Running rejection iterations')
     vel_rej, vel_sig, sig_rej, sig_sig \
-            = disk_fit_reject(kin, disk, disp=fitdisp, vel_mask=vel_mask, vel_sigma_rej=15,
-                              show_vel=debug, sig_mask=sig_mask, sig_sigma_rej=15, show_sig=debug,
+            = disk_fit_reject(kin, disk, disp=fitdisp, ignore_covar=True, #ignore_covar,
+                              vel_mask=vel_mask, vel_sigma_rej=15, show_vel=debug,
+                              sig_mask=sig_mask, sig_sigma_rej=15, show_sig=debug,
                               rej_flag='REJ_UNR')
     #   - Incorporate the rejection into the Kinematics object
     kin.reject(vel_rej=vel_rej, sig_rej=sig_rej)
@@ -2383,7 +2489,8 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     #     use the parameters from the previous fit as the starting point, and
     #     ignore the estimated intrinsic scatter.
     print('Running fit iteration 2')
-    disk.lsq_fit(kin, sb_wgt=True, p0=p0, fix=fix, lb=lb, ub=ub, verbose=verbose)
+    disk.lsq_fit(kin, sb_wgt=True, p0=p0, fix=fix, lb=lb, ub=ub, ignore_covar=True, #ignore_covar,
+                 assume_posdef_covar=assume_posdef_covar, verbose=verbose)
     # Show
     if verbose > 0:
         axisym_fit_plot(galmeta, kin, disk, fix=fix)
@@ -2393,8 +2500,9 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     #   - Perform a more restricted rejection
     print('Running rejection iterations')
     vel_rej, vel_sig, sig_rej, sig_sig \
-            = disk_fit_reject(kin, disk, disp=fitdisp, vel_mask=vel_mask, vel_sigma_rej=10,
-                              show_vel=debug, sig_mask=sig_mask, sig_sigma_rej=10, show_sig=debug,
+            = disk_fit_reject(kin, disk, disp=fitdisp, ignore_covar=True, #ignore_covar,
+                              vel_mask=vel_mask, vel_sigma_rej=10, show_vel=debug,
+                              sig_mask=sig_mask, sig_sigma_rej=10, show_sig=debug,
                               rej_flag='REJ_RESID')
     #   - Incorporate the rejection into the Kinematics object
     kin.reject(vel_rej=vel_rej, sig_rej=sig_rej)
@@ -2403,8 +2511,8 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     #     intrinsic scatter.
     print('Running fit iteration 3')
     scatter = np.array([vel_sig, sig_sig])
-    disk.lsq_fit(kin, sb_wgt=True, p0=disk.par, fix=fix, lb=lb, ub=ub, scatter=scatter,
-                 verbose=verbose)
+    disk.lsq_fit(kin, sb_wgt=True, p0=disk.par, fix=fix, lb=lb, ub=ub, ignore_covar=True, #ignore_covar,
+                 assume_posdef_covar=assume_posdef_covar, scatter=scatter, verbose=verbose)
     # Show
     if verbose > 0:
         axisym_fit_plot(galmeta, kin, disk, fix=fix)
@@ -2416,8 +2524,9 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     #   - Reject again based on the new fit parameters
     print('Running rejection iterations')
     vel_rej, vel_sig, sig_rej, sig_sig \
-            = disk_fit_reject(kin, disk, disp=fitdisp, vel_mask=vel_mask, vel_sigma_rej=10,
-                              show_vel=debug, sig_mask=sig_mask, sig_sigma_rej=10, show_sig=debug,
+            = disk_fit_reject(kin, disk, disp=fitdisp, ignore_covar=True, #ignore_covar,
+                              vel_mask=vel_mask, vel_sigma_rej=10, show_vel=debug,
+                              sig_mask=sig_mask, sig_sigma_rej=10, show_sig=debug,
                               rej_flag='REJ_RESID')
     #   - Incorporate the rejection into the Kinematics object
     kin.reject(vel_rej=vel_rej, sig_rej=sig_rej)
@@ -2426,8 +2535,8 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     #     intrinsic scatter.
     print('Running fit iteration 4')
     scatter = np.array([vel_sig, sig_sig])
-    disk.lsq_fit(kin, sb_wgt=True, p0=disk.par, fix=fix, lb=lb, ub=ub, scatter=scatter,
-                 verbose=verbose)
+    disk.lsq_fit(kin, sb_wgt=True, p0=disk.par, fix=fix, lb=lb, ub=ub, ignore_covar=True, #ignore_covar,
+                 assume_posdef_covar=assume_posdef_covar, scatter=scatter, verbose=verbose)
     # Show
     if verbose > 0:
         axisym_fit_plot(galmeta, kin, disk, fix=fix)
@@ -2439,8 +2548,9 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     #   - Reject again based on the new fit parameters
     print('Running rejection iterations')
     vel_rej, vel_sig, sig_rej, sig_sig \
-            = disk_fit_reject(kin, disk, disp=fitdisp, vel_mask=vel_mask, vel_sigma_rej=10,
-                              show_vel=debug, sig_mask=sig_mask, sig_sigma_rej=10, show_sig=debug,
+            = disk_fit_reject(kin, disk, disp=fitdisp, ignore_covar=True, #ignore_covar,
+                              vel_mask=vel_mask, vel_sigma_rej=10, show_vel=debug,
+                              sig_mask=sig_mask, sig_sigma_rej=10, show_sig=debug,
                               rej_flag='REJ_RESID')
     #   - Incorporate the rejection into the Kinematics object
     kin.reject(vel_rej=vel_rej, sig_rej=sig_rej)
@@ -2456,8 +2566,8 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     fix = np.append(base_fix, np.zeros(p0.size-5, dtype=bool))
     print('Running fit iteration 5')
     scatter = np.array([vel_sig, sig_sig])
-    disk.lsq_fit(kin, sb_wgt=True, p0=disk.par, fix=fix, lb=lb, ub=ub, scatter=scatter,
-                 verbose=verbose)
+    disk.lsq_fit(kin, sb_wgt=True, p0=disk.par, fix=fix, lb=lb, ub=ub, ignore_covar=ignore_covar,
+                 assume_posdef_covar=assume_posdef_covar, scatter=scatter, verbose=verbose)
     # Show
     if verbose > 0:
         axisym_fit_plot(galmeta, kin, disk, fix=fix)
@@ -2471,16 +2581,17 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     # argument?
     print('Running rejection iterations')
     vel_rej, vel_sig, sig_rej, sig_sig \
-            = disk_fit_reject(kin, disk, disp=fitdisp, vel_mask=vel_mask, vel_sigma_rej=10,
-                              show_vel=debug, sig_mask=sig_mask, sig_sigma_rej=10, show_sig=debug,
+            = disk_fit_reject(kin, disk, disp=fitdisp, ignore_covar=ignore_covar,
+                              vel_mask=vel_mask, vel_sigma_rej=10, show_vel=debug,
+                              sig_mask=sig_mask, sig_sigma_rej=10, show_sig=debug,
                               rej_flag='REJ_RESID')
     #   - Incorporate the rejection into the Kinematics object
     kin.reject(vel_rej=vel_rej, sig_rej=sig_rej)
     #   - Redo previous fit
     print('Running fit iteration 6')
     scatter = np.array([vel_sig, sig_sig])
-    disk.lsq_fit(kin, sb_wgt=True, p0=disk.par, fix=fix, lb=lb, ub=ub, scatter=scatter,
-                 verbose=verbose)
+    disk.lsq_fit(kin, sb_wgt=True, p0=disk.par, fix=fix, lb=lb, ub=ub, ignore_covar=ignore_covar,
+                 assume_posdef_covar=assume_posdef_covar, scatter=scatter, verbose=verbose)
     # Show
     if verbose > 0:
         axisym_fit_plot(galmeta, kin, disk, fix=fix)

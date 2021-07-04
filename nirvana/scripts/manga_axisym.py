@@ -164,17 +164,19 @@ def main(args):
     # Run the iterative fit
     disk, p0, fix, vel_mask, sig_mask \
             = axisym.axisym_iter_fit(galmeta, kin, rctype=args.rc, dctype=args.dc,
-                                     fitdisp=args.disp, max_vel_err=args.max_vel_err,
-                                     max_sig_err=args.max_sig_err, min_vel_snr=args.min_vel_snr,
-                                     min_sig_snr=args.min_sig_snr, fix_cen=args.fix_cen,
-                                     fix_inc=args.fix_inc, min_unmasked=args.min_unmasked,
-                                     select_coherent=args.coherent, verbose=args.verbose)
+                                     fitdisp=args.disp, ignore_covar=not args.covar,
+                                     max_vel_err=args.max_vel_err, max_sig_err=args.max_sig_err,
+                                     min_vel_snr=args.min_vel_snr, min_sig_snr=args.min_sig_snr,
+                                     fix_cen=args.fix_cen, fix_inc=args.fix_inc,
+                                     min_unmasked=args.min_unmasked, select_coherent=args.coherent,
+                                     verbose=args.verbose)
 
     # Plot the final residuals
     dv_plot = os.path.join(args.odir, f'{oroot}-vdist.png')
     ds_plot = os.path.join(args.odir, f'{oroot}-sdist.png')
-    axisym.disk_fit_resid_dist(kin, disk, disp=args.disp, vel_mask=vel_mask, vel_plot=dv_plot,
-                               sig_mask=sig_mask, sig_plot=ds_plot)
+    axisym.disk_fit_resid_dist(kin, disk, disp=args.disp, ignore_covar=not args.covar,
+                               vel_mask=vel_mask, vel_plot=dv_plot, sig_mask=sig_mask,
+                               sig_plot=ds_plot, debug=True)
 
     # Create the final fit plot
     fit_plot = os.path.join(args.odir, f'{oroot}-fit.png')

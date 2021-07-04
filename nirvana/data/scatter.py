@@ -47,7 +47,7 @@ class IntrinsicScatter:
             ensure that the covariance matrix is positive-definite. Ignored
             if ``covar`` is not provided.
     """
-    def __init__(self, resid, err=None, covar=None, gpm=None, npar=0, assume_posdef_covar=False):
+    def __init__(self, resid, err=None, covar=None, gpm=None, npar=0, assume_posdef_covar=True):
 
         self.resid = resid
         self.size = self.resid.size

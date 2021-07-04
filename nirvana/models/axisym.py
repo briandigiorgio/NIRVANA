@@ -44,9 +44,6 @@ def disk_fit_reject(kin, disk, disp=None, ignore_covar=True, vel_mask=None, vel_
     Note that you can both show the QA plots and have them written to a file
     (e.g., ``show_vel`` can be True and ``vel_plot`` can provide a file).
 
-    .. warning::
-        This function currently always ignores covariance!
-    
     Args:
         kin (:class:`~nirvana.data.kinematics.Kinematics`):
             Object with the data being fit.
@@ -174,7 +171,6 @@ def disk_fit_resid_dist(kin, disk, disp=None, ignore_covar=True, vel_mask=None, 
     resid = kin.vel - kin.bin(vmod)
     v_err_kwargs = {'covar': kin.vel_covar} if use_covar \
                         else {'err': np.sqrt(inverse(kin.vel_ivar))}
-
     scat = IntrinsicScatter(resid, gpm=disk.vel_gpm, npar=disk.nfree, **v_err_kwargs)
     scat.sig = 0. if disk.scatter is None else disk.scatter[0]
     scat.rej = np.zeros(resid.size, dtype=bool) if vel_mask is None else vel_mask > 0
@@ -1792,9 +1788,8 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
 
     #-------------------------------------------------------------------
     # Velocity Dispersion
-    sig_lim = np.power(10.0, growth_lim(np.ma.log10(s_map), 0.80, 1.05)) if smod_map is None \
-                else np.power(10.0, growth_lim(np.ma.log10(np.ma.append(s_map, smod_map)),
-                                               0.80, 1.05))
+    _smaps = s_map if smod_map is None else np.ma.append(s_map, smod_map)
+    sig_lim = np.power(10.0, growth_lim(np.ma.log10(_smaps), 0.80, 1.05))
     sig_lim = atleast_one_decade(sig_lim)
 
     ax = plot.init_ax(fig, [0.215, 0.580, 0.19, 0.19])
@@ -2466,7 +2461,7 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     print('Running fit iteration 1')
     # TODO: sb_wgt is always true throughout. Make this a command-line
     # parameter?
-    disk.lsq_fit(kin, sb_wgt=True, p0=p0, fix=fix, lb=lb, ub=ub, ignore_covar=True, #ignore_covar,
+    disk.lsq_fit(kin, sb_wgt=True, p0=p0, fix=fix, lb=lb, ub=ub, ignore_covar=True,
                  assume_posdef_covar=assume_posdef_covar, verbose=verbose)
     # Show
     if verbose > 0:
@@ -2479,7 +2474,7 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     #     measurements are bogus.
     print('Running rejection iterations')
     vel_rej, vel_sig, sig_rej, sig_sig \
-            = disk_fit_reject(kin, disk, disp=fitdisp, ignore_covar=True, #ignore_covar,
+            = disk_fit_reject(kin, disk, disp=fitdisp, ignore_covar=True,
                               vel_mask=vel_mask, vel_sigma_rej=15, show_vel=debug,
                               sig_mask=sig_mask, sig_sigma_rej=15, show_sig=debug,
                               rej_flag='REJ_UNR')
@@ -2489,7 +2484,7 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     #     use the parameters from the previous fit as the starting point, and
     #     ignore the estimated intrinsic scatter.
     print('Running fit iteration 2')
-    disk.lsq_fit(kin, sb_wgt=True, p0=p0, fix=fix, lb=lb, ub=ub, ignore_covar=True, #ignore_covar,
+    disk.lsq_fit(kin, sb_wgt=True, p0=p0, fix=fix, lb=lb, ub=ub, ignore_covar=True,
                  assume_posdef_covar=assume_posdef_covar, verbose=verbose)
     # Show
     if verbose > 0:
@@ -2500,7 +2495,7 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     #   - Perform a more restricted rejection
     print('Running rejection iterations')
     vel_rej, vel_sig, sig_rej, sig_sig \
-            = disk_fit_reject(kin, disk, disp=fitdisp, ignore_covar=True, #ignore_covar,
+            = disk_fit_reject(kin, disk, disp=fitdisp, ignore_covar=True,
                               vel_mask=vel_mask, vel_sigma_rej=10, show_vel=debug,
                               sig_mask=sig_mask, sig_sigma_rej=10, show_sig=debug,
                               rej_flag='REJ_RESID')
@@ -2511,7 +2506,7 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     #     intrinsic scatter.
     print('Running fit iteration 3')
     scatter = np.array([vel_sig, sig_sig])
-    disk.lsq_fit(kin, sb_wgt=True, p0=disk.par, fix=fix, lb=lb, ub=ub, ignore_covar=True, #ignore_covar,
+    disk.lsq_fit(kin, sb_wgt=True, p0=disk.par, fix=fix, lb=lb, ub=ub, ignore_covar=True,
                  assume_posdef_covar=assume_posdef_covar, scatter=scatter, verbose=verbose)
     # Show
     if verbose > 0:
@@ -2524,7 +2519,7 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     #   - Reject again based on the new fit parameters
     print('Running rejection iterations')
     vel_rej, vel_sig, sig_rej, sig_sig \
-            = disk_fit_reject(kin, disk, disp=fitdisp, ignore_covar=True, #ignore_covar,
+            = disk_fit_reject(kin, disk, disp=fitdisp, ignore_covar=True,
                               vel_mask=vel_mask, vel_sigma_rej=10, show_vel=debug,
                               sig_mask=sig_mask, sig_sigma_rej=10, show_sig=debug,
                               rej_flag='REJ_RESID')
@@ -2535,7 +2530,7 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     #     intrinsic scatter.
     print('Running fit iteration 4')
     scatter = np.array([vel_sig, sig_sig])
-    disk.lsq_fit(kin, sb_wgt=True, p0=disk.par, fix=fix, lb=lb, ub=ub, ignore_covar=True, #ignore_covar,
+    disk.lsq_fit(kin, sb_wgt=True, p0=disk.par, fix=fix, lb=lb, ub=ub, ignore_covar=True,
                  assume_posdef_covar=assume_posdef_covar, scatter=scatter, verbose=verbose)
     # Show
     if verbose > 0:
@@ -2548,7 +2543,7 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     #   - Reject again based on the new fit parameters
     print('Running rejection iterations')
     vel_rej, vel_sig, sig_rej, sig_sig \
-            = disk_fit_reject(kin, disk, disp=fitdisp, ignore_covar=True, #ignore_covar,
+            = disk_fit_reject(kin, disk, disp=fitdisp, ignore_covar=True,
                               vel_mask=vel_mask, vel_sigma_rej=10, show_vel=debug,
                               sig_mask=sig_mask, sig_sigma_rej=10, show_sig=debug,
                               rej_flag='REJ_RESID')
@@ -2556,7 +2551,7 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     kin.reject(vel_rej=vel_rej, sig_rej=sig_rej)
     #   - Now fit as requested by the user, freeing one or both of the
     #     inclination and center. Use the previous fit as the starting point
-    #     and include the estimated intrinsic scatter.
+    #     and include the estimated intrinsic scatter and the covariance.
     #                    x0     y0     pa     inc    vsys
     base_fix = np.array([False, False, False, False, False])
     if fix_cen:

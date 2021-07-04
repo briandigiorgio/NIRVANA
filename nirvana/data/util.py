@@ -18,7 +18,7 @@ from ..models import geometry
 
 
 # TODO: Build a Covariance class the pulls in all the covariance methods.  This
-# would make all the assume_posdef_covar, etc, stuff easier.
+# would make all the positive-definite + tracking easier.
 
 
 # TODO: Add a set of weights?

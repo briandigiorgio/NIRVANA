@@ -1121,7 +1121,7 @@ class AxisymmetricDisk:
             # the presence of covariance.
             vel_pd_covar = self.kin.vel_covar[np.ix_(self.vel_gpm,self.vel_gpm)]
             sig_pd_covar = None if self.dc is None \
-                            else self.kin.sig_phys2_covar[np.ix_(self.vel_gpm,self.vel_gpm)]
+                            else self.kin.sig_phys2_covar[np.ix_(self.sig_gpm,self.sig_gpm)]
             if not assume_posdef_covar:
                 # Force the matrices to be positive definite
                 print('Forcing vel covar to be pos-def')

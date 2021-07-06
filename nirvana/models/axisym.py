@@ -1500,6 +1500,11 @@ def axisym_fit_data(galmeta, kin, p0, disk, ofile, vmask, smask, compress=True):
     # Build the output fits extension (base) headers
     #   - Primary header
     prihdr = fileio.initialize_primary_header(galmeta)
+    #   - Add the model types to the primary header
+    prihdr['MODELTYP'] = ('AxisymmetricDisk', 'nirvana class used to fit the data')
+    prihdr['RCMODEL'] = (disk.rc.__class__.__name__, 'Rotation curve parameterization')
+    if disk.dc is not None:
+        prihdr['DCMODEL'] = (disk.dc.__class__.__name__, 'Dispersion profile parameterization')
     #   - Data map header
     maphdr = fileio.add_wcs(prihdr, kin)
     #   - PSF header

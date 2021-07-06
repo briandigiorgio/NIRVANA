@@ -27,15 +27,13 @@ from ..models import axisym
 def parse_args(options=None):
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('plate', default=None, type=int, 
-                        help='MaNGA plate identifier (e.g., 8138)')
-    parser.add_argument('ifu', default=None, type=int, 
-                        help='MaNGA ifu identifier (e.g., 12704)')
+    parser.add_argument('plate', type=int, help='MaNGA plate identifier (e.g., 8138)')
+    parser.add_argument('ifu', type=int, help='MaNGA ifu identifier (e.g., 12704)')
     parser.add_argument('--daptype', default='HYB10-MILESHC-MASTARHC2', type=str,
                         help='DAP analysis key used to select the data files.  This is needed '
                              'regardless of whether or not you specify the directory with the '
                              'data files (using --root).')
-    parser.add_argument('--dr', default='MPL-10', type=str,
+    parser.add_argument('--dr', default='MPL-11', type=str,
                         help='The MaNGA data release.  This is only used to automatically '
                              'construct the directory to the MaNGA galaxy data (see also '
                              '--redux and --analysis), and it will be ignored if the root '

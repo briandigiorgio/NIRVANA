@@ -99,10 +99,6 @@ def disk_fit_reject(kin, disk, disp=None, ignore_covar=True, vel_mask=None, vel_
     if disp:
         use_covar = use_covar and kin.sig_phys2_covar is not None
 
-    # Instantiate the bitmask.
-    # TODO: This is cheap to redo everytime, but could also make it a part of
-    # the AxisymmetricDisk class...
-    disk_bm = AxisymmetricDiskFitBitMask()
     # Get the models
     models = disk.model()
     _verbose = 2 if verbose else 0
@@ -117,7 +113,7 @@ def disk_fit_reject(kin, disk, disp=None, ignore_covar=True, vel_mask=None, vel_
     vel_sig, vel_rej, vel_gpm = scat.iter_fit(sigma_rej=vel_sigma_rej, fititer=5, verbose=_verbose)
     # Incorporate into mask
     if vel_mask is not None and np.any(vel_rej):
-        vel_mask[vel_rej] = disk_bm.turn_on(vel_mask[vel_rej], rej_flag)
+        vel_mask[vel_rej] = disk.mbm.turn_on(vel_mask[vel_rej], rej_flag)
 
     # Show and/or plot the result, if requested
     if show_vel:
@@ -138,7 +134,7 @@ def disk_fit_reject(kin, disk, disp=None, ignore_covar=True, vel_mask=None, vel_
     sig_sig, sig_rej, sig_gpm = scat.iter_fit(sigma_rej=sig_sigma_rej, fititer=5, verbose=_verbose)
     # Incorporate into mask
     if sig_mask is not None and np.any(sig_rej):
-        sig_mask[sig_rej] = disk_bm.turn_on(sig_mask[sig_rej], rej_flag)
+        sig_mask[sig_rej] = disk.mbm.turn_on(sig_mask[sig_rej], rej_flag)
     # Show and/or plot the result, if requested
     if show_sig:
         scat.show()
@@ -201,7 +197,8 @@ def disk_fit_resid_dist(kin, disk, disp=None, ignore_covar=True, vel_mask=None, 
         scat.show(ofile=sig_plot, title='Dispersion field residuals')
 
 
-def reset_to_base_flags(kin, vel_mask, sig_mask):
+# TODO: Make this a method in AxisymmetricDisk?
+def reset_to_base_flags(disk, kin, vel_mask, sig_mask):
     """
     Reset the masks to only include the "base" flags.
     
@@ -216,6 +213,8 @@ def reset_to_base_flags(kin, vel_mask, sig_mask):
         The objects are *all* modified in place.
 
     Args:
+        disk (:class:`~nirvana.models.axisym.AxisymmetricDisk`):
+            Object that performed the fit and has the best-fitting parameters.
         kin (:class:`~nirvana.data.kinematics.Kinematics`):
             Object with the data being fit.
         vel_mask (`numpy.ndarray`_):
@@ -223,19 +222,15 @@ def reset_to_base_flags(kin, vel_mask, sig_mask):
         sig_mask (`numpy.ndarray`_):
             Bitmask used to track dispersion rejections. Can be None.
     """
-    # Instantiate the bitmask.
-    # TODO: This is cheap to redo everytime, but could also make it a part of
-    # the AxisymmetricDisk class...
-    disk_bm = AxisymmetricDiskFitBitMask()
     # Turn off the relevant rejection for all pixels
-    vel_mask = disk_bm.turn_off(vel_mask, flag='REJ_RESID')
+    vel_mask = disk.mbm.turn_off(vel_mask, flag='REJ_RESID')
     # Reset the data mask held by the Kinematics object
-    kin.vel_mask = disk_bm.flagged(vel_mask, flag=disk_bm.base_flags())
+    kin.vel_mask = disk.mbm.flagged(vel_mask, flag=disk.mbm.base_flags())
     if sig_mask is not None:
         # Turn off the relevant rejection for all pixels
-        sig_mask = disk_bm.turn_off(sig_mask, flag='REJ_RESID')
+        sig_mask = disk.mbm.turn_off(sig_mask, flag='REJ_RESID')
         # Reset the data mask held by the Kinematics object
-        kin.sig_mask = disk_bm.flagged(sig_mask, flag=disk_bm.base_flags())
+        kin.sig_mask = disk.mbm.flagged(sig_mask, flag=disk.mbm.base_flags())
 
 
 class AxisymmetricDiskFitBitMask(BitMask):
@@ -310,6 +305,17 @@ class AxisymmetricDisk:
         Describe the attributes
 
     """
+
+    gbm = AxisymmetricDiskGlobalBitMask()
+    """
+    Global bitmask.
+    """
+
+    mbm = AxisymmetricDiskFitBitMask()
+    """
+    Measurement-specific bitmask.
+    """
+
     def __init__(self, rc=None, dc=None):
         # Rotation curve
         self.rc = HyperbolicTangent() if rc is None else rc
@@ -357,6 +363,7 @@ class AxisymmetricDisk:
         self.vel_gpm = None
         self.sig_gpm = None
         self.cnvfftw = None
+        self.global_mask = 0
 
     def guess_par(self):
         """
@@ -1381,11 +1388,6 @@ def axisym_fit_data(galmeta, kin, p0, disk, ofile, vmask, smask, compress=True):
     """
     Construct a fits file with the results.
     """
-    # Instantiate the bitmask.
-    # TODO: This is cheap to redo everytime, but could also make it a part of
-    # the AxisymmetricDisk class...
-    disk_bm = AxisymmetricDiskFitBitMask()
-
     # Rebuild the 2D maps
     #   - Bin ID
     binid = kin.remap('binid', masked=False, fill_value=-1)
@@ -1393,12 +1395,12 @@ def axisym_fit_data(galmeta, kin, p0, disk, ofile, vmask, smask, compress=True):
     r, th = projected_polar(kin.grid_x - disk.par[0], kin.grid_y - disk.par[1],
                             *np.radians(disk.par[2:4]))
     #   - Surface-brightness (in per spaxel units not per sq. arcsec).
-    didnotuse = disk_bm.minimum_dtype()(disk_bm.turn_on(0, flag='DIDNOTUSE'))
+    didnotuse = disk.mbm.minimum_dtype()(disk.mbm.turn_on(0, flag='DIDNOTUSE'))
     sb = kin.remap('sb', masked=False, fill_value=0.)
     sb_ivar = kin.remap('sb_ivar', masked=False, fill_value=0.)
     _mask = kin.remap('sb_mask', masked=False, fill_value=True)
-    sb_mask = disk_bm.init_mask_array(sb.shape)
-    sb_mask[_mask] = disk_bm.turn_on(sb_mask[_mask], flag='DIDNOTUSE')
+    sb_mask = disk.mbm.init_mask_array(sb.shape)
+    sb_mask[_mask] = disk.mbm.turn_on(sb_mask[_mask], flag='DIDNOTUSE')
     #   - Velocity
     vel = kin.remap('vel', masked=False, fill_value=0.)
     vel_ivar = kin.remap('vel_ivar', masked=False, fill_value=0.)
@@ -1533,7 +1535,7 @@ def axisym_fit_data(galmeta, kin, p0, disk, ofile, vmask, smask, compress=True):
                           name='FLUX_IVAR'),
             fits.ImageHDU(data=sb_mask,
                           header=fileio.finalize_header(maphdr, 'FLUX', hduclas2='QUALITY',
-                                                        err=True, bm=disk_bm),
+                                                        err=True, bm=disk.mbm),
                           name='FLUX_MASK'),
             fits.ImageHDU(data=vel,
                           header=fileio.finalize_header(maphdr, 'VEL', bunit='km/s', err=True,
@@ -1545,7 +1547,7 @@ def axisym_fit_data(galmeta, kin, p0, disk, ofile, vmask, smask, compress=True):
                           name='VEL_IVAR'),
             fits.ImageHDU(data=vel_mask,
                           header=fileio.finalize_header(maphdr, 'VEL', hduclas2='QUALITY',
-                                                        err=True, bm=disk_bm),
+                                                        err=True, bm=disk.mbm),
                           name='VEL_MASK'),
             fits.ImageHDU(data=vel_mod, header=fileio.finalize_header(maphdr, 'VEL_MOD',
                                                                       bunit='km/s'),
@@ -1565,7 +1567,7 @@ def axisym_fit_data(galmeta, kin, p0, disk, ofile, vmask, smask, compress=True):
                           name='SIGSQR_IVAR'),
             fits.ImageHDU(data=sigsqr_mask,
                           header=fileio.finalize_header(maphdr, 'SIGSQR', hduclas2='QUALITY',
-                                                        err=True, bm=disk_bm),
+                                                        err=True, bm=disk.mbm),
                           name='SIGSQR_MASK'),
             fits.ImageHDU(data=sig_mod,
                           header=fileio.finalize_header(maphdr, 'SIG_MOD',bunit='km/s'),
@@ -1614,6 +1616,14 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
     _par = disk.par if par is None else par
     _par_err = disk.par_err if par_err is None else par_err
     _fix = np.zeros(disk.np, dtype=bool) if fix is None else fix
+
+    if _par.size != disk.np:
+        raise ValueError('Number of provided parameters has the incorrect size.')
+    if _par_err.size != disk.np:
+        raise ValueError('Number of provided parameter errors has the incorrect size.')
+    if _fix.size != disk.np:
+        raise ValueError('Number of provided parameter errors has the incorrect size.')
+    
 
     disk.par = _par
     disk.par_err = _par_err
@@ -2074,7 +2084,9 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
     # Fitted center
     ax.text(0.00, -0.77, r'$x_0$ [arcsec]', ha='left', va='center', transform=ax.transAxes,
             fontsize=10, color='C3' if fix[0] else 'k')
-    ax.text(1.01, -0.77, r'{0:.2f} $\pm$ {1:.2f}'.format(disk.par[0], disk.par_err[0]),
+    xstr = r'{0:.2f}'.format(disk.par[0]) if _fix[0] \
+            else r'{0:.2f} $\pm$ {1:.2f}'.format(disk.par[0], disk.par_err[0])
+    ax.text(1.01, -0.77, xstr,
             ha='right', va='center', transform=ax.transAxes, fontsize=10,
             color='C3' if fix[0] else 'k')
     ax.text(0.00, -0.85, r'$y_0$ [arcsec]', ha='left', va='center', transform=ax.transAxes,
@@ -2253,12 +2265,60 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
 def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponential', fitdisp=True,
                     ignore_covar=True, assume_posdef_covar=True, max_vel_err=None,
                     max_sig_err=None, min_vel_snr=None, min_sig_snr=None, fix_cen=False,
-                    fix_inc=False, min_unmasked=None, select_coherent=False, verbose=0):
-    """
+                    fix_inc=False, low_inc=None, min_unmasked=None, select_coherent=False,
+                    verbose=0):
+    r"""
     Iteratively fit kinematic data with an axisymmetric disk model.
 
+    Constraints are as follows:
+
+        #. The center is constrained to be in the middle third of the available
+           range in x and y.
+
+    The iterations are as follows:
+
+        #. Fit all data but fix the inclination to the value returned by
+        :func:`~nirvana.data.meta.GlobalPar.guess_inclination` and fix the
+        center to be :math:`(x,y) = (0,0)`.  If available, covariance is
+        ignored.
+
+        #. Reject :math:`{\rm 15-}\sigma` outliers in both velocity and velocity
+        dispersion (if the latter is being fit) using :func:`disk_fit_reject`.
+        Then refit the data, starting again from the initial guess parameters.
+        The intrinsic scatter estimates provided by :func:`disk_fit_reject` are
+        *not* included in the fit and, if available, covariance is ignored.
+
+        #. Reject :math:`{\rm 10-}\sigma` outliers in both velocity and velocity
+        dispersion (if the latter is being fit) using :func:`disk_fit_reject`.
+        Then refit the data using the parameters from the previous fit as the
+        starting point. This iteration also uses the intrinsic scatter estimates
+        provided by :func:`disk_fit_reject`; however, covariance is still
+        ignored.
+
+        #. Recover all fit rejections (i.e., keep any masks in place that are
+        tied to the data quality, but remove any masks associated with fit
+        quality).  Then use :func:`disk_fit_reject` to perform a fresh
+        :math:`{\rm 10-}\sigma` rejection based on the most recent model.  The
+        resetting of the fit-outliers and re-rejection is done on the off chance
+        that rejections from the first few iterations were driven by a bad
+        model.  Refit the data as in the previous iteration, using the
+        parameters from the previous fit as the starting point and use the
+        intrinsic scatter estimates provided by :func:`disk_fit_reject`.
+        Covariance is still ignored.
+
+        #. Reject :math:`{\rm 10-}\sigma` outliers in both velocity and velocity
+        dispersion (if the latter is being fit) using :func:`disk_fit_reject`.
+        Then refit the data, but fix or free the center and inclination based on
+        the provided keywords (``fixcen`` and ``fixinc``).  Also, as in all
+        previous iterations, the covariance is ignored in the outlier rejection
+        and intrinsic scatter determination; however, the covariance *is* used
+        by the fit, as available and if ``ignore_covar`` is False.
+
+        #. Redo the previous iteration in exactly the same way, except
+        outlier rejection and intrinsic-scatter determination now use the
+        covariance, as available and if ``ignore_covar`` is False.
+        
     .. todo::
-        - Explain algorithm iteration steps
         - Enable more rotation curve and dispersion profile functions.
         - Allow guess RC and DC parameters and bounds to be input, or switch to
           requiring the 1D model class instances to be provided, like in
@@ -2304,6 +2364,14 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
             Fix the kinematic inclination of the fit to estimate provided by the
             :func:`~nirvana.data.meta.GlobalPar.guess_inclination` method of
             ``galmeta``.
+        low_inc (scalar-like, optional):
+            If the inclination is free and the best-fitting inclination from the
+            final fit iteration is below this value, flag the global bitmask of
+            the fit as having a low inclination and refit the data using a fixed
+            inclination set by
+            :func:`~nirvana.data.meta.GlobalPar.guess_inclination`.  If None, no
+            minimum is set on the viable inclination (apart from the fit
+            boundaries).
         min_unmasked (:obj:`int`, optional):
             The minimum of velocity measurements (and velocity dispersion
             measurements, if they are available and being fit) required to
@@ -2381,15 +2449,35 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     #---------------------------------------------------------------------------
 
     #---------------------------------------------------------------------------
-    # Setup the full velocity-field model
+    # Define the fitting object
+    disk = AxisymmetricDisk(rc=rc, dc=dc)
+
+    # Constrain the center to be in the middle third of the map relative to the
+    # photometric center. The mean in the calculation is to mitigate that some
+    # galaxies can be off center, but the detail here and how well it works
+    # hasn't been well tested.
+    # TODO: Should this use grid_x instead, so that it's more uniform for all
+    # IFUs?  Or should this be set as a fraction of Reff?
+    dx = np.mean([abs(np.amin(kin.x)), abs(np.amax(kin.x))])
+    dy = np.mean([abs(np.amin(kin.y)), abs(np.amax(kin.y))])
+    lb, ub = disk.par_bounds(base_lb=np.array([-dx/3, -dy/3, -350., 1., -500.]),
+                             base_ub=np.array([dx/3, dy/3, 350., 89., 500.]))
+    print(f'If free, center constrained within +/- {dx/3:.1f} in X and +/- {dy/3:.1f} in Y.')
+
+    # TODO: Handle these issues instead of faulting
+    if np.any(np.less(p0, lb)):
+        raise ValueError('Parameter lower bounds cannot accommodate initial guess value!')
+    if np.any(np.greater(p0, ub)):
+        raise ValueError('Parameter upper bounds cannot accommodate initial guess value!')
+
+    #---------------------------------------------------------------------------
     # Setup the masks
     print('Initializing data masking')
-    disk_bm = AxisymmetricDiskFitBitMask()
-    vel_mask = disk_bm.init_mask_array(kin.vel.shape)
-    vel_mask[kin.vel_mask] = disk_bm.turn_on(vel_mask[kin.vel_mask], 'DIDNOTUSE')
+    vel_mask = disk.mbm.init_mask_array(kin.vel.shape)
+    vel_mask[kin.vel_mask] = disk.mbm.turn_on(vel_mask[kin.vel_mask], 'DIDNOTUSE')
     if fitdisp:
-        sig_mask = disk_bm.init_mask_array(kin.sig.shape)
-        sig_mask[kin.sig_mask] = disk_bm.turn_on(sig_mask[kin.sig_mask], 'DIDNOTUSE')
+        sig_mask = disk.mbm.init_mask_array(kin.sig.shape)
+        sig_mask[kin.sig_mask] = disk.mbm.turn_on(sig_mask[kin.sig_mask], 'DIDNOTUSE')
     else:
         sig_mask = None
 
@@ -2397,19 +2485,19 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     vel_rej, sig_rej = kin.clip_err(max_vel_err=max_vel_err, max_sig_err=max_sig_err)
     if np.any(vel_rej):
         print(f'{np.sum(vel_rej)} velocity measurements removed because of large errors.')
-        vel_mask[vel_rej] = disk_bm.turn_on(vel_mask[vel_rej], 'REJ_ERR')
+        vel_mask[vel_rej] = disk.mbm.turn_on(vel_mask[vel_rej], 'REJ_ERR')
     if fitdisp and sig_rej is not None and np.any(sig_rej):
         print(f'{np.sum(sig_rej)} dispersion measurements removed because of large errors.')
-        sig_mask[sig_rej] = disk_bm.turn_on(sig_mask[sig_rej], 'REJ_ERR')
+        sig_mask[sig_rej] = disk.mbm.turn_on(sig_mask[sig_rej], 'REJ_ERR')
 
     # Reject based on S/N
     vel_rej, sig_rej = kin.clip_snr(min_vel_snr=min_vel_snr, min_sig_snr=min_sig_snr)
     if np.any(vel_rej):
         print(f'{np.sum(vel_rej)} velocity measurements removed because of low S/N.')
-        vel_mask[vel_rej] = disk_bm.turn_on(vel_mask[vel_rej], 'REJ_SNR')
+        vel_mask[vel_rej] = disk.mbm.turn_on(vel_mask[vel_rej], 'REJ_SNR')
     if fitdisp and sig_rej is not None and np.any(sig_rej):
         print(f'{np.sum(sig_rej)} dispersion measurements removed because of low S/N.')
-        sig_mask[sig_rej] = disk_bm.turn_on(sig_mask[sig_rej], 'REJ_SNR')
+        sig_mask[sig_rej] = disk.mbm.turn_on(sig_mask[sig_rej], 'REJ_SNR')
 
     if np.all(vel_mask > 0):
         raise ValueError('All velocity measurements masked!')
@@ -2429,7 +2517,7 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
         indx = np.logical_not(kin.bin(indx).astype(bool)) & (vel_mask == 0)
         if np.any(indx):
             print(f'Flagging {np.sum(indx)} velocities as disjoint from the main group.')
-            vel_mask[indx] = disk_bm.turn_on(vel_mask[indx], flag='DISJOINT')
+            vel_mask[indx] = disk.mbm.turn_on(vel_mask[indx], flag='DISJOINT')
 
         if sig_mask is not None:
             gpm = np.logical_not(kin.remap(sig_mask, masked=False, fill_value=1).astype(bool))
@@ -2437,28 +2525,10 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
             indx = np.logical_not(kin.bin(indx).astype(bool)) & (sig_mask == 0)
             if np.any(indx):
                 print(f'Flagging {np.sum(indx)} dispersions as disjoint from the main group.')
-                sig_mask[indx] = disk_bm.turn_on(sig_mask[indx], flag='DISJOINT')
+                sig_mask[indx] = disk.mbm.turn_on(sig_mask[indx], flag='DISJOINT')
 
     #---------------------------------------------------------------------------
-    # Define the fitting object
-    disk = AxisymmetricDisk(rc=rc, dc=dc)
-
-    # Constrain the center to be in the middle third of the map relative to the
-    # photometric center. The mean in the calculation is to mitigate that some
-    # galaxies can be off center, but the detail here and how well it works
-    # hasn't been well tested.
-    dx = np.mean([abs(np.amin(kin.x)), abs(np.amax(kin.x))])
-    dy = np.mean([abs(np.amin(kin.y)), abs(np.amax(kin.y))])
-    lb, ub = disk.par_bounds(base_lb=np.array([-dx/3, -dy/3, -350., 1., -500.]),
-                             base_ub=np.array([dx/3, dy/3, 350., 89., 500.]))
-    print(f'If free, center constrained within +/- {dx/3:.1f} in X and +/- {dy/3:.1f} in Y.')
-
-    # TODO: Handle these issues instead of faulting
-    if np.any(np.less(p0, lb)):
-        raise ValueError('Parameter lower bounds cannot accommodate initial guess value!')
-    if np.any(np.greater(p0, ub)):
-        raise ValueError('Parameter upper bounds cannot accommodate initial guess value!')
-
+    # Perform the fit iterations
     #---------------------------------------------------------------------------
     # Fit iteration 1: Fit all data but fix the inclination and center
     #                x0    y0    pa     inc   vsys    rc+dc parameters
@@ -2590,6 +2660,28 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     #   - Redo previous fit
     print('Running fit iteration 6')
     scatter = np.array([vel_sig, sig_sig])
+    disk.lsq_fit(kin, sb_wgt=True, p0=disk.par, fix=fix, lb=lb, ub=ub, ignore_covar=ignore_covar,
+                 assume_posdef_covar=assume_posdef_covar, scatter=scatter, verbose=verbose)
+    # Show
+    if verbose > 0:
+        axisym_fit_plot(galmeta, kin, disk, fix=fix)
+
+    if not fix_inc or low_inc is None or disk.par[3] > low_inc:
+        # Inclination is valid, so return
+        return disk, p0, fix, vel_mask, sig_mask
+
+    #---------------------------------------------------------------------------
+    # Fit iteration 7:
+    #   - The best-fitting inclination is below the viable value.  Flag it.
+    disk.global_mask = disk.gbm.turn_on(disk.global_mask, 'LOWINC')
+    #  Simply refit
+    #     the data but fix the inclination to the guess value.
+    #                    x0     y0     pa     inc   vsys
+    base_fix = np.array([False, False, False, True, False])
+    if fix_cen:
+        base_fix[:2] = True
+    fix = np.append(base_fix, np.zeros(p0.size-5, dtype=bool))
+    disk.par[3] = galmeta.guess_inclination(lb=1., ub=89.)
     disk.lsq_fit(kin, sb_wgt=True, p0=disk.par, fix=fix, lb=lb, ub=ub, ignore_covar=ignore_covar,
                  assume_posdef_covar=assume_posdef_covar, scatter=scatter, verbose=verbose)
     # Show

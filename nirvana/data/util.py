@@ -176,7 +176,7 @@ def impose_positive_definite(mat, min_eigenvalue=1e-10, renormalize=True):
     if not isinstance(mat, sparse.csr_matrix):
         raise TypeError('Must provide a scipy.sparse.csr_matrix to impose_positive_definite.')
     # Get the eigenvalues/eigenvectors
-    # WARNING: I didn't explore why to deeply, but scipy.sparse.linalg.eigs
+    # WARNING: I didn't explore why too deeply, but scipy.sparse.linalg.eigs
     # provided *significantly* different results. They also seem to be worse in
     # the sense that the reconstructed matrix based on the adjusted eigenvalues
     # is more different than input matrix compared to the use of
@@ -818,15 +818,18 @@ def equal_shape(arr1, arr2, fill_value=0):
     '''
     Take two 2D arrays and pad them to make them the same shape
 
-
     Args:
-        arr1, arr2 (`numpy.ndarray`_):
+        arr1 (`numpy.ndarray`_):
+            2D arrays that will be padded to be the same shape
+        arr2 (`numpy.ndarray`_):
             2D arrays that will be padded to be the same shape
         fill_value (:obj:`float`, optional):
             Fill value for the padding
 
     Returns:
-        Tuple of `numpy.ndarray`_s that are padded versions of the input arrays
+        :obj:`tuple`: Tuple of `numpy.ndarray`_ objects that are padded versions
+        of the input arrays
+
     '''
 
     #check for non 2D arrays

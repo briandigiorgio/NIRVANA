@@ -146,8 +146,42 @@ def disk_fit_reject(kin, disk, disp=None, ignore_covar=True, vel_mask=None, vel_
 
 # TODO: Consolidate this function with the one above
 def disk_fit_resid_dist(kin, disk, disp=None, ignore_covar=True, vel_mask=None, show_vel=False,
-                        vel_plot=None, sig_mask=None, show_sig=False, sig_plot=None, debug=False):
+                        vel_plot=None, sig_mask=None, show_sig=False, sig_plot=None):
     """
+    Construct plots of the distribution of the fit residuals.
+
+    Components of this function is very similar to :func:`disk_fit_reject`.  No
+    rejection is performed, though, and the method simply shows the current
+    distribution of residuals.
+
+    Args:
+        kin (:class:`~nirvana.data.kinematics.Kinematics`):
+            Object with the data being fit.
+        disk (:class:`~nirvana.models.axisym.AxisymmetricDisk`):
+            Object that performed the fit and has the best-fitting parameters.
+        disp (:obj:`bool`, optional):
+            Flag to include the velocity dispersion rejection in the
+            iteration. If None, rejection is included if ``kin`` has velocity
+            dispersion data and ``disk`` has a disperion parameterization.
+        ignore_covar (:obj:`bool`, optional):
+            If ``kin`` provides the covariance between measurements, ignore it.
+        vel_mask (`numpy.ndarray`_):
+            Bitmask used to track velocity rejections.
+        show_vel (:obj:`bool`, optional):
+            Show the QA plot for the velocity rejection (see
+            :func:`~nirvana.data.scatter.IntrinsicScatter.show`).
+        vel_plot (:obj:`str`, optional):
+            Write the QA plot for the velocity rejection to this file (see
+            :func:`~nirvana.data.scatter.IntrinsicScatter.show`).
+        sig_mask (`numpy.ndarray`_):
+            Bitmask used to track dispersion rejections.
+        show_sig (:obj:`bool`, optional):
+            Show the QA plot for the velocity dispersion rejection (see
+            :func:`~nirvana.data.scatter.IntrinsicScatter.show`).
+        sig_plot (:obj:`str`, optional):
+            Write the QA plot for the velocity dispersion rejection to this
+            file (see :func:`~nirvana.data.scatter.IntrinsicScatter.show`).
+ 
     """
     # Check input
     if disp is None:
@@ -304,6 +338,14 @@ class AxisymmetricDisk:
     .. todo::
         Describe the attributes
 
+    Args:
+        rc (:class:`~nirvana.models.oned.Func1D`, optional):
+            The parameterization to use for the disk rotation curve.  If None,
+            defaults to :class:`~nirvana.models.oned.HyperbolicTangent`.
+        dc (:class:`~nirvana.models.oned.Func1D`, optional):
+            The parameterization to use for the disk dispersion profile.  If
+            None, the dispersion profile is not included in the fit!
+
     """
 
     gbm = AxisymmetricDiskGlobalBitMask()
@@ -372,6 +414,9 @@ class AxisymmetricDisk:
         .. todo::
             Could enable this to base the guess on the data to be fit, but at
             the moment these are hard-coded numbers.
+
+        Returns:
+            `numpy.ndarray`_: Vector of guess parameters
         """
         # Return the 
         gp = np.concatenate(([0., 0., 45., 30., 0.], self.rc.guess_par()))
@@ -380,6 +425,13 @@ class AxisymmetricDisk:
     def par_names(self, short=False):
         """
         Return a list of strings with the parameter names.
+
+        Args:
+            short (:obj:`bool`, optional):
+                Return truncated nomenclature for the parameter names.
+
+        Returns:
+            :obj:`list`: List of parameter name strings.
         """
         if short:
             base = ['x0', 'y0', 'pa', 'inc', 'vsys']
@@ -395,6 +447,14 @@ class AxisymmetricDisk:
         """
         Return the base (largely geometric) parameters. Returns None if
         parameters are not defined yet.
+
+        Args:
+            err (:obj:`bool`, optional):
+                Return the parameter errors instead of the parameter values.
+
+        Returns:
+            `numpy.ndarray`_: Vector with parameters or parameter errors for the
+            "base" parameters.
         """
         p = self.par_err if err else self.par
         return None if p is None else p[:self.nbp]
@@ -403,6 +463,14 @@ class AxisymmetricDisk:
         """
         Return the rotation curve parameters. Returns None if parameters are
         not defined yet.
+
+        Args:
+            err (:obj:`bool`, optional):
+                Return the parameter errors instead of the parameter values.
+
+        Returns:
+            `numpy.ndarray`_: Vector with parameters or parameter errors for the
+            rotation curve.
         """
         p = self.par_err if err else self.par
         return None if p is None else p[self.nbp:self.nbp+self.rc.np]
@@ -411,6 +479,14 @@ class AxisymmetricDisk:
         """
         Return the dispersion profile parameters. Returns None if parameters
         are not defined yet or if no dispersion profile has been defined.
+
+        Args:
+            err (:obj:`bool`, optional):
+                Return the parameter errors instead of the parameter values.
+
+        Returns:
+            `numpy.ndarray`_: Vector with parameters or parameter errors for the
+            dispersion profile.
         """
         p = self.par_err if err else self.par
         return None if p is None or self.dc is None else p[self.nbp+self.rc.np:]
@@ -435,6 +511,10 @@ class AxisymmetricDisk:
             base_ub (`numpy.ndarray`_, optional):
                 The upper bounds for the "base" parameters: x0, y0, pa, inc,
                 vsys. If None, the defaults are used (see above).
+
+        Returns:
+            :obj:`tuple`: A two-tuple providing, respectively, the lower and
+            upper boundaries for all model parameters.
         """
         if base_lb is not None and len(base_lb) != self.nbp:
             raise ValueError('Incorrect number of lower bounds for the base '
@@ -1288,7 +1368,7 @@ class AxisymmetricDisk:
 
     def report(self):
         """
-        Report the current parameters of the model.
+        Report the current parameters of the model to the screen.
         """
         if self.par is None:
             print('No parameters to report.')
@@ -1344,6 +1424,16 @@ class AxisymmetricDisk:
 #   - Copy over the DataTable class from the DAP, or use an astropy.table.Table?
 def _fit_meta_dtype(par_names):
     """
+    Set the data type for a `numpy.recarray`_ used to hold metadata of the
+    best-fit model.
+
+    Args:
+        par_names (array-like):
+            Array of strings with the short names for the model parameters.
+
+    Returns:
+        :obj:`list`: The list of tuples providing the name, data type, and shape
+        of each `numpy.recarray`_ column.
     """
     gp = [(f'G_{n}'.upper(), np.float) for n in par_names]
     bp = [(f'F_{n}'.upper(), np.float) for n in par_names]
@@ -1410,9 +1500,27 @@ def _fit_meta_dtype(par_names):
 
 
 # TODO: This is MaNGA-specific and needs to be abstracted
-def axisym_fit_data(galmeta, kin, p0, disk, ofile, vmask, smask, compress=True):
+def axisym_fit_data(galmeta, kin, p0, disk, ofile, vmask, smask):
     """
-    Construct a fits file with the results.
+    Construct a fits file with the best-fit results.
+
+    Args:
+        galmeta (:class:`~nirvana.data.meta.GlobalPar`):
+            Object with metadata for the galaxy to be fit.
+        kin (:class:`~nirvana.data.kinematics.Kinematics`):
+            Object with the data to be fit
+        p0 (`numpy.ndarray`_):
+            Initial guess parameters of the model.
+        disk (:class:`~nirvana.models.axisym.AxisymmetricDisk`):
+            Object that performed the fit and has the best-fitting parameters.
+        ofile (:obj:`str`):
+            Output filename.  File names ending in '.gz' will be compressed.
+        vmask (`numpy.ndarray`_):
+            Vector with the mask bit values for each velocity measurement in
+            ``kin``.
+        smask (`numpy.ndarray`_):
+            Vector with the mask bit values for each dispersion measurement in
+            ``kin``.
     """
     # Rebuild the 2D maps
     #   - Bin ID
@@ -1633,7 +1741,6 @@ def axisym_fit_data(galmeta, kin, p0, disk, ofile, vmask, smask, compress=True):
     fits.HDUList(hdus).writeto(_ofile, overwrite=True, checksum=True)
     if compress:
         fileio.compress_file(_ofile, overwrite=True)
-        # TODO: Put this removal call in compress_file?
         os.remove(_ofile)
 
 
@@ -1647,6 +1754,25 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
     Construct the QA plot for the result of fitting an
     :class:`~nirvana.model.axisym.AxisymmetricDisk` model to a galaxy.
 
+    Args:
+        galmeta (:class:`~nirvana.data.meta.GlobalPar`):
+            Object with metadata for the galaxy to be fit.
+        kin (:class:`~nirvana.data.kinematics.Kinematics`):
+            Object with the data to be fit
+        disk (:class:`~nirvana.models.axisym.AxisymmetricDisk`):
+            Object that performed the fit and has the best-fitting parameters.
+        par (`numpy.ndarray`_, optional):
+            The parameters of the model.  If None are provided, the parameters
+            in ``disk`` are used.
+        par_err (`numpy.ndarray`_, optional):
+            The errors in the model parameters.  If None are provided, the
+            parameter errors in ``disk`` are used.
+        fix (`numpy.ndarray`_, optional):
+            Flags indicating the parameters that were fixed during the fit.  If
+            None, all parameters are assumed to have been free.
+        ofile (:obj:`str`, optional):
+            Output filename for the plot.  If None, the plot is shown to the
+            screen.
     """
     logformatter = plot.get_logformatter()
 
@@ -1662,7 +1788,7 @@ def axisym_fit_plot(galmeta, kin, disk, par=None, par_err=None, fix=None, ofile=
     if _par_err.size != disk.np:
         raise ValueError('Number of provided parameter errors has the incorrect size.')
     if _fix.size != disk.np:
-        raise ValueError('Number of provided parameter errors has the incorrect size.')
+        raise ValueError('Number of provided parameter fixing flags has the incorrect size.')
 
     disk.par = _par
     disk.par_err = _par_err

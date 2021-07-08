@@ -180,7 +180,7 @@ def main(args):
     ds_plot = os.path.join(args.odir, f'{oroot}-sdist.png')
     axisym.disk_fit_resid_dist(kin, disk, disp=args.disp, ignore_covar=not args.covar,
                                vel_mask=vel_mask, vel_plot=dv_plot, sig_mask=sig_mask,
-                               sig_plot=ds_plot, debug=True)
+                               sig_plot=ds_plot) 
 
     # Create the final fit plot
     fit_plot = os.path.join(args.odir, f'{oroot}-fit.png')

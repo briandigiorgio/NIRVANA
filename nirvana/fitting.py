@@ -94,7 +94,7 @@ def bisym_model(args, paramdict, plot=False, relative_pab=False):
     #apply beam smearing if beam is given
     try: conv
     except: conv = None
-    if args.beam_fft is not None:
+    if args.beam_fft is not None and args.smearing:
         sbmodel, velmodel, sigmodel = smear(velmodel, args.beam_fft, sb=sb, 
                 sig=sigmodel, beam_fft=True, cnvfftw=conv, verbose=False)
 
@@ -540,12 +540,12 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     else:
         if stellar:
             args = MaNGAStellarKinematics.from_plateifu(plate, ifu, daptype=daptype, dr=dr,
-                                                        ignore_psf=not smearing, cube_path=root,
+                                                        cube_path=root,
                                                         image_path=root, maps_path=root, 
                                                         remotedir=remotedir)
         else:
             args = MaNGAGasKinematics.from_plateifu(plate, ifu, line='Ha-6564', daptype=daptype,
-                                                    dr=dr, ignore_psf=not smearing, cube_path=root,
+                                                    dr=dr,  cube_path=root,
                                                     image_path=root, maps_path=root, 
                                                     remotedir=remotedir)
 

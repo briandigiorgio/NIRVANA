@@ -245,7 +245,7 @@ def cinv(mat, check_finite=False, upper=False):
             The array to invert.
         check_finite (:obj:`bool`, optional):
             Check that all the elements of ``mat`` are finite. See
-            `scipy.linalg.cholesky`_ and `scipy.linalg.solve_triangular`.
+            `scipy.linalg.cholesky`_ and `scipy.linalg.solve_triangular`_.
         upper (:obj:`bool`, optional):
             Return only the upper triangle matrix that can be used to
             construct the inverse matrix. I.e., for input matrix
@@ -253,7 +253,8 @@ def cinv(mat, check_finite=False, upper=False):
             that :math:`\mathbf{M}^{-1} = \mathbf{U} \mathbf{U}^T`.
 
     Returns:
-        `numpy.ndarray`_: Inverse of the input matrix.
+        `numpy.ndarray`_: Inverse or upper-triangle decomposition of the input
+        matrix, depending on ``upper``.
     """
     _mat = mat.toarray() if isinstance(mat, sparse.csr.csr_matrix) else mat
     # This uses scipy.linalg, not numpy.linalg
@@ -359,6 +360,9 @@ def construct_ivar_weights(error, eps=None):
     if eps is not None:
         wgts[wgts < eps] = 0.
     return wgts
+
+
+# TODO: Allow one to include covariance in all the stats functions below?
 
 
 def aggregate_stats(x, y, ye=None, wgts=None, gpm=None, eps=None, fill_value=None):

@@ -66,6 +66,12 @@ def parse_args(options=None):
     parser.add_argument('--fix_inc', default=False, action='store_true',
                         help='Fix the inclination to the guess inclination based on the '
                              'photometric ellipticity')
+    parser.add_argument('--low_inc', default=None, type=float,
+                        help='Best-fitting inclinations below this value are considered fitting '
+                             'errors.  A flag is tripped indicating that the fit resulted in a '
+                             'low inclination, but the actual returned fit fixes the inclination '
+                             'to the photometric estimate (i.e., as if setting --fix_inc).  If '
+                             'None, no lower limit is set.')
     parser.add_argument('-t', '--tracer', default='Gas', type=str,
                         help='The tracer to fit; must be either Gas or Stars.')
     parser.add_argument('--rc', default='HyperbolicTangent', type=str,
@@ -166,8 +172,8 @@ def main(args):
                                      max_vel_err=args.max_vel_err, max_sig_err=args.max_sig_err,
                                      min_vel_snr=args.min_vel_snr, min_sig_snr=args.min_sig_snr,
                                      fix_cen=args.fix_cen, fix_inc=args.fix_inc,
-                                     min_unmasked=args.min_unmasked, select_coherent=args.coherent,
-                                     verbose=args.verbose)
+                                     low_inc=args.low_inc, min_unmasked=args.min_unmasked,
+                                     select_coherent=args.coherent, verbose=args.verbose)
 
     # Plot the final residuals
     dv_plot = os.path.join(args.odir, f'{oroot}-vdist.png')

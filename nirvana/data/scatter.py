@@ -339,26 +339,32 @@ class IntrinsicScatter:
         chidof_def = fom(np.array([0.]))    # Chi-square minus DOF
         mean_enres_def = np.mean(enres_def) # Mean of the residuals; should be close to 0.
         sigma_enres_def = np.std(enres_def) # Standard deviation of the residuals
-        max_enres_def = np.amax(np.absolute(enres_def)) # Maximum residual
+
+        # 1, 2, 3-sigma growth and maximum value
+        grw_enres_def = np.percentile(np.absolute(enres_def), [68.26, 95.44, 99.73, 100.0])
+#        max_enres_def = np.amax(np.absolute(enres_def)) # Maximum residual
 
         # Error-normalized residuals accounting for intrinsic scatter
         enres = fom_vec(self._x)            # Only includes valid data; i.e., selected by self.gpm
         chidof = fom(self._x)               # Chi-square minus DOF
         mean_enres = np.mean(enres)
         sigma_enres = np.std(enres)
-        max_enres = np.amax(np.absolute(enres))
+
+        # 1, 2, 3-sigma growth and maximum value
+        grw_enres = np.percentile(np.absolute(enres), [68.26, 95.44, 99.73, 100.0])
+#        max_enres = np.amax(np.absolute(enres))
 
         # Revert to original gpm
         self.gpm = sv_gpm
 
         return ntot, nrej, median_eps, enres_def, chidof_def, mean_enres_def, sigma_enres_def, \
-                    max_enres_def, enres, chidof, mean_enres, sigma_enres, max_enres
+                    grw_enres_def, enres, chidof, mean_enres, sigma_enres, grw_enres
 
     def show(self, sig=None, rej=None, gpm=None, ofile=None, title=None):
         """
         """
         ntot, nrej, median_eps, enres_def, chidof_def, mean_enres_def, sigma_enres_def, \
-                max_enres_def, enres, chidof, mean_enres, sigma_enres, max_enres \
+                grw_enres_def, enres, chidof, mean_enres, sigma_enres, grw_enres \
                         = self.stats(sig=sig, rej=rej, gpm=gpm)
 
         # Set the range for the histograms
@@ -459,7 +465,7 @@ class IntrinsicScatter:
                 va='center', transform=ax.transAxes, zorder=8)
         ax.text(0.04, 0.35, r'$\Delta/\epsilon_{\rm 0,max}$:', ha='left',
                 va='center', transform=ax.transAxes, zorder=8)
-        ax.text(0.31, 0.35, '{0:.2f}'.format(max_enres_def), ha='right',
+        ax.text(0.31, 0.35, '{0:.2f}'.format(grw_enres_def[-1]), ha='right',
                 va='center', transform=ax.transAxes, zorder=8)
         ax.text(0.04, 0.31, r'$\sigma_0$:', ha='left',
                 va='center', transform=ax.transAxes, zorder=8)
@@ -480,7 +486,7 @@ class IntrinsicScatter:
                 va='center', transform=ax.transAxes, zorder=8)
         ax.text(0.04, 0.13, r'$\Delta/\epsilon_{i,{\rm max}}$:', ha='left',
                 va='center', transform=ax.transAxes, zorder=8)
-        ax.text(0.31, 0.13, '{0:.2f}'.format(max_enres), ha='right',
+        ax.text(0.31, 0.13, '{0:.2f}'.format(grw_enres[-1]), ha='right',
                 va='center', transform=ax.transAxes, zorder=8)
         ax.text(0.04, 0.09, r'$\sigma_i$:', ha='left',
                 va='center', transform=ax.transAxes, zorder=8)

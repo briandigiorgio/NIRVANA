@@ -280,8 +280,16 @@ class Kinematics(FitArgs):
         self.sb_covar = self._ingest_covar(sb_covar, positive_definite=False) #positive_definite)
         self.sig_covar = self._ingest_covar(sig_covar, positive_definite=positive_definite)
 
-        # TODO: Need to issue a some warning if the user has provided
-        # both ivar and covar
+        # Construct the covariance in the square of the astrophysical velocity
+        # dispersion.
+        if self.sig_covar is None:
+            self.sig_phys2_covar = None
+        else:
+            jac = sparse.diags(2*self.sig, format='csr')
+            self.sig_phys2_covar = jac.dot(self.sig_covar.dot(jac.T))
+
+        # TODO: Should issue a some warning/error if the user has provided both
+        # ivar and covar and they are not consistent
 
 
     def _set_beam(self, psf, aperture):
@@ -386,13 +394,22 @@ class Kinematics(FitArgs):
         """
         Ingest an input covariance matrix for use when fitting the data.
 
+        The covariance matrix is forced to be positive everywhere (any negative
+        values are set to 0) and to be identically symmetric.  
+
         Args:
             covar (`numpy.ndarray`_, `scipy.sparse.csr_matrix`_):
                 Covariance matrix. It's shape must match the input map shape.
                 If None, the returned value is also None.
+            positive_definite (:obj:`bool`, optional):
+                Use :func:`~nirvana.data.util.impose_positive_definite` to force
+                the provided covariance matrix to be positive definite.
+            quiet (:obj:`bool`, optional):
+                Suppress output to stdout.
 
         Returns:
-            `scipy.sparse.csr_matrix`_: The covariance matrix of the good bin values.
+            `scipy.sparse.csr_matrix`_: The covariance matrix of the good bin
+            values.
         """
         if covar is None:
             return None

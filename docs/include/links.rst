@@ -50,6 +50,7 @@
 .. _scipy.linalg.lu_factor: http://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.lu_factor.html
 .. _scipy.linalg.lu_solve: https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.lu_solve.html
 .. _scipy.linalg.cholesky: https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.cholesky.html
+.. _scipy.linalg.solve_triangular: https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.solve_triangular.html
 .. _scipy.spatial.KDTree: https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.KDTree.html
 .. _scipy.stats.truncnorm: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.truncnorm.html
 .. _scipy.stats.median_abs_deviation: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.median_abs_deviation.html

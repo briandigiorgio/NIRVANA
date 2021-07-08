@@ -1,0 +1,6 @@
+from nirvana.scripts import manga_axisym_collate
+
+if __name__ == '__main__':
+    manga_axisym_collate.main(manga_axisym_collate.parse_args())
+
+

@@ -867,9 +867,8 @@ class MaNGAKinematics(Kinematics):
                                             redux_path=redux_path, cube_path=cube_path,
                                             image_path=image_path, analysis_path=analysis_path,
                                             maps_path=maps_path, remotedir=remotedir)
-        if ignore_psf:
-            cube_file = None
-        elif not os.path.isfile(cube_file):
+        fwhm_only = True if ignore_psf else False
+        if not ignore_psf and not os.path.isfile(cube_file):
             warnings.warn(f'Datacube file {cube_file} does not exist!')
             cube_file = None
 
@@ -877,7 +876,7 @@ class MaNGAKinematics(Kinematics):
             warnings.warn(f'Image file {image_file} does not exist!')
             image_file = None
 
-        return cls(maps_file, cube_file=cube_file, image_file=image_file, **kwargs)
+        return cls(maps_file, cube_file=cube_file, image_file=image_file, fwhm_only=fwhm_only, **kwargs)
 
 
 # TODO:
@@ -934,14 +933,17 @@ class MaNGAGasKinematics(MaNGAKinematics):
     """
     def __init__(self, maps_file, cube_file=None, image_file=None, psf_ext='RPSF', line='Ha-6564',
                  mask_flags='any', flux_bound=None, sb_fill=None, covar=False,
-                 positive_definite=False, quiet=False):
+                 positive_definite=False, quiet=False, fwhm_only=False):
 
         if not os.path.isfile(maps_file):
             raise FileNotFoundError(f'File does not exist: {maps_file}')
 
         # Get the PSF, if possible
-        psf, fwhm = (None, None) if cube_file is None \
-                        else read_manga_psf(cube_file, psf_ext, fwhm=True)
+        if cube_file is not None: 
+            psf, fwhm = read_manga_psf(cube_file, psf_ext, fwhm=True)
+            if fwhm_only: psf, cube_file = (None, None)
+        else: psf, fwhm = (None, None)
+
         psf_name = None if cube_file is None else psf_ext
         # Get the 3-color galaxy thumbnail image
         image = None if image_file is None else img.imread(image_file)
@@ -1104,14 +1106,16 @@ class MaNGAStellarKinematics(MaNGAKinematics):
     """
     def __init__(self, maps_file, cube_file=None, image_file=None, psf_ext='GPSF',
                  mask_flags='any', unbinned_sb=True, sb_fill=None, covar=False,
-                 positive_definite=False, quiet=False):
+                 positive_definite=False, quiet=False, fwhm_only=False):
 
         if not os.path.isfile(maps_file):
             raise FileNotFoundError(f'File does not exist: {maps_file}')
 
         # Get the PSF, if possible
-        psf, fwhm = (None,None) if cube_file is None \
-                        else read_manga_psf(cube_file, psf_ext, fwhm=True)
+        if cube_file is not None: 
+            psf, fwhm = read_manga_psf(cube_file, psf_ext, fwhm=True)
+            if fwhm_only: psf, cube_file = (None, None)
+        else: psf, fwhm = (None, None)
         psf_name = None if cube_file is None else psf_ext
         image = img.imread(image_file) if image_file else None
 

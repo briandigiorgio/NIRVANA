@@ -94,8 +94,9 @@ def bisym_model(args, paramdict, plot=False, relative_pab=False):
     #apply beam smearing if beam is given
     try: conv
     except: conv = None
-    if args.beam_fft is not None and args.smearing:
-        sbmodel, velmodel, sigmodel = smear(velmodel, args.beam_fft, sb=sb, 
+    if args.beam_fft is not None:
+        if hasattr(args, 'smearing') and not args.smearing: pass
+        else: sbmodel, velmodel, sigmodel = smear(velmodel, args.beam_fft, sb=sb, 
                 sig=sigmodel, beam_fft=True, cnvfftw=conv, verbose=False)
 
     #remasking after convolution

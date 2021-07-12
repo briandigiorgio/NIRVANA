@@ -200,6 +200,9 @@ class IntrinsicScatter:
             clipped = np.ma.getmaskarray(clip)
             self.rej = self.inp_gpm & clipped
             self.gpm = np.logical_not(clipped)
+        else:
+            self.rej = np.zeros(self.inp_gpm.size, dtype=bool)
+            self.gpm = self.inp_gpm.copy()
 
         if self.err is None and self.covar is None:
             # No need to fit; just return the clipped standard deviation.

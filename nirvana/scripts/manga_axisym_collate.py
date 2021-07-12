@@ -53,13 +53,6 @@ def parse_args(options=None):
     parser.add_argument('-o', '--overwrite', default=False, action='store_true',
                         help='Overwrite existing an existing output file.')
 
-    # TODO: Get rid of these two options once the fits files have been updated
-    # to include this info in the output file header.
-    parser.add_argument('--rc', default='HyperbolicTangent', type=str,
-                        help='Class used to parameterize the rotation curve.')
-    parser.add_argument('--dc', default=None, type=str,
-                        help='Class used to parameterize the dispersion profile, if it was fit.')
-    
     return parser.parse_args() if options is None else parser.parse_args(options)
 
 def main(args):
@@ -73,6 +66,14 @@ def main(args):
              for p in pathlib.Path(args.dir).rglob(f'{nirvana_root}*.fits.gz')]
     if len(files) == 0:
         raise ValueError(f'No files found with the expected naming convention in {args.dir}!')
+
+    # Use the first file in the list to get the rc and dc class names, and check
+    # that it is an AxisymmetricDisk model
+    with fits.open(files[0]) as hdu:
+        if hdu[0].header['MODELTYP'] != 'AxisymmetricDisk':
+            raise ValueError('First file does not set MODELTYP=AxisymmetricDisk!')
+        rc_class = hdu[0].header['RCMODEL']
+        dc_class = hdu[0].header['DCMODEL'] if 'DCMODEL' in hdu[0].header else None
 
     oroot = np.unique([os.path.dirname(os.path.dirname(f)) for f in files])
     if len(oroot) > 1:
@@ -110,22 +111,21 @@ def main(args):
         raise FileNotFoundError(f'{_dapall_file} does not exist!')
 
     # Check the input rotation curve and dispersion profile parameterization
-    # TODO: Update this once the fits files have been updated to include the
-    # parameterization names.
     func1d_classes = all_subclasses(Func1D)
     func1d_class_names = [c.__name__ for c in func1d_classes]
-    if args.rc not in func1d_class_names:
-        raise ValueError(f'{args.rc} is not a known parameterization.')
-    if args.dc is not None and args.dc not in func1d_class_names:
-        raise ValueError(f'{args.rc} is not a known parameterization.')
-    disk = AxisymmetricDisk(rc=func1d_classes[func1d_class_names.index(args.rc)](),
-                            dc=None if args.dc is None 
-                                else func1d_classes[func1d_class_names.index(args.dc)]())
+    if rc_class not in func1d_class_names:
+        raise ValueError(f'{rc_class} is not a known parameterization.')
+    if dc_class is not None and dc_class not in func1d_class_names:
+        raise ValueError(f'{dc_class} is not a known parameterization.')
+    disk = AxisymmetricDisk(rc=func1d_classes[func1d_class_names.index(rc_class)](),
+                            dc=None if dc_class is None 
+                                else func1d_classes[func1d_class_names.index(dc_class)]())
 
     # Get the data type for the output table
     _dtype = _fit_meta_dtype(disk.par_names(short=True))
     meta_keys = [d[0] for d in _dtype]
-    _dtype += [('DRPALLINDX', np.int), ('DAPALLINDX', np.int), ('SUCCESS', np.int)]
+    _dtype += [('DRPALLINDX', np.int), ('DAPALLINDX', np.int), ('SUCCESS', np.int),
+               ('QUAL', np.int)]
 
     # Read the DAPall file
     with fits.open(_dapall_file) as hdu:
@@ -147,43 +147,83 @@ def main(args):
         gas_metadata['DAPALLINDX'][i] = j
         gas_file = os.path.join(oroot, str(plate), f'{nirvana_root}-{plate}-{ifu}-Gas.fits.gz')
         if os.path.isfile(gas_file):
-            gas_metadata['SUCCESS'][i] = 1
             with fits.open(gas_file) as hdu:
-                for k in meta_keys:
-                    gas_metadata[k][i] = hdu['FITMETA'].data[k][0]
+                # Confirm the output has the expected model parameterization
+                if hdu[0].header['MODELTYP'] != 'AxisymmetricDisk' \
+                        or hdu[0].header['RCMODEL'] != rc_class \
+                        or dc_class is not None and hdu[0].header['DCMODEL'] != dc_class \
+                        or dc_class is None and 'DCMODEL' in hdu[0].header:
+                    warnings.warn(f'{gas_file} is not an AxisymmetricDisk fit with the same model '
+                                  f'parameterization as determined by the template file, '
+                                  f'{files[0]}.  Skipping this file.')
+                    # SUCCESS will already be set to 0; set QUAL to 2 (define
+                    # this in AxisymmetricDiskGlobalBitMask?)
+                    gas_metadata['QUAL'][i] = 2
+                else:
+                    gas_metadata['SUCCESS'][i] = 1
+                    gas_metadata['QUAL'][i] = hdu[0].header['QUAL']
+                    for k in meta_keys:
+                        gas_metadata[k][i] = hdu['FITMETA'].data[k][0]
         else:
+            # SUCCESS will already be set to 0; set QUAL to 2 (define this in
+            # AxisymmetricDiskGlobalBitMask?)
+            gas_metadata['QUAL'][i] = 2
+            # And save the identifier information
             gas_metadata['MANGAID'][i] = dapall['MANGAID'][j]
             gas_metadata['PLATE'][i] = plate
             gas_metadata['IFU'][i] = ifu
-            
 
         str_metadata['DRPALLINDX'][i] = dapall['DRPALLINDX'][j]
         str_metadata['DAPALLINDX'][i] = j
         str_file = os.path.join(oroot, str(plate), f'{nirvana_root}-{plate}-{ifu}-Stars.fits.gz')
         if os.path.isfile(str_file):
-            str_metadata['SUCCESS'][i] = 1
             with fits.open(str_file) as hdu:
-                for k in meta_keys:
-                    str_metadata[k][i] = hdu['FITMETA'].data[k][0]
+                # Confirm the output has the expected model parameterization
+                if hdu[0].header['MODELTYP'] != 'AxisymmetricDisk' \
+                        or hdu[0].header['RCMODEL'] != rc_class \
+                        or dc_class is not None and hdu[0].header['DCMODEL'] != dc_class \
+                        or dc_class is None and 'DCMODEL' in hdu[0].header:
+                    warnings.warn(f'{str_file} is not an AxisymmetricDisk fit with the same model '
+                                  f'parameterization as determined by the template file, '
+                                  f'{files[0]}.  Skipping this file.')
+                    # SUCCESS will already be set to 0; set QUAL to 2 (define
+                    # this in AxisymmetricDiskGlobalBitMask?)
+                    str_metadata['QUAL'][i] = 2
+                else:
+                    str_metadata['SUCCESS'][i] = 1
+                    str_metadata['QUAL'][i] = hdu[0].header['QUAL']
+                    for k in meta_keys:
+                        str_metadata[k][i] = hdu['FITMETA'].data[k][0]
         else:
+            # SUCCESS will already be set to 0; set QUAL to 2 (define this in
+            # AxisymmetricDiskGlobalBitMask?)
+            str_metadata['QUAL'][i] = 2
+            # And save the identifier information
             str_metadata['MANGAID'][i] = dapall['MANGAID'][j]
             str_metadata['PLATE'][i] = plate
             str_metadata['IFU'][i] = ifu
 
     print(f'Collating {indx.size}/{indx.size}')
 
-    # TODO: Add to the primary header?
-    fits.HDUList([fits.PrimaryHDU(),
+    # TODO: Add more to the headers?
+    hdr = fits.Header()
+    hdr['MODELTYP'] = 'AxisymmetricDisk'
+    hdr['RCMODEL'] = rc_class
+    if dc_class is not None:
+        hdr['DCMODEL'] = dc_class
+    fits.HDUList([fits.PrimaryHDU(header=hdr),
                   fits.BinTableHDU.from_columns(
                         [fits.Column(name=n, format=fileio.rec_to_fits_type(gas_metadata[n]),
                                      array=gas_metadata[n]) for n in gas_metadata.dtype.names],
-                        name='GAS'),
+                        name='GAS', header=hdr),
                   fits.BinTableHDU.from_columns(
                         [fits.Column(name=n, format=fileio.rec_to_fits_type(str_metadata[n]),
                                      array=str_metadata[n]) for n in str_metadata.dtype.names],
-                        name='STARS')]).writeto(_ofile, overwrite=True, checksum=True)
+                        name='STARS', header=hdr)]).writeto(_ofile, overwrite=True, checksum=True)
     if compress:
+        # Compress the file
         fileio.compress_file(_ofile, overwrite=True)
+        # Get rid of the uncompressed file
         os.remove(_ofile)
 
 

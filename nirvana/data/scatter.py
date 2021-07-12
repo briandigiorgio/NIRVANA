@@ -183,7 +183,7 @@ class IntrinsicScatter:
             _sig0 = sig0
 
         self.debug = verbose > 0
-        _sigma_rej = float(sigma_rej)
+        _sigma_rej = None if sigma_rej is None else float(sigma_rej)
 
         # Do a first pass at clipping the data based on the standard deviation
         # in the (error-normalized) residuals
@@ -193,30 +193,40 @@ class IntrinsicScatter:
                                 else np.sqrt(_sig0**2 + self.err[self.gpm]**2)
         elif self.err is not None:
             _chi[self.gpm] /= self.err[self.gpm]
-        clip = sigma_clip(np.ma.MaskedArray(_chi, mask=np.logical_not(self.gpm)),
-                          sigma=_sigma_rej, stdfunc=util.sigma_clip_stdfunc_mad, maxiters=rejiter)
-        clipped = np.ma.getmaskarray(clip)
-        self.rej = self.inp_gpm & clipped
-        self.gpm = np.logical_not(clipped)
+        if _sigma_rej is not None:
+            clip = sigma_clip(np.ma.MaskedArray(_chi, mask=np.logical_not(self.gpm)),
+                              sigma=_sigma_rej, stdfunc=util.sigma_clip_stdfunc_mad,
+                              maxiters=rejiter)
+            clipped = np.ma.getmaskarray(clip)
+            self.rej = self.inp_gpm & clipped
+            self.gpm = np.logical_not(clipped)
 
         if self.err is None and self.covar is None:
             # No need to fit; just return the clipped standard deviation.
             self.sig = np.std(self.resid[self.gpm])
             return self.sig, self.rej, self.gpm
 
-        # Initialize the fit workspace objects
-        self._fit_init(sig0=_sig0, fixed_rho=fixed_rho)
-
         # Assign the merit function to use based on the availability of the
         # covariance
+        fom_vec = self._merit_vec_err if self.covar is None else self._merit_vec_covar
         fom = self._merit_err if self.covar is None else self._merit_covar
 
-        # Run the fit
-        result = optimize.least_squares(fom, self._x, method='lm', diff_step=np.array([1e-5]),
-                                        verbose=verbose)
-        # Save the result
-        self.sig = abs(result.x[0])
-        # TODO: Save the success somehow?
+        nrej = 1
+        while nrej > 0:
+            # Initialize the fit workspace objects
+            self._fit_init(sig0=_sig0, fixed_rho=fixed_rho)
+
+            # Run the fit
+            result = optimize.least_squares(fom, self._x, method='lm', diff_step=np.array([1e-5]),
+                                            verbose=verbose)
+            # Save the result
+            self.sig = abs(result.x[0])
+            if _sigma_rej is not None:
+                indx = np.absolute(fom_vec(result.x)) > _sigma_rej
+                nrej = np.sum(indx)
+                self.gpm[np.where(self.gpm)[0][indx]] = False
+            else:
+                nrej = 0
 
         return self.sig, self.rej, self.gpm
 
@@ -412,7 +422,7 @@ class IntrinsicScatter:
         # Growth curves of absolute residuals
         ax = plot.init_ax(fig, [0.54, 0.1, 0.45, 0.87])
         ax.set_xlim([0., rng[1]])
-        ax.set_ylim([0.9*2*(1 - stats.norm.cdf(rng[1])), 1.05])
+        ax.set_ylim([max(0.9*2*(1 - stats.norm.cdf(rng[1])), 1e-4), 1.05])
         ax.set_yscale('log')
         ax.yaxis.set_major_formatter(logformatter)
         plot.rotate_y_ticks(ax, 90., 'center')
@@ -503,4 +513,5 @@ class IntrinsicScatter:
             pyplot.show()
         fig.clear()
         pyplot.close(fig)
+
 

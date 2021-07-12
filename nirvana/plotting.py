@@ -395,55 +395,14 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
     vel_r = args.remap('vel')
     sig_r = np.sqrt(args.remap('sig_phys2')) if hasattr(args, 'sig_phys2') else args.remap('sig')
 
-    #mask border if necessary
-    if args.bordermask is not None:
-        velmodel = np.ma.array(velmodel, mask=args.bordermask)
-        vel_r = np.ma.array(vel_r, mask=args.bordermask)
-        if sigmodel is not None:
-            sigmodel = np.ma.array(sigmodel, mask=args.bordermask)
-            sig_r = np.ma.array(sig_r, mask=args.bordermask)
-
     if args.vel_ivar is None: args.vel_ivar = np.ones_like(args.vel)
     if args.sig_ivar is None: args.sig_ivar = np.ones_like(args.sig)
-
-    #calculate number of variables
-    if 'velmask' in resdict:
-        fill = len(resdict['velmask'])
-        fixcent = resdict['vt'][0] == 0
-        lenmeds = 6 + 3*(fill - resdict['velmask'].sum() - fixcent) + (fill - resdict['sigmask'].sum())
-    else: lenmeds = len(resdict['vt'])
-    nvar = len(args.vel) + len(args.sig) - lenmeds
-
-    #calculate reduced chisq for vel and sig
-    rchisqv = np.sum((vel_r - velmodel)**2 * args.remap('vel_ivar')) / nvar
-    rchisqs = np.sum((sig_r - sigmodel)**2 * args.remap('sig_ivar')) / nvar
 
     #print global parameters on figure
     fig = plt.figure(figsize = (12,9))
     plt.subplot(3,4,1)
     ax = plt.gca()
-    plt.axis('off')
-    plt.title(f"{resdict['plate']}-{resdict['ifu']} {resdict['type']}",size=18)
-    plt.text(.1, .86, r'$i$: %0.1f$^{+%0.1f}_{-%0.1f}$ deg.'
-            %(resdict['inc'], resdict['incu'] - resdict['inc'], 
-            resdict['inc'] - resdict['incl']), transform=ax.transAxes, size=14)
-    plt.text(.1, .72, r'$\phi$: %0.1f$^{+%0.1f}_{-%0.1f}$ deg.'
-            %(resdict['pa'], resdict['pau'] - resdict['pa'], 
-            resdict['pa'] - resdict['pal']), transform=ax.transAxes, size=14)
-    plt.text(.1, .58, r'$\phi_b$: %0.1f$^{+%0.1f}_{-%0.1f}$ deg.'
-            %(resdict['pab'], resdict['pabu'] - resdict['pab'], 
-            resdict['pab'] - resdict['pabl']), transform=ax.transAxes, size=14)
-    plt.text(.1, .44, r'$v_{{sys}}$: %0.1f$^{+%0.1f}_{-%0.1f}$ km/s'
-            %(resdict['vsys'], resdict['vsysu'] - resdict['vsys'], 
-            resdict['vsys'] - resdict['vsysl']),transform=ax.transAxes, size=14)
-    plt.text(.1, .30, r'$\chi_v^2$: %0.1f,   $\chi_s^2$: %0.1f' % (rchisqv, rchisqs), 
-            transform=ax.transAxes, size=14)
-    plt.text(.1, .16, 'Asymmetry: %0.3f' % args.arc,
-            transform=ax.transAxes, size=14)
-    if cen: plt.text(.1, .02, r'$x_c: %0.1f$" $ ^{+%0.1f}_{-%0.1f}$,   $y_c: %0.1f$" $ ^{+%0.1f}_{-%0.1f}$' %  
-                    (resdict['xc'], abs(resdict['xcu'] - resdict['xc']), abs(resdict['xcl'] - resdict['xc']), 
-                    resdict['yc'], abs(resdict['ycu'] - resdict['yc']), abs(resdict['ycl'] - resdict['yc'])),
-                    transform=ax.transAxes, size=14)
+    infobox(ax, resdict, args, cen, relative_pab)
 
     #image
     plt.subplot(3,4,2)
@@ -568,7 +527,8 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
 
     return fig
 
-def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, cen=True): 
+def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, cen=True,
+        fixcent=True, save=False, clobber=False, remotedir=None, gal=None, relative_pab=False, cmap='RdBu'):
     """
     Make a plot `nirvana` output file with the different velocity components
     searated.
@@ -601,7 +561,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
         
     """
 
-    args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, cen, fixcent)
+    args, resdict = fileprep(f, plate, ifu, smearing, stellar, maxr, cen, fixcent, remotedir=remotedir, gal=gal)
     z = np.zeros(len(resdict['vt']))
     vtdict, v2tdict, v2rdict = [resdict.copy(), resdict.copy(), resdict.copy()]
     vtdict['v2t'] = z
@@ -620,63 +580,163 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     vtmodel,  sigmodel = bisym_model(args, vtdict,  plot=True)
     v2tmodel, sigmodel = bisym_model(args, v2tdict, plot=True)
     v2rmodel, sigmodel = bisym_model(args, v2rdict, plot=True)
+    v2model = v2tmodel + v2rmodel
     vel_r = args.remap('vel')
 
-    plt.figure(figsize = (12,6))
-    vmax = min(max(np.max(np.abs(velmodel)), np.max(np.abs(vtmodel)), np.max(np.abs(v2tmodel)), np.max(np.abs(v2rmodel)), np.max(np.abs(vel_r))), 300)
+    #must set all masked areas to 0 or else vmax calculations barf
+    for v in [vel_r, velmodel, vtmodel, v2tmodel, v2rmodel, v2model]:
+        v.data[v.mask] = 0
 
-    plt.subplot(241)
+    velresid = vel_r - velmodel
+    vtresid  = vel_r - v2tmodel - v2rmodel
+    v2tresid = vel_r - vtmodel - v2rmodel
+    v2rresid = vel_r - vtmodel - v2tmodel
+    v2resid  = vel_r - vtmodel
+
+    datavmax = min(np.max(np.abs([vel_r, velmodel])), 300)
+    velvmax = min(np.max(np.abs(velresid)), 300)
+    vtvmax = min(np.max(np.abs([vtmodel, vtresid])), 300)
+    v2tvmax = min(np.max(np.abs([v2tmodel, v2tresid])), 300)
+    v2rvmax = min(np.max(np.abs([v2rmodel, v2rresid])), 300)
+    v2vmax = min(np.max(np.abs([v2model, v2resid])), 300)
+
+    plt.figure(figsize = (15,9))
+
+    plt.subplot(3,5,1)
     ax = plt.gca()
-    plt.axis('off')
-    plt.title(f"{resdict['plate']}-{resdict['ifu']} {resdict['type']}",size=20)
-    plt.text(.1, .8, r'$i$: %0.1f$^\circ$'%resdict['inc'], 
-            transform=ax.transAxes, size=20)
-    plt.text(.1, .6, r'$\phi$: %0.1f$^\circ$'%resdict['pa'], 
-            transform=ax.transAxes, size=20)
-    plt.text(.1, .4, r'$\phi_b$: %0.1f$^\circ$'%resdict['pab'], 
-            transform=ax.transAxes, size=20)
-    plt.text(.1, .2, r'$v_{{sys}}$: %0.1f km/s'%resdict['vsys'], 
-            transform=ax.transAxes, size=20)
+    infobox(ax, resdict, args)
 
     #image
-    plt.subplot(242)
+    plt.subplot(3,5,2)
     plt.imshow(args.image)
     plt.axis('off')
 
     #MaNGA Ha velocity field
-    plt.subplot(243)
-    plt.title(r'H$\alpha$ Velocity Data')
-    vmax = min(np.max(np.abs(vel_r)), 300)
-    plt.imshow(vel_r, cmap='RdBu', origin='lower', vmin=-vmax, vmax=vmax)
+    plt.subplot(3,5,3)
+    plt.title(r'Velocity Data')
+    plt.imshow(vel_r, cmap='RdBu', origin='lower', vmin=-datavmax, vmax=datavmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
-    cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
-    cb = plt.colorbar(cax=cax)
-    cb.set_label('km/s', labelpad=-10)
+    cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)
+    cb = plt.colorbar(cax=cax, orientation='horizontal')
+    cax.tick_params(direction='in')
+    cb.set_label('km/s', labelpad=-2)
 
-    plt.subplot(245)
-    plt.imshow(velmodel, cmap = 'RdBu', origin='lower', vmin=-vmax, vmax=vmax)
+    #Radial velocity profiles
+    plt.subplot(3,5,4)
+    ls = [r'$V_t$',r'$V_{2t}$',r'$V_{2r}$']
+    for i,v in enumerate(['vt', 'v2t', 'v2r']):
+        plt.plot(args.edges, resdict[v], label=ls[i]) 
+
+    errors = [[resdict['vtl'], resdict['vtu']], [resdict['v2tl'], resdict['v2tu']], [resdict['v2rl'], resdict['v2ru']]]
+    for i,p in enumerate(errors):
+        plt.fill_between(args.edges, p[0], p[1], alpha=.5) 
+    plt.ylim(bottom=0)
+    plt.legend(loc=2)
+    plt.xlabel('Radius (arcsec)', labelpad=-1)
+    plt.ylabel(r'$v$ (km/s)')
+    plt.title('Velocity Profiles')
+    plt.gca().tick_params(direction='in')
+
+    plt.subplot(3,5,6)
+    plt.imshow(velmodel, cmap = 'RdBu', origin='lower', vmin=-datavmax, vmax=datavmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
-    plt.text(1.05,.5,'=', transform=plt.gca().transAxes, size=30)
-    plt.xlabel(r'$V$', fontsize=16)
+    #plt.text(1.15,.5,'=', transform=plt.gca().transAxes, size=30)
+    plt.title(r'$V$', fontsize=16)
+    cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)
+    cb = plt.colorbar(cax=cax, orientation='horizontal')
+    cax.tick_params(direction='in')
+    cb.set_label('km/s', labelpad=-2)
 
-    plt.subplot(246)
-    plt.imshow(vtmodel, cmap = 'RdBu', origin='lower', vmin=-vmax, vmax=vmax)
+    plt.subplot(3,5,7)
+    plt.imshow(vtmodel, cmap = 'RdBu', origin='lower', vmin=-vtvmax, vmax=vtvmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
-    plt.text(1.05,.5,'+', transform=plt.gca().transAxes, size=30)
-    plt.xlabel(r'$V_t$', fontsize=16)
+    #plt.text(1.15,.5,'+', transform=plt.gca().transAxes, size=30)
+    plt.title(r'$V_t$', fontsize=16)
+    cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)
+    cb = plt.colorbar(cax=cax, orientation='horizontal')
+    cax.tick_params(direction='in')
+    cb.set_label('km/s', labelpad=-2)
 
-    plt.subplot(247)
-    plt.imshow(v2tmodel, cmap = 'RdBu', origin='lower', vmin=-vmax, vmax=vmax)
+    plt.subplot(3,5,8)
+    plt.imshow(v2tmodel, cmap = 'RdBu', origin='lower', vmin=-v2tvmax, vmax=v2tvmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
-    plt.text(1.05,.5,'+', transform=plt.gca().transAxes, size=30)
-    plt.xlabel(r'$V_{2t}$', fontsize=16)
+    #plt.text(1.15,.5,'+', transform=plt.gca().transAxes, size=30)
+    plt.title(r'$V_{2t}$', fontsize=16)
+    cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)
+    cb = plt.colorbar(cax=cax, orientation='horizontal')
+    cax.tick_params(direction='in')
+    cb.set_label('km/s', labelpad=-2)
 
-    plt.subplot(248)
-    plt.imshow(v2rmodel, cmap = 'RdBu', origin='lower', vmin=-vmax, vmax=vmax)
+    plt.subplot(3,5,9)
+    plt.imshow(v2rmodel, cmap = 'RdBu', origin='lower', vmin=-v2rvmax, vmax=v2rvmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
-    plt.xlabel(r'$V_{2r}$', fontsize=16)
+    plt.title(r'$V_{2r}$', fontsize=16)
+    cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)
+    cb = plt.colorbar(cax=cax, orientation='horizontal')
+    cax.tick_params(direction='in')
+    cb.set_label('km/s', labelpad=-2)
 
-    plt.tight_layout(h_pad=2)
+    plt.subplot(3,5,10)
+    plt.imshow(v2model, cmap = 'RdBu', origin='lower', vmin=-v2vmax, vmax=v2vmax)
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    plt.title(r'$V_{2t} + V_{2r}$', fontsize=16)
+    cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)
+    cb = plt.colorbar(cax=cax, orientation='horizontal')
+    cax.tick_params(direction='in')
+    cb.set_label('km/s', labelpad=-2)
+
+    plt.subplot(3,5,11)
+    plt.imshow(velresid, cmap='RdBu', origin='lower', vmin=-velvmax, vmax=velvmax)
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    plt.title(r'Data $-$ V', fontsize=16)
+    cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)
+    cb = plt.colorbar(cax=cax, orientation='horizontal')
+    cax.tick_params(direction='in')
+    cb.set_label('km/s', labelpad=-2)
+
+    plt.subplot(3,5,12)
+    plt.imshow(vtresid, cmap='RdBu', origin='lower', vmin=-vtvmax, vmax=vtvmax)
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    plt.title(r'Data$- (V_{2t} + V_{2r})$', fontsize=16)
+    cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)
+    cb = plt.colorbar(cax=cax, orientation='horizontal')
+    cax.tick_params(direction='in')
+    cb.set_label('km/s', labelpad=-2)
+
+    plt.subplot(3,5,13)
+    plt.imshow(v2tresid, cmap='RdBu', origin='lower', vmin=-v2tvmax, vmax=v2tvmax)
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    plt.title(r'Data$- (V_t + V_{2r})$', fontsize=16)
+    cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)
+    cb = plt.colorbar(cax=cax, orientation='horizontal')
+    cax.tick_params(direction='in')
+    cb.set_label('km/s', labelpad=-2)
+
+    plt.subplot(3,5,14)
+    plt.imshow(v2rresid, cmap='RdBu', origin='lower', vmin=-v2rvmax, vmax=v2rvmax)
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    plt.title(r'Data$- (V_t + V_{2t})$', fontsize=16)
+    cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)
+    cb = plt.colorbar(cax=cax, orientation='horizontal')
+    cax.tick_params(direction='in')
+    cb.set_label('km/s', labelpad=-2)
+
+    plt.subplot(3,5,15)
+    plt.imshow(v2resid, cmap='RdBu', origin='lower', vmin=-v2vmax, vmax=v2vmax)
+    plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    plt.title(r'Data$- V_t$', fontsize=16)
+    cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)
+    cb = plt.colorbar(cax=cax, orientation='horizontal')
+    cax.tick_params(direction='in')
+    cb.set_label('km/s', labelpad=-2)
+
+    plt.tight_layout(pad=-.025)
+
+    if save:
+        path = f[:f.rfind('/')+1]
+        fname = f[f.rfind('/')+1:-5]
+        plt.savefig(f'{path}plots/sepcomp_{fname}.pdf', format='pdf')
+        plt.close()
 
 def sinewave(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, cen=True): 
     """
@@ -733,7 +793,7 @@ def sinewave(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, c
         plt.xlabel('Azimuth (deg)')
         plt.tight_layout()
 
-def safeplot(f, **kwargs):
+def safeplot(f, func='sum', **kwargs):
     '''
     Call :func:`~nirvana.plotting.summaryplot` in a safe way.
 
@@ -745,14 +805,15 @@ def safeplot(f, **kwargs):
         kwargs (optional):
             Arguments for `~nirvana.plotting.summaryplot`.
     '''
-
+    if func not in ['sum', 'sep']: raise ValueError('Please provide a valid plotting function: sum or sep')
     try:
-        summaryplot(f, save=True, **kwargs)
+        if func == 'sum': summaryplot(f, save=True, **kwargs)
+        elif func == 'sep': separate_components(f, save=True, **kwargs)
     except Exception:
         print(f, 'failed')
         print(traceback.format_exc())
 
-def plotdir(directory='/data/manga/digiorgio/nirvana/', fname='*-*_*.nirv', cores=20, **kwargs):
+def plotdir(directory='/data/manga/digiorgio/nirvana/', fname='*-*_*.nirv', cores=20, func='sum', **kwargs):
     '''
     Make summaryplots of an entire directory of output files.
 
@@ -783,4 +844,56 @@ def plotdir(directory='/data/manga/digiorgio/nirvana/', fname='*-*_*.nirv', core
     if len(fs) == 0: raise FileNotFoundError('No files found')
     else: print(len(fs), 'files found')
     with mp.Pool(cores) as p:
-        p.map(safeplot, fs)
+        p.map(partial(safeplot, func=func), fs)
+
+def infobox(plot, resdict, args, cen=True, relative_pab=False):
+    #generate velocity models
+    velmodel, sigmodel = bisym_model(args,resdict,plot=True,relative_pab=relative_pab)
+    vel_r = args.remap('vel')
+    sig_r = np.sqrt(args.remap('sig_phys2')) if hasattr(args, 'sig_phys2') else args.remap('sig')
+
+    #calculate number of variables
+    if 'velmask' in resdict:
+        fill = len(resdict['velmask'])
+        fixcent = resdict['vt'][0] == 0
+        lenmeds = 6 + 3*(fill - resdict['velmask'].sum() - fixcent) + (fill - resdict['sigmask'].sum())
+    else: lenmeds = len(resdict['vt'])
+    nvar = len(args.vel) + len(args.sig) - lenmeds
+
+    #calculate reduced chisq for vel and sig
+    rchisqv = np.sum((vel_r - velmodel)**2 * args.remap('vel_ivar')) / nvar
+    rchisqs = np.sum((sig_r - sigmodel)**2 * args.remap('sig_ivar')) / nvar
+
+    #print global parameters on figure
+    plot.axis('off')
+    ny = 6 + 2*cen
+    fontsize = 14 - 2*cen
+    ys = np.linspace(1 - .01*fontsize, 0, ny)
+
+    plot.set_title(f"{resdict['plate']}-{resdict['ifu']} {resdict['type']}",size=18)
+    plot.text(.1, ys[0], r'$i$: %0.1f$^{+%0.1f}_{-%0.1f}$ deg. (phot: %0.1f$^\circ$)'
+            %(resdict['inc'], resdict['incu'] - resdict['inc'], 
+            resdict['inc'] - resdict['incl'], args.phot_inc),
+            transform=plot.transAxes, size=fontsize)
+    plot.text(.1, ys[1], r'$\phi$: %0.1f$^{+%0.1f}_{-%0.1f}$ deg.'
+            %(resdict['pa'], resdict['pau'] - resdict['pa'], 
+            resdict['pa'] - resdict['pal']), transform=plot.transAxes, size=fontsize)
+    plot.text(.1, ys[2], r'$\phi_b$: %0.1f$^{+%0.1f}_{-%0.1f}$ deg.'
+            %(resdict['pab'], resdict['pabu'] - resdict['pab'], 
+            resdict['pab'] - resdict['pabl']), transform=plot.transAxes, size=fontsize)
+    plot.text(.1, ys[3], r'$v_{{sys}}$: %0.1f$^{+%0.1f}_{-%0.1f}$ km/s'
+            %(resdict['vsys'], resdict['vsysu'] - resdict['vsys'], 
+            resdict['vsys'] - resdict['vsysl']),transform=plot.transAxes, size=fontsize)
+    plot.text(.1, ys[4], r'$\chi_v^2$: %0.1f,   $\chi_s^2$: %0.1f' % (rchisqv, rchisqs), 
+            transform=plot.transAxes, size=fontsize)
+    plot.text(.1, ys[5], 'Asymmetry: %0.3f' % args.arc,
+            transform=plot.transAxes, size=fontsize)
+    if cen: 
+        plot.text(.1, ys[6], r'$x_c: %0.1f$" $ ^{+%0.1f}_{-%0.1f}$' %  
+                    (resdict['xc'], abs(resdict['xcu'] - resdict['xc']),
+                    abs(resdict['xcl'] - resdict['xc'])), 
+                    transform=plot.transAxes, size=fontsize)
+        plot.text(.1, ys[7], r'$y_c: %0.1f$" $ ^{+%0.1f}_{-%0.1f}$' %  
+                    (resdict['yc'], abs(resdict['ycu'] - resdict['yc']), 
+                    abs(resdict['ycl'] - resdict['yc'])),
+                    transform=plot.transAxes, size=fontsize)

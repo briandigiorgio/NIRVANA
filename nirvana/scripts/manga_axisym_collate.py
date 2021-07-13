@@ -124,7 +124,7 @@ def main(args):
     # Get the data type for the output table
     _dtype = _fit_meta_dtype(disk.par_names(short=True))
     meta_keys = [d[0] for d in _dtype]
-    _dtype += [('DRPALLINDX', np.int), ('DAPALLINDX', np.int), ('SUCCESS', np.int),
+    _dtype += [('DRPALLINDX', np.int), ('DAPALLINDX', np.int), ('FINISHED', np.int),
                ('QUAL', np.int)]
 
     # Read the DAPall file
@@ -156,16 +156,16 @@ def main(args):
                     warnings.warn(f'{gas_file} is not an AxisymmetricDisk fit with the same model '
                                   f'parameterization as determined by the template file, '
                                   f'{files[0]}.  Skipping this file.')
-                    # SUCCESS will already be set to 0; set QUAL to 2 (define
+                    # FINISHED will already be set to 0; set QUAL to 2 (define
                     # this in AxisymmetricDiskGlobalBitMask?)
                     gas_metadata['QUAL'][i] = 2
                 else:
-                    gas_metadata['SUCCESS'][i] = 1
+                    gas_metadata['FINISHED'][i] = 1
                     gas_metadata['QUAL'][i] = hdu[0].header['QUAL']
                     for k in meta_keys:
                         gas_metadata[k][i] = hdu['FITMETA'].data[k][0]
         else:
-            # SUCCESS will already be set to 0; set QUAL to 2 (define this in
+            # FINISHED will already be set to 0; set QUAL to 2 (define this in
             # AxisymmetricDiskGlobalBitMask?)
             gas_metadata['QUAL'][i] = 2
             # And save the identifier information
@@ -186,16 +186,16 @@ def main(args):
                     warnings.warn(f'{str_file} is not an AxisymmetricDisk fit with the same model '
                                   f'parameterization as determined by the template file, '
                                   f'{files[0]}.  Skipping this file.')
-                    # SUCCESS will already be set to 0; set QUAL to 2 (define
+                    # FINISHED will already be set to 0; set QUAL to 2 (define
                     # this in AxisymmetricDiskGlobalBitMask?)
                     str_metadata['QUAL'][i] = 2
                 else:
-                    str_metadata['SUCCESS'][i] = 1
+                    str_metadata['FINISHED'][i] = 1
                     str_metadata['QUAL'][i] = hdu[0].header['QUAL']
                     for k in meta_keys:
                         str_metadata[k][i] = hdu['FITMETA'].data[k][0]
         else:
-            # SUCCESS will already be set to 0; set QUAL to 2 (define this in
+            # FINISHED will already be set to 0; set QUAL to 2 (define this in
             # AxisymmetricDiskGlobalBitMask?)
             str_metadata['QUAL'][i] = 2
             # And save the identifier information

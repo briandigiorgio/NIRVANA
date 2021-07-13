@@ -14,6 +14,14 @@
    but the `lsq_fit` function allows for a fall back to the
    finite-difference methods provided by `scipy.optimize.least_squares`.
  - Included additional 1D functions for, e.g., rotation curves.
+ - Bug fixes when using covariance and fitting without dispersion in
+   `nirvana_manga_axisym` script.  Includes propagation of sigma
+   covariance to corrected `sigma**2` covariance.
+ - Added the `nirvana_manga_axisym_collate` script to collate the
+   metadata rows from all `nirvana_manga_axisym` output files into a
+   single fits table.
+ - Minor adjustments to the datamodel for the `nirvana_manga_axisym`
+   metadata table.
 
 0.1.0
 -----

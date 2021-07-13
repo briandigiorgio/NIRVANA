@@ -2683,8 +2683,6 @@ def axisym_iter_fit(galmeta, kin, rctype='HyperbolicTangent', dctype='Exponentia
     """
     # Running in "debug" mode
     debug = verbose > 1
-#    analytic_jac = False
-#    fit_scatter = False
 
     # Check input
     _vel_sigma_rej = None if vel_sigma_rej is None else list(vel_sigma_rej)

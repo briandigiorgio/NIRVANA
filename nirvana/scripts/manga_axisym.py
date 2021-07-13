@@ -99,6 +99,16 @@ def parse_args(options=None):
                              'beam-smeared model using an iterative Gaussian smoothing '
                              'operation.  This parameter both turns this on and sets the size of '
                              'the circular Gaussian smoothing kernel in spaxels.')
+    parser.add_argument('--no_scatter', dest='fit_scatter', default=True, action='store_false',
+                        help='Do not include any intrinsic scatter terms during the model fit.')
+    parser.add_argument('--vel_rej', nargs='*', default=[15,10,10,10],
+                        help='The velocity rejection sigma.  Provide 1 or 4 numbers.  If 1 '
+                             'number provided, the same sigma threshold is used for all fit '
+                             'iterations.')
+    parser.add_argument('--sig_rej', nargs='*', default=[15,10,10,10],
+                        help='The dispersion rejection sigma.  Provide 1 or 4 numbers.  If 1 '
+                             'number provided, the same sigma threshold is used for all fit '
+                             'iterations.')
     parser.add_argument('--coherent', default=False, action='store_true',
                         help='After the initial rejection of S/N and error limits, find the '
                              'largest coherent region of adjacent spaxels and only fit that '
@@ -171,9 +181,11 @@ def main(args):
                                      fitdisp=args.disp, ignore_covar=not args.covar,
                                      max_vel_err=args.max_vel_err, max_sig_err=args.max_sig_err,
                                      min_vel_snr=args.min_vel_snr, min_sig_snr=args.min_sig_snr,
+                                     vel_sigma_rej=args.vel_rej, sig_sigma_rej=args.sig_rej,
                                      fix_cen=args.fix_cen, fix_inc=args.fix_inc,
                                      low_inc=args.low_inc, min_unmasked=args.min_unmasked,
-                                     select_coherent=args.coherent, verbose=args.verbose)
+                                     select_coherent=args.coherent, fit_scatter=args.fit_scatter,
+                                     verbose=args.verbose)
 
     # Plot the final residuals
     dv_plot = os.path.join(args.odir, f'{oroot}-vdist.png')

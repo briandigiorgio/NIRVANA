@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Script that runs the fit.
+Script that runs the bisymmetric fit.
 """
 
 import argparse
@@ -10,10 +10,9 @@ import os
 from glob import glob
 import numpy as np
 
-from nirvana.fitting import fit
-from nirvana.output import imagefits
+from nirvana.models.bisym import fit
+from nirvana.util.fileio import imagefits, fileprep
 from nirvana.data.manga import MaNGAGlobalPar
-from nirvana.plotting import fileprep
 
 def parse_args(options=None):
 
@@ -143,7 +142,7 @@ def main(args):
         mockgal, params = fileprep(args.mock, remotedir=args.remote)
         if args.mock_inc: 
             params['inc'] = args.mock_inc
-            mockgal.phot_inc = args.mock_inc
+            mockgal.kin.phot_inc = args.mock_inc
         mock = (mockgal, params, args.resid)
     else: mock = None
 

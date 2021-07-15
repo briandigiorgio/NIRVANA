@@ -20,17 +20,13 @@ try:
 except:
     tt = None
 
-from .fitargs import FitArgs
 from .util import get_map_bin_transformations, impose_positive_definite
 
 from ..models.beam import construct_beam, ConvolveFFTW, smear
 from ..models.geometry import projected_polar
 from ..models import oned, axisym
 
-# TODO: We should separate the needs of the model from the needs of the
-# data. I.e., I don't think that Kinematics should inherit from
-# FitArgs.
-class Kinematics(FitArgs):
+class Kinematics():
     r"""
     Base class to hold data fit by the kinematic model.
 
@@ -955,24 +951,6 @@ class Kinematics(FitArgs):
             dsigmask = self.bin(np.abs(filledsig - smeared[2]) > smear_dsig)
             masks += [dsigmask]
             labels += ['dsig']
-
-        #plt.figure(figsize=(16,8))
-        #plt.subplot(241)
-        #plt.imshow(origvel, cmap='jet', vmin=-200, vmax=200,origin='lower')
-        #plt.subplot(242)
-        #plt.imshow(mask, origin='lower')
-        #plt.subplot(243)
-        #plt.imshow(filledvel, cmap='jet', vmin=-200, vmax=200,origin='lower')
-        #plt.subplot(244)
-        #plt.imshow(smeared[1], cmap='jet', vmin=-200, vmax=200,origin='lower')
-        #plt.subplot(245)
-        #plt.imshow(origsig, cmap='jet', vmin=0, vmax=100,origin='lower')
-        #plt.subplot(246)
-        #plt.imshow(mask,origin='lower')
-        #plt.subplot(247)
-        #plt.imshow(filledsig, cmap='jet', vmin=0, vmax=100,origin='lower')
-        #plt.subplot(248)
-        #plt.imshow(smeared[2], cmap='jet', vmin=0, vmax=100,origin='lower')
 
         #clip on surface brightness and ANR
         if self.sb is not None: 

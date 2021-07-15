@@ -485,6 +485,7 @@ def deriv_smear(v, dv, beam, beam_fft=False, sb=None, dsb=None, sig=None, dsig=N
                             - 2 * mom1 * dmom1[...,i]
         # dsb terms
         if dsb is not None:
+            dmom2[...,i] += _cnv(_sig*dsb[...,i], bfft, kernel_fft=True) * inv_mom0
             dmom2[...,i] -= mom2 * inv_mom0 * dmom0[...,i]
         # dsig terms
         if dsig is not None:

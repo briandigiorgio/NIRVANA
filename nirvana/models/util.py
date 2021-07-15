@@ -5,7 +5,7 @@ Utility function for modeling.
 """
 
 import numpy as np
-from scipy import linalg
+from scipy import linalg, stats
 
 def cov_err(jac):
     """
@@ -123,5 +123,28 @@ def sech2(x):
     s[indx] = 1/np.cosh(_x[indx])**2
     return s
 
+
+def trunc(q, mean, std, left, right):
+    """
+    Wrapper function for the ``ppf`` method of the `scipy.stats.truncnorm`_
+    function. This makes defining edges easier.
+    
+    Args:
+        q (:obj:`float`):
+            Desired quantile.
+        mean (:obj:`float`):
+            Mean of distribution
+        std (:obj:`float`):
+            Standard deviation of distribution.
+        left (:obj:`float`):
+            Left bound of truncation.
+        right (:obj:`float`):
+            Right bound of truncation.
+
+    Returns:
+        :obj:`float`: Value of the distribution at the desired quantile
+    """
+    a,b = (left-mean)/std, (right-mean)/std #transform to z values
+    return stats.truncnorm.ppf(q,a,b,mean,std)
 
 

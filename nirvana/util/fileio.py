@@ -29,6 +29,8 @@ from .. import __version__
 
 from ..models.higher_order import bisym_model
 from ..models.geometry import projected_polar, asymmetry
+from ..data.manga import MaNGAStellarKinematics, MaNGAGasKinematics
+from ..data.fitargs import FitArgs
 
 def init_record_array(shape, dtype):
     r"""
@@ -307,11 +309,11 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
         #get galaxy object
         if gal is None:
             if resdict['type'] == 'Stars':
-                args = MaNGAStellarKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir)
+                kin = MaNGAStellarKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir)
             else:
-                args = MaNGAGasKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir)
+                kin = MaNGAGasKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir)
         else:
-            args = gal
+            kin = gal
 
         fill = len(resdict['velmask'])
         fixcent = resdict['vt'][0] == 0
@@ -345,31 +347,19 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
             if 'fixcent' in info: fixcent = True
             elif 'freecent' in info: fixcent = False
 
-        #mock galaxy using stored values
-        if plate == 0:
-            mock = np.load('mockparams.npy', allow_pickle=True)[ifu]
-            print('Using mock:', mock['name'])
-            params = [mock['inc'], mock['pa'], mock['pab'], mock['vsys'], mock['vts'], mock['v2ts'], mock['v2rs'], mock['sig']]
-            args = Kinematics.mock(56,*params)
-            cnvfftw = ConvolveFFTW(args.kin.spatial_shape)
-            smeared = smear(args.kin.remap('vel'), args.kin.beam_fft, beam_fft=True, sig=args.kin.remap('sig'), sb=args.kin.remap('sb'), cnvfftw=cnvfftw)
-            args.kin.sb  = args.kin.bin(smeared[0])
-            args.kin.vel = args.kin.bin(smeared[1])
-            args.kin.sig = args.kin.bin(smeared[2])
-            args.fwhm  = 2.44
-
         #load input galaxy object
-        elif gal is not None:
-            args = gal
+        if gal is not None:
+            kin = gal
 
         #load in MaNGA data
         else:
             if stellar:
-                args = MaNGAStellarKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing, remotedir=remotedir)
+                kin = MaNGAStellarKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing, remotedir=remotedir)
             else:
-                args = MaNGAGasKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing, remotedir=remotedir)
+                kin = MaNGAGasKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing, remotedir=remotedir)
 
     #set relevant parameters for galaxy
+    args = FitArgs(kin) 
     args.setdisp(True)
     args.setnglobs(4) if not cen else args.setnglobs(6)
     args.setfixcent(fixcent)

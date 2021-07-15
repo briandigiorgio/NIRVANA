@@ -27,15 +27,13 @@ from ..models import axisym
 def parse_args(options=None):
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('plate', default=None, type=int, 
-                        help='MaNGA plate identifier (e.g., 8138)')
-    parser.add_argument('ifu', default=None, type=int, 
-                        help='MaNGA ifu identifier (e.g., 12704)')
+    parser.add_argument('plate', type=int, help='MaNGA plate identifier (e.g., 8138)')
+    parser.add_argument('ifu', type=int, help='MaNGA ifu identifier (e.g., 12704)')
     parser.add_argument('--daptype', default='HYB10-MILESHC-MASTARHC2', type=str,
                         help='DAP analysis key used to select the data files.  This is needed '
                              'regardless of whether or not you specify the directory with the '
                              'data files (using --root).')
-    parser.add_argument('--dr', default='MPL-10', type=str,
+    parser.add_argument('--dr', default='MPL-11', type=str,
                         help='The MaNGA data release.  This is only used to automatically '
                              'construct the directory to the MaNGA galaxy data (see also '
                              '--redux and --analysis), and it will be ignored if the root '
@@ -68,6 +66,12 @@ def parse_args(options=None):
     parser.add_argument('--fix_inc', default=False, action='store_true',
                         help='Fix the inclination to the guess inclination based on the '
                              'photometric ellipticity')
+    parser.add_argument('--low_inc', default=None, type=float,
+                        help='Best-fitting inclinations below this value are considered fitting '
+                             'errors.  A flag is tripped indicating that the fit resulted in a '
+                             'low inclination, but the actual returned fit fixes the inclination '
+                             'to the photometric estimate (i.e., as if setting --fix_inc).  If '
+                             'None, no lower limit is set.')
     parser.add_argument('-t', '--tracer', default='Gas', type=str,
                         help='The tracer to fit; must be either Gas or Stars.')
     parser.add_argument('--rc', default='HyperbolicTangent', type=str,
@@ -164,17 +168,19 @@ def main(args):
     # Run the iterative fit
     disk, p0, fix, vel_mask, sig_mask \
             = axisym.axisym_iter_fit(galmeta, kin, rctype=args.rc, dctype=args.dc,
-                                     fitdisp=args.disp, max_vel_err=args.max_vel_err,
-                                     max_sig_err=args.max_sig_err, min_vel_snr=args.min_vel_snr,
-                                     min_sig_snr=args.min_sig_snr, fix_cen=args.fix_cen,
-                                     fix_inc=args.fix_inc, min_unmasked=args.min_unmasked,
+                                     fitdisp=args.disp, ignore_covar=not args.covar,
+                                     max_vel_err=args.max_vel_err, max_sig_err=args.max_sig_err,
+                                     min_vel_snr=args.min_vel_snr, min_sig_snr=args.min_sig_snr,
+                                     fix_cen=args.fix_cen, fix_inc=args.fix_inc,
+                                     low_inc=args.low_inc, min_unmasked=args.min_unmasked,
                                      select_coherent=args.coherent, verbose=args.verbose)
 
     # Plot the final residuals
     dv_plot = os.path.join(args.odir, f'{oroot}-vdist.png')
     ds_plot = os.path.join(args.odir, f'{oroot}-sdist.png')
-    axisym.disk_fit_resid_dist(kin, disk, disp=args.disp, vel_mask=vel_mask, vel_plot=dv_plot,
-                               sig_mask=sig_mask, sig_plot=ds_plot)
+    axisym.disk_fit_resid_dist(kin, disk, disp=args.disp, ignore_covar=not args.covar,
+                               vel_mask=vel_mask, vel_plot=dv_plot, sig_mask=sig_mask,
+                               sig_plot=ds_plot) 
 
     # Create the final fit plot
     fit_plot = os.path.join(args.odir, f'{oroot}-fit.png')

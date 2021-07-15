@@ -886,6 +886,9 @@ class MaNGAGasKinematics(MaNGAKinematics):
         if not os.path.isfile(maps_file):
             raise FileNotFoundError(f'File does not exist: {maps_file}')
 
+        # TODO: We don't need to read the DRP cube file to get the FWHM.  We can
+        # get it from the DRPall file, and this is actually already done in the
+        # MaNGAGlobalPar class...
         # Get the PSF, if possible
         if cube_file is not None: 
             psf, fwhm = read_manga_psf(cube_file, psf_ext, fwhm=True)
@@ -982,6 +985,10 @@ class MaNGAGasKinematics(MaNGAKinematics):
         if covar:
             if not quiet:
                 print('Building covariance matrices ... ')
+
+            # NOTE: None of the covariance matrices are forced to be
+            # positive-definite here.  This is left to the base Kinematics
+            # instantiation.
             sb_gpm, sb_covar = manga_map_covar(np.ma.MaskedArray(sb_ivar, mask=sb_mask),
                                                binid=binid, positive_definite=False, fill=True)
             vel_gpm, vel_covar = manga_map_covar(np.ma.MaskedArray(vel_ivar, mask=vel_mask),

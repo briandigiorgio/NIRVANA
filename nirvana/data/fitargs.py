@@ -205,7 +205,7 @@ class FitArgs:
         return self.guess
 
     def setbounds(self, incpad=20, papad=30, vsyspad=30, cenpad=2, velpad = 1.5,
-            velmax=400, sigmax=300, incgauss=False):
+            velmax=400, sigmax=300, incgauss=False, pagauss):
         '''
         Set the bounds for the prior of the fit.
 
@@ -234,6 +234,9 @@ class FitArgs:
             incgauss (:obj:`bool`, optional):
                 If `True`, will treat `incpad` as the standard deviation of a
                 Gaussian prior rather than bounds of a uniform prior.
+            pagauss (:obj:`bool`, optional):
+                If `True`, will treat `papad` as the standard deviation of a
+                Gaussian prior rather than bounds of a uniform prior.
         '''
 
         try: theta0 = self.guess
@@ -242,12 +245,14 @@ class FitArgs:
             raise AttributeError('Must define nbins first')
 
         inc = self.guess[1] if self.phot_inc is None else self.phot_inc
+        #pa = self.guess[2] if self.phot_pa is None else self.phot_pa
         ndim = len(self.guess) + (self.nbins + self.fixcent) * self.disp
 
         #prior bounds defined based off of guess
         bounds = np.zeros((ndim, 2))
         if incgauss: bounds[0] = (inc, incpad)
         else: bounds[0] = (max(inc - incpad, 5), min(inc + incpad, 85))
+        #if pagauss: bounds[1] = (pa, papad)
         bounds[1] = (theta0[1] - papad, theta0[1] + papad)
         bounds[2] = (0, 180) #uninformed
         bounds[3] = (theta0[3] - vsyspad, theta0[3] + vsyspad)

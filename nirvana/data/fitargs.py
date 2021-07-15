@@ -205,7 +205,7 @@ class FitArgs:
         return self.guess
 
     def setbounds(self, incpad=20, papad=30, vsyspad=30, cenpad=2, velpad = 1.5,
-            velmax=400, sigmax=300, incgauss=False, pagauss):
+            velmax=400, sigmax=300, incgauss=False, pagauss=False):
         '''
         Set the bounds for the prior of the fit.
 

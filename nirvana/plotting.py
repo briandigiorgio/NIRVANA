@@ -580,12 +580,15 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     vtmodel,  sigmodel = bisym_model(args, vtdict,  plot=True)
     v2tmodel, sigmodel = bisym_model(args, v2tdict, plot=True)
     v2rmodel, sigmodel = bisym_model(args, v2rdict, plot=True)
-    v2model = v2tmodel + v2rmodel
     vel_r = args.remap('vel')
 
     #must set all masked areas to 0 or else vmax calculations barf
-    for v in [vel_r, velmodel, vtmodel, v2tmodel, v2rmodel, v2model]:
+    for v in [vel_r, velmodel, vtmodel, v2tmodel, v2rmodel]:
         v.data[v.mask] = 0
+        v -= resdict['vsys'] #recenter at 0
+
+    v2model = v2tmodel + v2rmodel
+    v2model.data[v2model.mask] = 0
 
     velresid = vel_r - velmodel
     vtresid  = vel_r - v2tmodel - v2rmodel
@@ -641,7 +644,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     plt.imshow(velmodel, cmap = 'RdBu', origin='lower', vmin=-datavmax, vmax=datavmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     #plt.text(1.15,.5,'=', transform=plt.gca().transAxes, size=30)
-    plt.title(r'$V$', fontsize=16)
+    plt.title(r'Model', fontsize=16)
     cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)
     cb = plt.colorbar(cax=cax, orientation='horizontal')
     cax.tick_params(direction='in')
@@ -688,7 +691,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     plt.subplot(3,5,11)
     plt.imshow(velresid, cmap='RdBu', origin='lower', vmin=-velvmax, vmax=velvmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
-    plt.title(r'Data $-$ V', fontsize=16)
+    plt.title(r'Data $-$ Model', fontsize=16)
     cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)
     cb = plt.colorbar(cax=cax, orientation='horizontal')
     cax.tick_params(direction='in')

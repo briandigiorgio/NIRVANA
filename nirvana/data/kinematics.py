@@ -13,6 +13,7 @@ from scipy import sparse
 from scipy import linalg
 from astropy.stats import sigma_clip
 import matplotlib.pyplot as plt
+import warnings
 
 try:
     import theano.tensor as tt
@@ -213,10 +214,6 @@ class Kinematics(FitArgs):
         self.phot_inc = phot_inc
         self.maxr = maxr
 
-        # TODO: This has more to do with the model than the data, so we
-        # should put in the relevant model class/method
-        self.bordermask = bordermask.astype(bool) if bordermask is not None else None
-
         # Build coordinate arrays
         if x is None:
             # No coordinate arrays provided, so just assume a
@@ -251,7 +248,7 @@ class Kinematics(FitArgs):
 
         # Unravel and select the valid values for all arrays
         for attr in ['x', 'y', 'sb', 'sb_ivar', 'sb_mask', 'vel', 'vel_ivar', 'vel_mask', 'sig', 
-                     'sig_ivar', 'sig_mask', 'sig_corr', 'bordermask', 'sb_anr']:
+                     'sig_ivar', 'sig_mask', 'sig_corr', 'sb_anr']:
             if getattr(self, attr) is not None:
                 setattr(self, attr, getattr(self, attr).ravel()[self.bin_indx])
 
@@ -269,11 +266,6 @@ class Kinematics(FitArgs):
         self.sig_phys2 = self.sig**2 if self.sig_corr is None else self.sig**2 - self.sig_corr**2
         self.sig_phys2_ivar = None if self.sig_ivar is None \
                                     else self.sig_ivar/(2*self.sig + (self.sig == 0.0))**2
-
-        #if self.bordermask is not None:
-        #    self.sb_mask  |= self.bordermask
-        #    self.vel_mask |= self.bordermask
-        #    self.sig_mask |= self.bordermask
 
         # Ingest the covariance matrices, if they're provided
         self.vel_covar = self._ingest_covar(vel_covar, positive_definite=positive_definite)
@@ -853,7 +845,7 @@ class Kinematics(FitArgs):
         self.reject(vel_rej=vel_rej, sig_rej=sig_rej)
         return vel_rej, sig_rej
 
-    def clip(self, sigma=10, sbf=.03, anr=5, maxiter=10, smear_dv=50, smear_dsig=50, clip_thresh=.95, verbose=False):
+    def clip(self, galmeta=None, sigma=10, sbf=.03, anr=5, maxiter=10, smear_dv=50, smear_dsig=50, clip_thresh=.95, verbose=False):
         '''
         Filter out bad spaxels in kinematic data.
         
@@ -890,6 +882,9 @@ class Kinematics(FitArgs):
                 Flag for printing out information on iterations.
         '''
 
+        origvel = self.remap('vel')
+        origsig = self.remap('sig')
+
         #count spaxels in each bin and make 2d maps excluding large bins
         nspax = np.array([(self.remap('binid') == self.binid[i]).sum() for i in range(len(self.binid))])
         binmask = self.remap(nspax) > 10
@@ -897,22 +892,70 @@ class Kinematics(FitArgs):
         ngood = self.vel_mask.sum()
         nmasked0 = (~self.vel_mask).sum()
 
+        #axisymmetric fit of data
+        fit = None
+        if galmeta is not None:
+            try:
+                fit = axisym.axisym_iter_fit(galmeta, self)[0]
+                avel, asig = fit.model()
+            except Exception as e: 
+                print(e)
+                warnings.warn('Iterative fit failed, using noniterative fit instead')
+
+        #failsafe simpler fit
+        if fit is None:
+            fit = axisym.AxisymmetricDisk()
+            fit.lsq_fit(self)
+            avel = fit.model()
+            asig = None
+
+        #surface brightness
         sb  = np.ma.array(self.remap('sb'), mask=binmask) if self.sb is not None else None
-        vel = np.ma.array(self.remap('vel'), mask=binmask)
-        sig = np.ma.array(self.remap('sig'), mask=binmask) if self.sig is not None  else None
+
+        #get the vel field, fill masked areas with axisym model
+        #have to do this so the convolution doesn't barf
+        filledvel = np.ma.array(self.remap('vel'), mask=binmask)
+        mask = filledvel.mask | binmask.data | (filledvel == 0).data
+        filledvel = filledvel.data
+        filledvel[mask] = avel[mask]
+
+        #same for sig
+        filledsig = np.ma.array(np.sqrt(self.remap('sig_phys2')), mask=binmask) if self.sig is not None else None
+        if filledsig is not None and asig is not None:
+            mask |= filledsig.mask | (filledsig == 0).data
+            filledsig = filledsig.data
+            filledsig[mask] = asig[mask]
 
         #reconvolve psf on top of velocity and dispersion
         cnvfftw = ConvolveFFTW(self.spatial_shape)
-        smeared = smear(vel, self.beam_fft, beam_fft=True, sig=sig, sb=sb, cnvfftw=cnvfftw)
+        smeared = smear(filledvel, self.beam_fft, beam_fft=True, sig=filledsig, sb=None, cnvfftw=cnvfftw)
 
         #cut out spaxels with too high residual because they're probably bad
-        dvmask = self.bin(np.abs(vel - smeared[1]) > smear_dv) 
+        dvmask = self.bin(np.abs(filledvel - smeared[1]) > smear_dv) 
         masks = [dvmask]
         labels = ['dv']
         if self.sig is not None: 
-            dsigmask = self.bin(np.abs(sig - smeared[2]) > smear_dsig)
+            dsigmask = self.bin(np.abs(filledsig - smeared[2]) > smear_dsig)
             masks += [dsigmask]
             labels += ['dsig']
+
+        plt.figure(figsize=(16,8))
+        plt.subplot(241)
+        plt.imshow(origvel, cmap='jet', vmin=-200, vmax=200,origin='lower')
+        plt.subplot(242)
+        plt.imshow(mask, origin='lower')
+        plt.subplot(243)
+        plt.imshow(filledvel, cmap='jet', vmin=-200, vmax=200,origin='lower')
+        plt.subplot(244)
+        plt.imshow(smeared[1], cmap='jet', vmin=-200, vmax=200,origin='lower')
+        plt.subplot(245)
+        plt.imshow(origsig, cmap='jet', vmin=0, vmax=100,origin='lower')
+        plt.subplot(246)
+        plt.imshow(mask,origin='lower')
+        plt.subplot(247)
+        plt.imshow(filledsig, cmap='jet', vmin=0, vmax=100,origin='lower')
+        plt.subplot(248)
+        plt.imshow(smeared[2], cmap='jet', vmin=0, vmax=100,origin='lower')
 
         #clip on surface brightness and ANR
         if self.sb is not None: 
@@ -979,9 +1022,17 @@ class Kinematics(FitArgs):
                 labels += ['resid', 'chisq']
                 print(f'Clipping converged after {niter} iterations')
 
-            plt.figure(figsize = (12,8))
+            plt.figure(figsize = (16,8))
+            plt.subplot(241)
+            plt.axis('off')
+            plt.imshow(origvel, cmap='jet', origin='lower')
+            plt.title('Original vel')
+            plt.subplot(242)
+            plt.axis('off')
+            plt.imshow(origsig, cmap='jet', origin='lower')
+            plt.title('Original sig')
             for i in range(len(masks)):
-                plt.subplot(231+i)
+                plt.subplot(243+i)
                 plt.axis('off')
                 plt.imshow(self.remap(masks[i]), origin='lower')
                 plt.title(labels[i])

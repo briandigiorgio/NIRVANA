@@ -307,8 +307,9 @@ def ptform(params, args, gaussprior=False):
         #uniform prior on sin(inc)
         #incfunc = lambda i: np.cos(np.radians(i))
         #incp = np.degrees(np.arccos(unifprior('inc', paramdict, bounddict,func=incfunc)))
-        incp = stats.norm.ppf(paramdict['inc'], *bounddict['inc'])
         pap = unifprior('pa', paramdict, bounddict)
+        incp = stats.norm.ppf(paramdict['inc'], *bounddict['inc'])
+        #pap = stats.norm.ppf(paramdict['pa'], *bounddict['pa'])
         pabp = unifprior('pab', paramdict, bounddict)
         vsysp = unifprior('vsys', paramdict, bounddict)
 

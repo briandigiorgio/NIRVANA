@@ -675,15 +675,15 @@ class Kinematics():
                 Thrown if input mask is not the same shape as the data.
         '''
 
-        if mask.ndim > 1 and mask.shape != self.kin.spatial_shape:
+        if mask.ndim > 1 and mask.shape != self.spatial_shape:
             raise ValueError('Mask is not the same shape as data.')
-        if mask.ndim == 1 and len(mask) != len(self.kin.vel):
+        if mask.ndim == 1 and len(mask) != len(self.vel):
             raise ValueError('Mask is not the same length as data')
 
         for m in ['sb_mask', 'vel_mask', 'sig_mask']:
             if m is None: continue
-            if mask.ndim > 1: mask = self.kin.bin(mask)
-            setattr(self, m, np.array(getattr(self.kin, m) + mask, dtype=bool))
+            if mask.ndim > 1: mask = self.bin(mask)
+            setattr(self, m, np.array(getattr(self, m) + mask, dtype=bool))
 
     def clip_err(self, max_vel_err=None, max_sig_err=None):
         """

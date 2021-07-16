@@ -80,7 +80,9 @@ class FitArgs:
 
         #calculate nyquist bin width based off fwhm and inc
         else:
-            binwidth = min(self.kin.fwhm/2/np.cos(np.radians(inc)), self.kin.fwhm)
+            if self.fwhm is None: 
+                raise ValueError('Must either supply bin number or use PSF')
+            binwidth = min(self.fwhm/2/np.cos(np.radians(inc)), self.fwhm)
             self.edges = np.arange(0, maxr, binwidth)
 
         #clip outer bins that have too many masked spaxels

@@ -19,12 +19,22 @@ parser.add_argument('--start', type=int, default=0,
                     help='Index of DRPall file to start at')
 parser.add_argument('--stop', type=int, default=-1,
                     help='Index of DRPall file to stop at')
+parser.add_argument('--clobber', action='store_true',
+                    help='Overwrite existing slurm files')
+parser.add_argument('--ad', action='store_true',
+                    help='Use the plateifus from nirvana_test_sample.txt')
+parser.add_argument('--nosmear', action='store_true',
+                    help="Don't smear with PSF")
 args = parser.parse_args()
 
 if __name__ == '__main__':
-    drp = fits.open('/home/bdigiorg/drpall-v3_1_1.fits')[1].data
-    lendrp = len(drp['plate'])
+    if args.ad:
+        plates, ifus = np.genfromtxt('/home/bdigiorg/nirvana_testing_sample.txt').T
+        drp = {'plate':plates, 'ifudsgn':ifus}
+    else:
+        drp = fits.open('/home/bdigiorg/drpall-v3_1_1.fits')[1].data
 
+    lendrp = len(drp['plate'])
     args.stop = lendrp if args.stop == -1 else args.stop
     galpernode = (args.stop - args.start)//args.nnodes
     print(galpernode, 'galaxies per file')
@@ -34,7 +44,7 @@ if __name__ == '__main__':
     remotedir = '/data/users/bdigiorg/download/'
     progressdir = '/data/users/bdigiorg/progress/'
 
-    plates = drp['plate'][args.start:args.stop]
+    plates = np.array(drp['plate'], dtype=int)[args.start:args.stop]
     ifus = np.array(drp['ifudsgn'], dtype=int)[args.start:args.stop]
     if args.reverse:
         plates = plates[::-1]
@@ -47,7 +57,10 @@ if __name__ == '__main__':
         ifusi = ifus[galpernode * i:galpernode * (i+1)]
         fname = f'/home/bdigiorg/slurms/nirvana_{platesi[0]}-{platesi[-1]}.slurm'
         if os.path.isfile(fname):
-            raise FileExistsError(f'File already exists: {fname}')
+            if args.clobber:
+                os.remove(fname)
+            else:
+                raise FileExistsError(f'File already exists: {fname}')
         with open(fname, 'a') as f:
             f.write(f'\
 #!/bin/bash \n\
@@ -82,13 +95,13 @@ echo {platesi[j]} {ifusi[j]} gas \n\
 mkdir {progressdir}/{platesi[j]}/ \n\
 mkdir {progressdir}/{platesi[j]}/{ifusi[j]}/ \n\
 touch {progresspath}/gas.start \n\
-nirvana {platesi[j]} {ifusi[j]} -c 40 --root {rootdir} --dir {outdir} --remote {remotedir} --fits > {progresspath}/gas.log 2> {progresspath}/gas.err\n\
+nirvana {platesi[j]} {ifusi[j]} -c 40 --root {rootdir} --dir {outdir} --remote {remotedir} {"--nosmear" * args.nosmear} > {progresspath}/gas.log 2> {progresspath}/gas.err\n\
 touch {progressdir}/{platesi[j]}/{ifusi[j]}/gas.finish \n \n\
 ln -s {outdir}/nirvana_{platesi[j]}-{ifusi[j]}_Gas.fits {progresspath}/gas.fits\n\
 \
 echo {platesi[j]} {ifusi[j]} stellar \n\
 touch {progresspath}/stellar.start \n\
-nirvana {platesi[j]} {ifusi[j]} -s -c 40 --root {rootdir} --dir {outdir} --remote {remotedir} --fits > {progresspath}/stellar.log 2> {progresspath}/stellar.err\n\
+nirvana {platesi[j]} {ifusi[j]} -s -c 40 --root {rootdir} --dir {outdir} --remote {remotedir} {"--nosmear" * args.nosmear} > {progresspath}/stellar.log 2> {progresspath}/stellar.err\n\
 touch {progresspath}/stellar.finish \n\
 ln -s {outdir}/nirvana_{platesi[j]}-{ifusi[j]}_Stars.fits {progresspath}/stellar.fits\n\
 date\n\n')

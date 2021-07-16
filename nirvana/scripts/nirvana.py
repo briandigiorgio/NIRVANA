@@ -11,7 +11,7 @@ from glob import glob
 import numpy as np
 
 from nirvana.models.bisym import fit
-from nirvana.util.fileio import imagefits, fileprep
+from nirvana.util.fits_prep import fileprep, imagefits
 from nirvana.data.manga import MaNGAGlobalPar
 
 def parse_args(options=None):

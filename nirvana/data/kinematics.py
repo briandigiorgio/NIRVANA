@@ -156,9 +156,6 @@ class Kinematics():
         fwhm (:obj:`float`, optional):
             The FWHM of the PSF of the galaxy in the same units as :attr:`x` and
             :attr:`y`.
-        bordermask (`numpy.ndarray`_):
-            Boolean array containing the mask for a ring around the outside of
-            the data. Meant to mask bad data from convolution errors.
         phot_inc (:obj:`float`, optional):
             Photometric inclination in degrees.
         maxr (:obj:`float`, optional):
@@ -176,7 +173,7 @@ class Kinematics():
                  sb_ivar=None, sb_mask=None, sb_covar=None, sb_anr=None, sig=None, sig_ivar=None,
                  sig_mask=None, sig_covar=None, sig_corr=None, psf_name=None, psf=None,
                  aperture=None, binid=None, grid_x=None, grid_y=None, grid_sb=None, grid_wcs=None,
-                 reff=None, fwhm=None, bordermask=None, image=None, phot_inc=None, maxr=None,
+                 reff=None, fwhm=None, image=None, phot_inc=None, maxr=None,
                  positive_definite=False, quiet=False):
 
         # Check shape of input arrays
@@ -641,131 +638,6 @@ class Kinematics():
         miny = np.amin(self.y)
         maxy = np.amax(self.y)
         return np.sqrt(max(abs(minx), maxx)**2 + max(abs(miny), maxy)**2)
-
-    # TODO: This should be in a different method/class
-    @classmethod
-    def mock(cls, size, inc, pa, pab, vsys, vt, v2t, v2r, sig, xc=0, yc=0, reff=10, maxr=15, psf=None, border=3, fwhm=2.44):
-        """
-        Makes a :class:`nirvana.data.kinematics.Kinematics` object with a
-        mock velocity field with input parameters using similar code to
-        :func:`nirvana.fiting.bisym_model`.
-
-        Args:
-            size (:obj:`int`):
-                length of each side of the output arrays.
-            inc (:obj:`float`):
-                Inclination in degrees.
-            pa (:obj:`float`):
-                Position angle in degrees.
-            pab (:obj:`float`):
-                Relative position angle of bisymmetric features.
-            vsys (:obj:`float`):
-                Systemic velocity.
-            vt (`numpy.ndarray`_):
-                First order tangential velocities. Must have same length as
-                :attr:`v2t` and :attr:`v2r`.
-            v2t (`numpy.ndarray`_):
-                Second order tangential velocities. Must have same length as
-                :attr:`vt` and :attr:`v2r`.
-            v2r (`numpy.ndarray`_):
-                Second order radial velocities. Must have same length as
-                :attr:`vt` and :attr:`v2t`.
-            sig (`numpy.ndarray`_):
-                Velocity dispersion values for each radial bin. Must have same
-                length as other velocity arrays. 
-            xc (:obj:`float`, optional):
-                Offset of center on x axis. Optional, defaults to 0.
-            yc (:obj:`float`, optional):
-                Offset of center on y axis. Optional, defaults to 0.
-            reff (:obj:`float`, optional):
-                Effective radius of the mock galaxy. Units are arbitrary
-                but must be the same as :attr:`r`. Defaults to 10.
-            maxr (:obj:`float`, optional):
-                Maximum absolute value for the x and y arrays. Defaults to 15.
-            psf (`numpy.ndarray`_, optional):
-                2D array of the point-spread function of the simulated galaxy.
-                Must have dimensions of `size` by `size`. If not given, it will
-                load a default PSF taken from a MaNGA observation that is 55 by
-                55.
-            border (:obj:`float`, optional):
-                How many FWHM widths of a border to make around the central
-                part of the galaxy you actually care about. This is to mitigate
-                the edge effects of the PSF convolution that create erroneous
-                values. Bigger borders will lead to smaller edge effects but
-                will cost computational time in model fitting. Defaults to 3. 
-            fwhm (:obj:`float`, optional):
-                FWHM of PSF in same units as :attr:`size`. Defaults to 2.44 for
-                example MaNGA PSF.
-
-        Returns:
-            :class:`nirvana.data.kinematics.Kinematics`: Object with the
-            velocity field and x and y coordinates of the mock galaxy.
-
-        Raises:
-            ValueError:
-                Raises if input velocity arrays are not the same length.
-                
-        """
-
-        #check that velocities are compatible
-        if len(vt) != len(v2t) or len(vt) != len(v2r) or len(vt) != len(sig):
-            raise ValueError('Velocity arrays must be the same length.')
-
-        #if the border needs to be masked, increase the size of the array to
-        #make up for it so it ends up the right size in the end 
-        if border: 
-            _r = maxr + border * fwhm
-            _size = int(_r/maxr * size)+1
-            _bsize = (_size - size)//2
-        else: _r,_size = (maxr,size)
-
-        #make grid of x and y and define edges
-        a = np.linspace(-_r,_r,_size)
-        x,y = np.meshgrid(a,a)
-        edges = np.linspace(0, maxr, len(vt)+1)
-
-        #convert angles to polar
-        _inc,_pa,_pab = np.radians([inc, pa, pab])
-        r, th = projected_polar(x - xc, y - yc, _pa, _inc)
-
-        #interpolate velocity values for all r 
-        bincents = (edges[:-1] + edges[1:])/2
-        vtvals  = np.interp(r, bincents, vt)
-        v2tvals = np.interp(r, bincents, v2t)
-        v2rvals = np.interp(r, bincents, v2r)
-        sig = np.interp(r, bincents, sig)
-        sb = oned.Sersic1D([1,10,1]).sample(r) #sersic profile for flux
-
-        #spekkens and sellwood 2nd order vf model (from andrew's thesis)
-        vel = vsys + np.sin(_inc) * (vtvals * np.cos(th) - 
-              v2tvals * np.cos(2*(th - _pab)) * np.cos(th) -
-              v2rvals * np.sin(2*(th - _pab)) * np.sin(th))
-
-        #load example MaNGA PSF if none is provided
-        #TODO: construct a general PSF instead
-        if psf is None: psf = np.load('psfexample56.npy')
-
-        #make border around PSF if necessary
-        if border:
-            #make the mask for the border
-            bordermask = np.ones((_size, _size))
-            bordermask[_bsize:-_bsize, _bsize:-_bsize] = 0
-
-            #define masked versions of all the arrays
-            _vel = np.ma.array(vel, mask=bordermask)
-            _x   = np.ma.array(x,   mask=bordermask)
-            _y   = np.ma.array(y,   mask=bordermask)
-            _sig = np.ma.array(sig, mask=bordermask)
-            _sb  = np.ma.array(sb,  mask=bordermask)
-
-            #make bigger masked psf
-            _psf = np.zeros((_size, _size))
-            _psf[_bsize:-_bsize, _bsize:-_bsize] = psf
-           
-        else: _vel, _x, _y, _sig, _sb = [vel, x, y, sig, sb]
-
-        binid = np.arange(np.product(_vel.shape)).reshape(_vel.shape)
-        return cls(_vel, x=_x, y=_y, grid_x=_x, grid_y=_y, reff=reff, binid=binid, sig=_sig, psf=_psf, sb=_sb, bordermask=bordermask)
 
     def reject(self, vel_rej=None, sig_rej=None):
         r"""

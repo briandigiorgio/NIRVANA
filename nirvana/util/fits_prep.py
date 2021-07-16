@@ -23,7 +23,8 @@ from astropy.table import Table,Column
 from tqdm import tqdm
 
 from ..models.higher_order import bisym_model
-from ..models.geometry import projected_polar, asymmetry
+from ..models.geometry import projected_polar
+from ..models.asymmetry import asymmetry
 from ..data.manga import MaNGAStellarKinematics, MaNGAGasKinematics
 from ..data.fitargs import FitArgs
 from ..data.util import unpack
@@ -565,3 +566,29 @@ def imagefits(f, galmeta, gal=None, outfile=None, padding=20, remotedir=None, ou
     if outfile is None: 
         outfile = f"nirvana_{resdict['plate']}-{resdict['ifu']}_{resdict['type']}.fits"
     hdul.writeto(outdir + outfile, overwrite=True, output_verify='fix', checksum=True)
+
+def fig2data(fig):
+    '''
+    Take a `matplolib` figure and return it as an array of RGBA values.
+
+    Stolen from somewhere on Stack Overflow.
+
+    Args:
+        fig (`matplotlib.figure.Figure`_):
+            Figure to be turned into an array.
+
+    Returns:
+        `numpy.ndarray`_: RGBA array representation of the figure.
+    '''
+
+    # draw the renderer
+    fig.canvas.draw()
+ 
+    # Get the RGBA buffer from the figure
+    h,w = fig.canvas.get_width_height()
+    buf = np.fromstring(fig.canvas.tostring_argb(), dtype=np.uint8)
+    buf.shape = (w, h, 4)
+ 
+    # canvas.tostring_argb give pixmap in ARGB mode. Roll the ALPHA channel to have it in RGBA mode
+    buf = np.roll(buf, 3, axis=2)
+    return buf

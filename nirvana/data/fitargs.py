@@ -8,7 +8,8 @@ import warnings
 
 from astropy.stats import sigma_clip
 
-from ..models.geometry import projected_polar, asymmetry
+from ..models.geometry import projected_polar
+from ..models.asymmetry import asymmetry
 from ..models.axisym import AxisymmetricDisk, axisym_iter_fit
 from ..models.beam import ConvolveFFTW, smear
 

@@ -308,7 +308,7 @@ class FitArgs:
         mask = np.zeros(dvmask.shape)
         for m in masks: mask += m
         mask = mask.astype(bool)
-        self.kin.remask(mask)
+        self.remask(mask)
 
         #iterate through rest of clips until mask converges
         nmaskedold = -1
@@ -348,7 +348,7 @@ class FitArgs:
                 break
 
             #apply mask to data
-            self.kin.remask(clipmask)
+            self.remask(clipmask)
 
         #make a plot of all of the masks if desired
         if verbose: 
@@ -401,7 +401,7 @@ class FitArgs:
         for m in ['sb_mask', 'vel_mask', 'sig_mask']:
             if m is None: continue
             if mask.ndim > 1: mask = self.kin.bin(mask)
-            setattr(self, m, np.array(getattr(self, m) + mask, dtype=bool))
+            setattr(self, m, np.array(getattr(self.kin, m) + mask, dtype=bool))
 
 
     def setbounds(self, incpad=20, papad=30, vsyspad=30, cenpad=2, velpad = 1.5,

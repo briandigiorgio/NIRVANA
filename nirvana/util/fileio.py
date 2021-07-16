@@ -28,7 +28,8 @@ import astropy
 from .. import __version__
 
 from ..models.higher_order import bisym_model
-from ..models.geometry import projected_polar, asymmetry
+from ..models.geometry import projected_polar
+from ..models.asymmetry import asymmetry
 from ..data.manga import MaNGAStellarKinematics, MaNGAGasKinematics
 
 def init_record_array(shape, dtype):

@@ -27,6 +27,7 @@ from ..models.geometry import projected_polar, asymmetry
 from ..data.manga import MaNGAStellarKinematics, MaNGAGasKinematics
 from ..data.fitargs import FitArgs
 from ..data.util import unpack
+from .fileio import initialize_primary_header, add_wcs, finalize_header
 
 def dynmeds(samp, stds=False, fixcent=True):
     """
@@ -283,7 +284,8 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
                 kin = MaNGAGasKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing, remotedir=remotedir)
 
     #set relevant parameters for galaxy
-    args = FitArgs(kin) 
+    if isinstance(kin, FitArgs): args = kin
+    else: args = FitArgs(kin)
     args.setdisp(True)
     args.setnglobs(4) if not cen else args.setnglobs(6)
     args.setfixcent(fixcent)
@@ -324,7 +326,7 @@ def extractfile(f, remotedir=None, gal=None):
         args, resdict = fileprep(f, remotedir=remotedir, gal=gal)
 
         inc, pa, pab, vsys, xc, yc = args.guess[:6]
-        arc, asymmap = asymmetry(args, pa, vsys, xc, yc)
+        arc, asymmap = asymmetry(args.kin, pa, vsys, xc, yc)
         resdict['a_rc'] = arc
 
     #failure if bad file
@@ -478,7 +480,7 @@ def imagefits(f, galmeta, gal=None, outfile=None, padding=20, remotedir=None, ou
         #drpallfile = glob(drpalldir + '/drpall*')[0]
         #galmeta = MaNGAGlobalPar(resdict['plate'], resdict['ifu'], drpall_file=drpallfile)
     hdr = initialize_primary_header(galmeta)
-    maphdr = add_wcs(hdr, args)
+    maphdr = add_wcs(hdr, args.kin)
     psfhdr = hdr.copy()
     psfhdr['PSFNAME'] = (args.kin.psf_name, 'Original PSF name')
 

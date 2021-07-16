@@ -309,7 +309,7 @@ class FitArgs:
         mask = np.zeros(dvmask.shape)
         for m in masks: mask += m
         mask = mask.astype(bool)
-        self.remask(mask)
+        self.kin.remask(mask)
 
         #iterate through rest of clips until mask converges
         nmaskedold = -1
@@ -349,7 +349,7 @@ class FitArgs:
                 break
 
             #apply mask to data
-            self.remask(clipmask)
+            self.kin.remask(clipmask)
 
         #make a plot of all of the masks if desired
         if verbose: 
@@ -378,32 +378,6 @@ class FitArgs:
 
         if err:
             raise ValueError(f'Bad velocity field: {round(maskfrac * 100, 1)}% of data clipped after {niter} iterations')
-
-
-    def remask(self, mask):
-        '''
-        Apply a given mask to the masks that are already in the object.
-
-        Args:
-            mask (`numpy.ndarray`):
-                Mask to apply to the data. Should be the same shape as the
-                data (either 1D binned or 2D). Will be interpreted as boolean.
-
-        Raises:
-            ValueError:
-                Thrown if input mask is not the same shape as the data.
-        '''
-
-        if mask.ndim > 1 and mask.shape != self.kin.spatial_shape:
-            raise ValueError('Mask is not the same shape as data.')
-        if mask.ndim == 1 and len(mask) != len(self.kin.vel):
-            raise ValueError('Mask is not the same length as data')
-
-        for m in ['sb_mask', 'vel_mask', 'sig_mask']:
-            if m is None: continue
-            if mask.ndim > 1: mask = self.kin.bin(mask)
-            setattr(self, m, np.array(getattr(self.kin, m) + mask, dtype=bool))
-
 
     def setbounds(self, incpad=20, papad=30, vsyspad=30, cenpad=2, velpad = 1.5,
             velmax=400, sigmax=300, incgauss=False, pagauss=False):

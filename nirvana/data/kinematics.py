@@ -661,6 +661,30 @@ class Kinematics():
         if self.sig is not None and sig_rej is not None:
             self.sig_mask |= sig_rej
 
+    def remask(self, mask):
+        '''
+        Apply a given mask to the masks that are already in the object.
+
+        Args:
+            mask (`numpy.ndarray`):
+                Mask to apply to the data. Should be the same shape as the
+                data (either 1D binned or 2D). Will be interpreted as boolean.
+
+        Raises:
+            ValueError:
+                Thrown if input mask is not the same shape as the data.
+        '''
+
+        if mask.ndim > 1 and mask.shape != self.kin.spatial_shape:
+            raise ValueError('Mask is not the same shape as data.')
+        if mask.ndim == 1 and len(mask) != len(self.kin.vel):
+            raise ValueError('Mask is not the same length as data')
+
+        for m in ['sb_mask', 'vel_mask', 'sig_mask']:
+            if m is None: continue
+            if mask.ndim > 1: mask = self.kin.bin(mask)
+            setattr(self, m, np.array(getattr(self.kin, m) + mask, dtype=bool))
+
     def clip_err(self, max_vel_err=None, max_sig_err=None):
         """
         Reject data with large errors.

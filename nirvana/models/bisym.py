@@ -3,8 +3,6 @@
 .. include:: ../include/links.rst
 """
 
-import sys
-import argparse
 import multiprocessing as mp
 
 import numpy as np
@@ -12,183 +10,20 @@ from scipy import stats, optimize
 
 import matplotlib.pyplot as plt
 
-from astropy.io import fits
-
 try:
     from tqdm import tqdm
 except:
     tqdm = None
 
 import dynesty
-try:
-    from ultranest import ReactiveNestedSampler, stepsampler
-except:
-    ReactiveNestedSampler = None
-    stepsampler = None
 
-from .models.beam import smear, ConvolveFFTW
-from .data.manga import MaNGAGasKinematics, MaNGAStellarKinematics
-from .data.kinematics import Kinematics
-from .data.fitargs import FitArgs
-from .data.util import trim_shape
+from .beam import smear, ConvolveFFTW
+from .geometry import projected_polar
+from ..data.manga import MaNGAGasKinematics, MaNGAStellarKinematics
+from ..data.util import trim_shape, unpack
+from ..data.fitargs import FitArgs
+from ..models.higher_order import bisym_model
 
-from .models.geometry import projected_polar
-
-def bisym_model(args, paramdict, plot=False, relative_pab=False):
-    '''
-    Evaluate a bisymmetric velocity field model for given parameters.
-
-    The model for this is a second order nonaxisymmetric model taken from
-    Leung (2018) who in turn took it from Spekkens & Sellwood (2007). It
-    evaluates the specified models at the desired coordinates.
-
-    Args:
-        args (:class:`~nirvana.data.fitargs.FitArgs`):
-            Object containing all of the data and settings needed for the
-            galaxy.  
-        paramdict (:obj:`dict`): 
-            Dictionary of galaxy parameters that are being fit. Assumes the
-            format produced :func:`nirvana.fitting.unpack`.
-        plot (:obj:`bool`, optional): 
-            Flag to return resulting models as 2D arrays instead of 1D for 
-            plotting purposes.
-        relative_pab (:obj:`bool`, optional):
-            Whether to define the second order position angle relative to the
-            first order position angle (better for fitting) or absolutely
-            (better for output).
-
-    Returns:
-        :obj:`tuple`: Tuple of two objects that are the model velocity field and
-        the model velocity dispersion (if `args.disp = True`, otherwise second
-        object is `None`). Arrays are 1D unless specified otherwise and should
-        be rebinned to match the data.
-
-    '''
-
-    #convert angles to polar and normalize radial coorinate
-    inc, pa, pab = np.radians([paramdict['inc'], paramdict['pa'], paramdict['pab']])
-    if not relative_pab: pab = (pab - pa) % (2*np.pi)
-    r, th = projected_polar(args.grid_x-paramdict['xc'], args.grid_y-paramdict['yc'], pa, inc)
-
-    #interpolate the velocity arrays over full coordinates
-    if len(args.edges) != len(paramdict['vt']):
-        raise ValueError(f"Bin edge and velocity arrays are not the same shape: {len(args.edges)} and {len(paramdict['vt'])}")
-    vtvals  = np.interp(r, args.edges, paramdict['vt'])
-    v2tvals = np.interp(r, args.edges, paramdict['v2t'])
-    v2rvals = np.interp(r, args.edges, paramdict['v2r'])
-
-    #spekkens and sellwood 2nd order vf model (from andrew's thesis)
-    velmodel = paramdict['vsys'] + np.sin(inc) * (vtvals * np.cos(th) \
-             - v2tvals * np.cos(2 * (th - pab)) * np.cos(th) \
-             - v2rvals * np.sin(2 * (th - pab)) * np.sin(th))
-
-
-    #define dispersion and surface brightness if desired
-    if args.disp: 
-        sigmodel = np.interp(r, args.edges, paramdict['sig'])
-        sb = args.remap('sb', masked=False)
-    else: 
-        sigmodel = None
-        sb = None
-
-    #apply beam smearing if beam is given
-    try: conv
-    except: conv = None
-    if args.beam_fft is not None:
-        if hasattr(args, 'smearing') and not args.smearing: pass
-        else: sbmodel, velmodel, sigmodel = smear(velmodel, args.beam_fft, sb=sb, 
-                sig=sigmodel, beam_fft=True, cnvfftw=conv, verbose=False)
-
-    #remasking after convolution
-    if args.vel_mask is not None: velmodel = np.ma.array(velmodel, mask=args.remap('vel_mask'))
-    if args.sig_mask is not None: sigmodel = np.ma.array(sigmodel, mask=args.remap('sig_mask'))
-
-    #rebin data
-    binvel = np.ma.MaskedArray(args.bin(velmodel), mask=args.vel_mask)
-    if sigmodel is not None: binsig = np.ma.MaskedArray(args.bin(sigmodel), mask=args.sig_mask)
-    else: binsig = None
-
-    #return a 2D array for plotting reasons
-    if plot:
-        velremap = args.remap(binvel, masked=True)
-        if sigmodel is not None: 
-            sigremap = args.remap(binsig, masked=True)
-            return velremap, sigremap
-        return velremap
-
-    return binvel, binsig
-
-def unpack(params, args, jump=None, bound=False, relative_pab=False):
-    """
-    Utility function to carry around a bunch of values in the Bayesian fit.
-
-    Takes all of the parameters that are being fit and turns them from a long
-    and poorly organized tuple into an easily accessible dictionary that allows
-    for much easier access to the values.
-
-    Args:
-        params (:obj:`tuple`):
-            Tuple of parameters that are being fit. Assumes the standard order
-            of parameters constructed in :func:`nirvana.fitting.fit`.
-        args (:class:`~nirvana.data.fitargs.FitArgs`):
-            Object containing all of the data and settings needed for the
-            galaxy.  
-        jump (:obj:`int`, optional):
-            How many indices to jump between different velocity components (i.e.
-            how many bins there are). If not given, it will just determine this
-            from `args.edges`.
-        relative_pab (:obj:`bool`, optional):
-            Whether to define the second order position angle relative to the
-            first order position angle (better for fitting) or absolutely
-            (better for output).
-
-    Returns:
-        :obj:`dict`: Dictionary with keys for inclination `inc`, first order
-        position angle `pa`, second order position angle `pab`, systemic
-        velocity `vsys`, x and y center coordinates `xc` and `yc`,
-        `numpy.ndarray`_ of first order tangential velocities `vt`,
-        `numpy.ndarray`_ objects of second order tangential and radial
-        velocities `v2t` and `v2r`, and `numpy.ndarray`_ of velocity
-        dispersions `sig`. Arrays have lengths that are the same as the
-        number of bins (determined automatically or from `jump`). All angles
-        are in degrees and all velocities must be in consistent units.
-    """
-    paramdict = {}
-
-    #global parameters with and without center
-    paramdict['xc'], paramdict['yc'] = [0,0]
-    if args.nglobs == 4:
-        paramdict['inc'],paramdict['pa'],paramdict['pab'],paramdict['vsys'] = params[:args.nglobs]
-    elif args.nglobs == 6:
-        paramdict['inc'],paramdict['pa'],paramdict['pab'],paramdict['vsys'],paramdict['xc'],paramdict['yc'] = params[:args.nglobs]
-
-    #adjust pab if necessary
-    if not relative_pab:
-        paramdict['pab'] = (paramdict['pab'] + paramdict['pa']) % 360
-
-    #figure out what indices to get velocities from
-    start = args.nglobs
-    if jump is None: jump = len(args.edges) - args.fixcent
-
-    #velocities
-    paramdict['vt']  = params[start:start + jump]
-    paramdict['v2t'] = params[start + jump:start + 2*jump]
-    paramdict['v2r'] = params[start + 2*jump:start + 3*jump]
-
-    #add in 0 center bin
-    if args.fixcent and not bound:
-        paramdict['vt']  = np.insert(paramdict['vt'],  0, 0)
-        paramdict['v2t'] = np.insert(paramdict['v2t'], 0, 0)
-        paramdict['v2r'] = np.insert(paramdict['v2r'], 0, 0)
-
-    #get sigma values and fill in center bin if necessary
-    if args.disp: 
-        sigjump = jump + args.fixcent
-        end = start + 3*jump + sigjump
-        paramdict['sig'] = params[start + 3*jump:end]
-    else: end = start + 3*jump
-
-    return paramdict
 
 def smoothing(array, weight=1):
     """
@@ -215,29 +50,6 @@ def smoothing(array, weight=1):
     chisq = (avgs - array)**2 / np.abs(array) #chi sq of each bin to averages
     chisq[~np.isfinite(chisq)] = 0 #catching nans
     return chisq.sum() * weight
-
-def trunc(q, mean, std, left, right):
-    """
-    Wrapper function for the ``ppf`` method of the `scipy.stats.truncnorm`_
-    function. This makes defining edges easier.
-    
-    Args:
-        q (:obj:`float`):
-            Desired quantile.
-        mean (:obj:`float`):
-            Mean of distribution
-        std (:obj:`float`):
-            Standard deviation of distribution.
-        left (:obj:`float`):
-            Left bound of truncation.
-        right (:obj:`float`):
-            Right bound of truncation.
-
-    Returns:
-        :obj:`float`: Value of the distribution at the desired quantile
-    """
-    a,b = (left-mean)/std, (right-mean)/std #transform to z values
-    return stats.truncnorm.ppf(q,a,b,mean,std)
 
 def unifprior(key, params, bounds, indx=0, func=lambda x:x):
     '''
@@ -387,18 +199,12 @@ def loglike(params, args, squared=False):
     #make velocity and dispersion models
     velmodel, sigmodel = bisym_model(args, paramdict)
 
-    #mask border if necessary
-    if args.bordermask is not None:
-        velmodel = np.ma.array(velmodel, mask=args.bordermask)
-        if sigmodel is not None:
-            sigmodel = np.ma.array(sigmodel, mask=args.bordermask)
-
     #compute chi squared value with error if possible
-    llike = (velmodel - args.vel)**2
+    llike = (velmodel - args.kin.vel)**2
 
     #inflate ivar with noise floor
-    if args.vel_ivar is not None: 
-        vel_ivar = 1/(1/args.vel_ivar + args.noise_floor**2)
+    if args.kin.vel_ivar is not None: 
+        vel_ivar = 1/(1/args.kin.vel_ivar + args.noise_floor**2)
         llike = llike * vel_ivar - .5 * np.log(2*np.pi * vel_ivar)
     llike = -.5 * np.ma.sum(llike)
 
@@ -412,14 +218,14 @@ def loglike(params, args, squared=False):
     if sigmodel is not None:
         #compute chisq with squared sigma or not
         if squared:
-            sigdata = args.sig_phys2
-            sigdataivar = args.sig_phys2_ivar if args.sig_phys2_ivar is not None else np.ones_like(sigdata)
+            sigdata = args.kin.sig_phys2
+            sigdataivar = args.kin.sig_phys2_ivar if args.kin.sig_phys2_ivar is not None else np.ones_like(sigdata)
             siglike = (sigmodel**2 - sigdata)**2
 
         #calculate chisq with unsquared data
         else:
-            sigdata = np.sqrt(args.sig_phys2)
-            sigdataivar = np.sqrt(args.sig_phys2_ivar) if args.sig_phys2_ivar is not None else np.ones_like(sigdata)
+            sigdata = np.sqrt(args.kin.sig_phys2)
+            sigdataivar = np.sqrt(args.kin.sig_phys2_ivar) if args.kin.sig_phys2_ivar is not None else np.ones_like(sigdata)
             siglike = (sigmodel - sigdata)**2
 
         #inflate ivar with noisefloor
@@ -497,7 +303,7 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
             Flag for whether to fix the center velocity bin at 0.
         method (:obj:`str`, optional):
             Which fitting method to use. Defaults to `'dynesty'` but can also
-            be `'ultranest'` or `'lsq'`.
+            be 'lsq'`.
         remotedir (:obj:`str`, optional):
             If a directory is given, it will download data from sas into that
             base directory rather than looking for it locally
@@ -519,21 +325,18 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         :class:`~nirvana.data.fitargs.FitArgs`: Object with all of the relevant
         data for the galaxy as well as the parameters used for the fit.
     '''
-    # Check if ultranest can be used
-    if method == 'ultranest' and stepsampler is None:
-        raise ImportError('Could not import ultranest.  Cannot use ultranest sampler!')
-
+    nglobs = 6 if cen else 4
     if mock is not None:
         args, params, residnum = mock
-        args.vel, args.sig = bisym_model(args, params)
+        args.kin.vel, args.kin.sig = bisym_model(args, params)
         if residnum:
             try:
                 residlib = np.load('residlib.dict', allow_pickle=True)
-                vel2d = args.remap('vel')
+                vel2d = args.kin.remap('vel')
                 resid = trim_shape(residlib[residnum], vel2d)
                 newvel = vel2d + resid
-                args.vel = args.bin(newvel)
-                args.remask(resid.mask)
+                args.kin.vel = args.kin.bin(newvel)
+                args.kin.remask(resid.mask)
             except:
                 raise ValueError('Could not apply residual correctly. Check that residlib.dict is in the appropriate place')
 
@@ -541,32 +344,25 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     #get info on galaxy and define bins and starting guess
     else:
         if stellar:
-            args = MaNGAStellarKinematics.from_plateifu(plate, ifu, daptype=daptype, dr=dr,
+            kin = MaNGAStellarKinematics.from_plateifu(plate, ifu, daptype=daptype, dr=dr,
                                                         cube_path=root,
                                                         image_path=root, maps_path=root, 
                                                         remotedir=remotedir)
         else:
-            args = MaNGAGasKinematics.from_plateifu(plate, ifu, line='Ha-6564', daptype=daptype,
+            kin = MaNGAGasKinematics.from_plateifu(plate, ifu, line='Ha-6564', daptype=daptype,
                                                     dr=dr,  cube_path=root,
                                                     image_path=root, maps_path=root, 
                                                     remotedir=remotedir)
 
-    #set basic fit parameters for galaxy
-    args.setnglobs(6) if cen else args.setnglobs(4)
-    args.setweight(weight)
-    args.setdisp(disp)
-    args.setfixcent(fixcent)
-    args.setnoisefloor(floor)
-    args.setpenalty(penalty)
-    args.npoints = points
-    args.smearing = smearing
+        #set basic fit parameters for galaxy
+        args = FitArgs(kin, nglobs, weight, disp, fixcent, floor, penalty, points, smearing, maxr)
 
     #set bin edges
     if galmeta is not None: 
-        if mock is None: args.phot_inc = galmeta.guess_inclination()
-        args.reff = galmeta.reff
+        if mock is None: args.kin.phot_inc = galmeta.guess_inclination()
+        args.kin.reff = galmeta.reff
 
-    inc = args.getguess(galmeta=galmeta)[1] if args.phot_inc is None else args.phot_inc
+    inc = args.getguess(galmeta=galmeta)[1] if args.kin.phot_inc is None else args.kin.phot_inc
     if nbins is not None: args.setedges(nbins, nbin=True, maxr=maxr)
     else: args.setedges(inc, maxr=maxr)
 
@@ -577,7 +373,7 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     #define a variable for speeding up convolutions
     #has to be a global because multiprocessing can't pickle cython
     global conv
-    conv = ConvolveFFTW(args.spatial_shape)
+    conv = ConvolveFFTW(args.kin.spatial_shape)
 
     #starting positions for all parameters based on a quick fit
     #not used in dynesty
@@ -602,35 +398,12 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         pool.size = cores
     else: pool = None
 
-    #experimental support for ultranest
-    if method == 'ultranest':
-        #define names of parameters
-        names = ['inc', 'pa', 'pab', 'vsys', 'xc', 'yc']
-        for i in range(args.fixcent, nbin+1): names += ['vt'  + str(i)]
-        for i in range(args.fixcent, nbin+1): names += ['v2t' + str(i)]
-        for i in range(args.fixcent, nbin+1): names += ['v2r' + str(i)]
-        for i in range(nbin+1): names += ['sig' + str(i)]
-
-        #wraparound parameters for pa and pab
-        wrap = np.zeros(len(names), dtype=bool)
-        wrap[1:3] = True
-
-        #define likelihood and prior with arguments
-        ulike = lambda params: loglike(params, args)
-        uprior = lambda params: ptform(params, args)
-
-        #ultranest step sampler
-        sampler = ReactiveNestedSampler(names, ulike, uprior, wrapped_params=wrap, 
-                log_dir=f'/data/manga/digiorgio/nirvana/ultranest/{plate}/{ifu}')
-        sampler.stepsampler = stepsampler.RegionSliceSampler(nsteps = 2*len(names))
-        sampler.run()
-
-    elif method == 'lsq':
+    if method == 'lsq':
         #minfunc = lambda x: loglike(x, args)
         def minfunc(params):
             velmodel, sigmodel = bisym_model(args, unpack(params, args))
-            velchisq = (velmodel - args.vel)**2 * args.vel_ivar
-            sigchisq = (sigmodel - args.sig)**2 * args.sig_ivar
+            velchisq = (velmodel - args.kin.vel)**2 * args.kin.vel_ivar
+            sigchisq = (sigmodel - args.kin.sig)**2 * args.kin.sig_ivar
             return velchisq + sigchisq
 
         lsqguess = np.append(args.guess, [np.median(args.sig)] * (args.nbins + args.fixcent))
@@ -648,6 +421,6 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         if pool is not None: pool.close()
 
     else:
-        raise ValueError('Choose a valid fitting method: dynesty, ultranest, or lsq')
+        raise ValueError('Choose a valid fitting method: dynesty or lsq')
 
     return sampler, args

@@ -1035,4 +1035,101 @@ def gaussian_fill(img, sigma=1., mask=None, threshold=0.1, maxiter=None, debug=F
 
     return _img.filled(0.0)
 
+def fig2data(fig):
+    """
+    Convert a figure to an ARGB array.
 
+    Stolen from somewhere on StackOverflow.
+
+    Args:
+        fig (`matplotlib.figure.Figure`):
+            Figure to be converted into an ARGB array.
+
+    Returns:
+        `numpy.ndarray`_: ARGB array representing figure
+
+    """
+
+    # draw the renderer
+    fig.canvas.draw( )
+ 
+    # Get the RGBA buffer from the figure
+    h,w = fig.canvas.get_width_height()
+    buf = np.fromstring(fig.canvas.tostring_argb(), dtype=np.uint8)
+    buf.shape = (w, h, 4)
+ 
+    # canvas.tostring_argb give pixmap in ARGB mode. Roll the ALPHA channel to have it in RGBA mode
+    buf = np.roll(buf, 3, axis=2)
+    return buf
+
+def unpack(params, args, jump=None, bound=False, relative_pab=False):
+    """
+    Utility function to carry around a bunch of values in the Bayesian fit.
+
+    Takes all of the parameters that are being fit and turns them from a long
+    and poorly organized tuple into an easily accessible dictionary that allows
+    for much easier access to the values.
+
+    Args:
+        params (:obj:`tuple`):
+            Tuple of parameters that are being fit. Assumes the standard order
+            of parameters constructed in :func:`nirvana.fitting.fit`.
+        args (:class:`~nirvana.data.fitargs.FitArgs`):
+            Object containing all of the data and settings needed for the
+            galaxy.  
+        jump (:obj:`int`, optional):
+            How many indices to jump between different velocity components (i.e.
+            how many bins there are). If not given, it will just determine this
+            from `args.edges`.
+        relative_pab (:obj:`bool`, optional):
+            Whether to define the second order position angle relative to the
+            first order position angle (better for fitting) or absolutely
+            (better for output).
+
+    Returns:
+        :obj:`dict`: Dictionary with keys for inclination `inc`, first order
+        position angle `pa`, second order position angle `pab`, systemic
+        velocity `vsys`, x and y center coordinates `xc` and `yc`,
+        `np.ndarray`_ of first order tangential velocities `vt`,
+        `np.ndarray`_ objects of second order tangential and radial
+        velocities `v2t` and `v2r`, and `np.ndarray`_ of velocity
+        dispersions `sig`. Arrays have lengths that are the same as the
+        number of bins (determined automatically or from `jump`). All angles
+        are in degrees and all velocities must be in consistent units.
+    """
+    paramdict = {}
+
+    #global parameters with and without center
+    paramdict['xc'], paramdict['yc'] = [0,0]
+    if args.nglobs == 4:
+        paramdict['inc'],paramdict['pa'],paramdict['pab'],paramdict['vsys'] = params[:args.nglobs]
+    elif args.nglobs == 6:
+        paramdict['inc'],paramdict['pa'],paramdict['pab'],paramdict['vsys'],paramdict['xc'],paramdict['yc'] = params[:args.nglobs]
+
+    #adjust pab if necessary
+    if not relative_pab:
+        paramdict['pab'] = (paramdict['pab'] + paramdict['pa']) % 360
+
+    #figure out what indices to get velocities from
+    start = args.nglobs
+    if jump is None: jump = len(args.edges) - args.fixcent
+
+    #velocities
+    paramdict['vt']  = params[start:start + jump]
+    paramdict['v2t'] = params[start + jump:start + 2*jump]
+    paramdict['v2r'] = params[start + 2*jump:start + 3*jump]
+
+    #add in 0 center bin
+    if args.fixcent and not bound:
+        paramdict['vt']  = np.insert(paramdict['vt'],  0, 0)
+        paramdict['v2t'] = np.insert(paramdict['v2t'], 0, 0)
+        paramdict['v2r'] = np.insert(paramdict['v2r'], 0, 0)
+
+    #get sigma values and fill in center bin if necessary
+    if args.disp: 
+        sigjump = jump + args.fixcent
+        end = start + 3*jump + sigjump
+        paramdict['sig'] = params[start + 3*jump:end]
+    else: end = start + 3*jump
+
+    return paramdict

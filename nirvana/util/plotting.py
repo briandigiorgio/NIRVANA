@@ -21,316 +21,14 @@ from glob import glob
 from tqdm import tqdm
 from astropy.io import fits
 
-from .fitting import bisym_model, unpack
-from .data.manga import MaNGAStellarKinematics, MaNGAGasKinematics
-from .data.kinematics import Kinematics
-from .models.beam import smear, ConvolveFFTW
-from .models.geometry import projected_polar
+from ..models.higher_order import bisym_model
+from ..models.beam import smear, ConvolveFFTW
+from ..models.geometry import projected_polar
+from ..data.manga import MaNGAStellarKinematics, MaNGAGasKinematics
+from ..data.kinematics import Kinematics
+from ..data.util import unpack
+from .fits_prep import fileprep, dynmeds, profs
 
-
-def dynmeds(samp, stds=False, fixcent=True):
-    """
-    Get median values for each variable's posterior in a
-    `dynesty.NestedSampler`_ sampler.
-
-    Args:
-        samp (:obj:`str`, `dynesty.NestedSampler`_, `dynesty.results.Results`_):
-            Sampler, results, or file of dumped results from `dynesty`_ fit.
-        stds (:obj:`bool`, optional):
-            Flag for whether or not to return standard deviations of the
-            posteriors as well.
-
-    Returns:
-        `numpy.ndarray`_: Median values of all of the parameters in the
-        `dynesty`_ sampler. If ``stds == True``, it will instead return a
-        :obj:`tuple` of three `numpy.ndarray`_ objects. The first is the
-        median values, the second is the lower 1 sigma bound for all of the
-        posteriors, and the third is the upper 1 sigma bound.
-    """
-
-    #get samples and weights
-    if type(samp) == str: res = pickle.load(open(samp,'rb'))
-    elif type(samp)==dynesty.results.Results: res = samp
-    else: res = samp.results
-    samps = res.samples
-    weights = np.exp(res.logwt - res.logz[-1])
-
-    #iterate through and get 50th percentile of values
-    meds = np.zeros(samps.shape[1])
-    for i in range(samps.shape[1]):
-        meds[i] = dynesty.utils.quantile(samps[:,i],[.5],weights)[0]
-
-    #pull out 1 sigma values on either side of the mean as well if desired
-    if stds:
-        lstd = np.zeros(samps.shape[1])
-        ustd = np.zeros(samps.shape[1])
-        for i in range(samps.shape[1]):
-            lstd[i] = dynesty.utils.quantile(samps[:,i], [.5-.6826/2], weights)[0]
-            ustd[i] = dynesty.utils.quantile(samps[:,i], [.5+.6826/2], weights)[0]
-        return meds, lstd, ustd
-
-    return meds
-
-def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
-    '''
-    Turn a sampler output by `nirvana` into a set of rotation curves.
-    
-    Args:
-        samp (:obj:`str`, `dynesty.NestedSampler`_, `dynesty.results.Results`_):
-            Sampler, results, or file of dumped results from
-            :func:`~nirvana.fitting.fit`
-        args (:class:`~nirvana.data.fitargs.FitArgs`):
-            Object containing all of the data and settings needed for the
-            galaxy.  
-        plot (:class:`matplotlib.axes._subplots.Axes`, optional):
-            Axis to plot the rotation curves on. If not specified, it will not
-            try to plot anything.
-        stds (:obj:`bool`, optional):
-            Flag for whether to fetch the standard deviations as well.
-        jump (:obj:`int`, optional):
-            Number of radial bins in the sampler. Will be calculated
-            automatically if not specified.
-        **kwargs:
-            args for :func:`plt.plot`.
-
-    Returns:
-        :obj:`dict`: Dictionary with all of the median values of the
-        posteriors in the sampler. Has keys for inclination `inc`, first
-        order position angle `pa`, second order position angle `pab`,
-        systemic velocity `vsys`, x and y center coordinates `xc` and `yc`,
-        `numpy.ndarray`_ of first order tangential velocities `vt`,
-        `numpy.ndarray`_ objects of second order tangential and radial
-        velocities `v2t` and `v2r`, and `numpy.ndarray`_ of velocity
-        dispersions `sig`. If `stds == True` it will also contain keys for
-        the 1 sigma lower bounds of the velocity parameters `vtl`, `v2tl`,
-        `v2rl`, and `sigl` as well as their 1 sigma upper bounds `vtu`,
-        `v2tu`, `v2ru`, and `sigu`. Arrays have lengths that are the same as
-        the number of bins (determined automatically or from `jump`). All
-        angles are in degrees and all velocities must be in consistent units.
-
-        If `plot` is not `None`, it will also display a plot of the profiles.
-    '''
-
-    #get and unpack median values for params
-    meds = dynmeds(samp, stds=stds, fixcent=args.fixcent)
-
-    #get standard deviations and put them into the dictionary
-    if stds:
-        meds, lstd, ustd = meds
-        paramdict = unpack(meds, args, jump=jump, relative_pab=False)
-        paramdict['incl'], paramdict['pal'], paramdict['pabl'], paramdict['vsysl'] = lstd[:4]
-        paramdict['incu'], paramdict['pau'], paramdict['pabu'], paramdict['vsysu'] = ustd[:4]
-        if args.nglobs == 6:
-            paramdict['xcl'], paramdict['ycl'] = lstd[4:6]
-            paramdict['xcu'], paramdict['ycu'] = ustd[4:6]
-
-        start = args.nglobs
-        jump = len(args.edges) - args.fixcent
-        vs = ['vt', 'v2t', 'v2r']
-        for i,v in enumerate(vs):
-            for b in ['l','u']:
-                exec(f'paramdict["{v}{b}"] = {b}std[start + {i}*jump : start + {i+1}*jump]')
-                if args.fixcent:
-                    exec(f'paramdict["{v}{b}"] = np.insert(paramdict["{v}{b}"], 0, 0)')
-
-        #dispersion stds
-        if args.disp: 
-            sigjump = jump + 1
-            paramdict['sigl'] = lstd[start + 3*jump:start + 3*jump + sigjump]
-            paramdict['sigu'] = ustd[start + 3*jump:start + 3*jump + sigjump]
-
-    else: paramdict = unpack(meds, args, jump=jump)
-
-    #plot profiles if desired
-    if plot is not None: 
-        if not isinstance(plot, matplotlib.axes._subplots.Axes): f,plot = plt.subplots()
-        ls = [r'$V_t$',r'$V_{2t}$',r'$V_{2r}$']
-        [plot.plot(args.edges, p, label=ls[i], **kwargs) 
-                for i,p in enumerate([paramdict['vt'], paramdict['v2t'], paramdict['v2r']])]
-
-        #add in lower and upper bounds
-        if stds: 
-            errors = [[paramdict['vtl'], paramdict['vtu']], [paramdict['v2tl'], paramdict['v2tu']], [paramdict['v2rl'], paramdict['v2ru']]]
-            for i,p in enumerate(errors):
-                plot.fill_between(args.edges, p[0], p[1], alpha=.5) 
-
-        plt.xlabel(r'$R_e$')
-        plt.ylabel(r'$v$ (km/s)')
-        plt.legend(loc=2)
-
-    return paramdict
-
-def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
-        cen=True, fixcent=True, clip=True, remotedir=None,
-        gal=None, galmeta=None):
-    """
-    Function to turn any nirvana output file into useful objects.
-
-    Can take in `.fits`, `.nirv`, `dynesty.NestedSampler`_, or
-    `dynesty.results.Results`_ along with any relevant parameters and spit
-    out galaxy, result dictionary, all livepoint positions, and median values
-    for each of the parameters.
-
-    Args:
-        f (:obj:`str`, `dynesty.NestedSampler`_, `dynesty.results.Results`_):
-            `.fits` file, sampler, results, `.nirv` file of dumped results
-            from :func:`~nirvana.fitting.fit`. If this is in the regular
-            format from the automatic outfile generator in
-            :func:`~nirvana.scripts.nirvana.main` then it will fill in most
-            of the rest of the parameters by itself.
-        plate (:obj:`int`, optional):
-            MaNGA plate number for desired galaxy. Can be auto filled by `f`.
-        ifu (:obj:`int`, optional):
-            MaNGA IFU number for desired galaxy. Can be auto filled by `f`.
-        smearing (:obj:`bool`, optional):
-            Whether or not to apply beam smearing to models. Can be auto
-            filled by `f`.
-        stellar (:obj:`bool`, optional):
-            Whether or not to use stellar velocity data instead of gas. Can
-            be auto filled by `f`.
-        maxr (:obj:`float`, optional):
-            Maximum radius to make edges go out to in units of effective
-            radii. Can be auto filled by `f`.
-        cen (:obj:`bool`, optional):
-            Whether the position of the center was fit. Can be auto filled by
-            `f`.
-        fixcent (:obj:`bool`, optional):
-            Whether the center velocity bin was held at 0 in the fit. Can be
-            auto filled by `f`.
-        clip (:obj:`bool`, optional):
-            Whether to apply clipping to the galaxy with
-            :func:`~nirvana.data.kinematics.clip` as it is handling it.
-        remotedir (:obj:`str`, optional):
-            Directory to load MaNGA data files from, or save them if they are
-            not found and are remotely downloaded.
-        gal (:class:`~nirvana.data.fitargs.FitArgs`, optional):
-            Galaxy object to use instead of loading the galaxy from scratch.
-        
-        Returns:
-            :class:`~nirvana.data.fitargs.FitArgs`: Galaxy object containing
-            relevant data and parameters. :obj:`dict`: Dictionary of results
-            of the fit.
-    """
-    #unpack fits file
-    if type(f) == str and '.fits' in f:
-        isfits = True #tracker variable
-
-        #open file and get relevant stuff from header
-        with fits.open(f) as fitsfile:
-            table = fitsfile[1].data
-            maxr = fitsfile[0].header['maxr']
-            smearing = fitsfile[0].header['smearing']
-
-        #unpack bintable into dict
-        keys = table.columns.names
-        vals = [table[k][0] for k in keys]
-        resdict = dict(zip(keys, vals))
-        for v in ['vt','v2t','v2r','vtl','vtu','v2tl','v2tu','v2rl','v2ru']:
-            resdict[v] = resdict[v][resdict['velmask'] == 0]
-        for s in ['sig','sigl','sigu']:
-            resdict[s] = resdict[s][resdict['sigmask'] == 0]
-
-        #get galaxy object
-        if gal is None:
-            if resdict['type'] == 'Stars':
-                args = MaNGAStellarKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir)
-            else:
-                args = MaNGAGasKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir)
-        else:
-            args = gal
-
-        fill = len(resdict['velmask'])
-        fixcent = resdict['vt'][0] == 0
-        lenmeds = 6 + 3*(fill - resdict['velmask'].sum() - fixcent) + (fill - resdict['sigmask'].sum())
-        meds = np.zeros(lenmeds)
-
-    else:
-        isfits = False
-
-        #get sampler in right format
-        if type(f) == str: chains = pickle.load(open(f,'rb'))
-        elif type(f) == np.ndarray: chains = f
-        elif type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler: chains = f.results
-
-        if gal is None and '.nirv' in f and os.path.isfile(f[:-5] + '.gal'):
-            gal = f[:-5] + '.gal'
-        if type(gal) == str: gal = np.load(gal, allow_pickle=True)
-
-        #parse the automatically generated filename
-        if plate is None or ifu is None:
-            fname = re.split('/', f[:-5])[-1]
-            info = re.split('/|-|_', fname)
-            plate = int(info[0]) if plate is None else plate
-            ifu = int(info[1]) if ifu is None else ifu
-            stellar = True if 'stel' in info else False
-            cen = True if 'nocen' not in info else False
-            smearing = True if 'nosmear' not in info else False
-            try: maxr = float([i for i in info if 'r' in i][0][:-1])
-            except: maxr = None
-
-            if 'fixcent' in info: fixcent = True
-            elif 'freecent' in info: fixcent = False
-
-        #mock galaxy using stored values
-        if plate == 0:
-            mock = np.load('mockparams.npy', allow_pickle=True)[ifu]
-            print('Using mock:', mock['name'])
-            params = [mock['inc'], mock['pa'], mock['pab'], mock['vsys'], mock['vts'], mock['v2ts'], mock['v2rs'], mock['sig']]
-            args = Kinematics.mock(56,*params)
-            cnvfftw = ConvolveFFTW(args.spatial_shape)
-            smeared = smear(args.remap('vel'), args.beam_fft, beam_fft=True, sig=args.remap('sig'), sb=args.remap('sb'), cnvfftw=cnvfftw)
-            args.sb  = args.bin(smeared[0])
-            args.vel = args.bin(smeared[1])
-            args.sig = args.bin(smeared[2])
-            args.fwhm  = 2.44
-
-        #load input galaxy object
-        elif gal is not None:
-            args = gal
-
-        #load in MaNGA data
-        else:
-            if stellar:
-                args = MaNGAStellarKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing, remotedir=remotedir)
-            else:
-                args = MaNGAGasKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing, remotedir=remotedir)
-
-    #set relevant parameters for galaxy
-    args.setdisp(True)
-    args.setnglobs(4) if not cen else args.setnglobs(6)
-    args.setfixcent(fixcent)
-
-    #clip data if desired
-    if gal is not None: clip = False
-    if clip: args.clip()
-
-    vel_r = args.remap('vel')
-    sig_r = args.remap('sig') if args.sig_phys2 is None else np.sqrt(np.abs(args.remap('sig_phys2')))
-
-    if not isfits: meds = dynmeds(chains)
-
-    #get appropriate number of edges  by looking at length of meds
-    nbins = (len(meds) - args.nglobs - fixcent)/4
-    print(nbins, len(meds), args.nglobs, fixcent)
-    if not nbins.is_integer(): 
-        raise ValueError('Dynesty output array has a bad shape.')
-    else: nbins = int(nbins)
-
-    #calculate edges and velocity profiles, get basic data
-    if not isfits:
-        if gal is None: args.setedges(nbins - 1 + args.fixcent, nbin=True, maxr=maxr)
-        resdict = profs(chains, args, stds=True)
-        resdict['plate'] = plate
-        resdict['ifu'] = ifu
-        resdict['type'] = 'Stars' if stellar else 'Gas'
-    else:
-        args.edges = resdict['bin_edges'][~resdict['velmask']]
-
-    print(args.edges)
-    args.getguess(galmeta=galmeta)
-    args.getasym()
-
-    return args, resdict
 
 def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, cen=True,
                 fixcent=True, save=False, clobber=False, remotedir=None, gal=None, relative_pab=False):
@@ -392,11 +90,11 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
 
     #generate velocity models
     velmodel, sigmodel = bisym_model(args,resdict,plot=True,relative_pab=relative_pab)
-    vel_r = args.remap('vel')
-    sig_r = np.sqrt(args.remap('sig_phys2')) if hasattr(args, 'sig_phys2') else args.remap('sig')
+    vel_r = args.kin.remap('vel')
+    sig_r = np.sqrt(args.kin.remap('sig_phys2')) if hasattr(args, 'sig_phys2') else args.kin.remap('sig')
 
-    if args.vel_ivar is None: args.vel_ivar = np.ones_like(args.vel)
-    if args.sig_ivar is None: args.sig_ivar = np.ones_like(args.sig)
+    if args.kin.vel_ivar is None: args.kin.vel_ivar = np.ones_like(args.kin.vel)
+    if args.kin.sig_ivar is None: args.kin.sig_ivar = np.ones_like(args.kin.sig)
 
     #calculate number of variables
     if 'velmask' in resdict:
@@ -404,11 +102,11 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
         fixcent = resdict['vt'][0] == 0
         lenmeds = 6 + 3*(fill - resdict['velmask'].sum() - fixcent) + (fill - resdict['sigmask'].sum())
     else: lenmeds = len(resdict['vt'])
-    nvar = len(args.vel) + len(args.sig) - lenmeds
+    nvar = len(args.kin.vel) + len(args.kin.sig) - lenmeds
 
     #calculate reduced chisq for vel and sig
-    rchisqv = np.sum((vel_r - velmodel)**2 * args.remap('vel_ivar')) / nvar
-    rchisqs = np.sum((sig_r - sigmodel)**2 * args.remap('sig_ivar')) / nvar
+    rchisqv = np.sum((vel_r - velmodel)**2 * args.kin.remap('vel_ivar')) / nvar
+    rchisqs = np.sum((sig_r - sigmodel)**2 * args.kin.remap('sig_ivar')) / nvar
 
     #print global parameters on figure
     fig = plt.figure(figsize = (12,9))
@@ -418,7 +116,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
 
     #image
     plt.subplot(3,4,2)
-    if args.image is not None: plt.imshow(args.image)
+    if args.kin.image is not None: plt.imshow(args.kin.image)
     else: plt.text(.5,.5, 'No image found', horizontalalignment='center',
             transform=plt.gca().transAxes, size=14)
 
@@ -484,7 +182,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
     #Chisq from vel fit
     plt.subplot(3,4,8)
     plt.title('Velocity Chi Squared')
-    velchisq = (vel_r - velmodel)**2 * args.remap('vel_ivar')
+    velchisq = (vel_r - velmodel)**2 * args.kin.remap('vel_ivar')
     plt.imshow(velchisq, 'jet', origin='lower', vmin=0, vmax=50)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
@@ -523,7 +221,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
     #Chisq from sig fit
     plt.subplot(3,4,12)
     plt.title('Dispersion Chi Squared')
-    sigchisq = (sig_r - sigmodel)**2 * args.remap('sig_ivar')
+    sigchisq = (sig_r - sigmodel)**2 * args.kin.remap('sig_ivar')
     plt.imshow(sigchisq, 'jet', origin='lower', vmin=0, vmax=50)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
@@ -583,16 +281,16 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     v2rdict['vt'] = z
     v2rdict['v2t'] = z
     if maxr is not None:
-        r,th = projected_polar(args.x, args.y, *np.radians((resdict['pa'], resdict['inc'])))
+        r,th = projected_polar(args.kin.x, args.kin.y, *np.radians((resdict['pa'], resdict['inc'])))
         rmask = r > maxr
-        args.vel_mask |= rmask
-        args.sig_mask |= rmask
+        args.kin.vel_mask |= rmask
+        args.kin.sig_mask |= rmask
 
     velmodel, sigmodel = bisym_model(args, resdict, plot=True)
     vtmodel,  sigmodel = bisym_model(args, vtdict,  plot=True)
     v2tmodel, sigmodel = bisym_model(args, v2tdict, plot=True)
     v2rmodel, sigmodel = bisym_model(args, v2rdict, plot=True)
-    vel_r = args.remap('vel')
+    vel_r = args.kin.remap('vel')
 
     #must set all masked areas to 0 or else vmax calculations barf
     for v in [vel_r, velmodel, vtmodel, v2tmodel, v2rmodel]:
@@ -623,7 +321,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
 
     #image
     plt.subplot(3,5,2)
-    plt.imshow(args.image)
+    plt.imshow(args.kin.image)
     plt.axis('off')
 
     #MaNGA Ha velocity field
@@ -786,7 +484,7 @@ def sinewave(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, c
     #prep the data, parameters, and coordinates
     args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, cen, fixcent)
     inc, pa, pab = np.radians([resdict['inc'], resdict['pa'], resdict['pab']])
-    r,th = projected_polar(args.x, args.y, pa, inc)
+    r,th = projected_polar(args.kin.x, args.kin.y, pa, inc)
 
     plt.figure(figsize=(4,len(args.edges)*.75))
     c = plt.cm.jet(np.linspace(0,1,len(args.edges)-1))
@@ -797,7 +495,7 @@ def sinewave(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, c
         cut = (r > args.edges[i]) * (r < args.edges[i+1])
         sort = np.argsort(th[cut])
         thcs = th[cut][sort]
-        plt.plot(np.degrees(thcs), args.vel[cut][sort]+100*i, '.', c=c[i])
+        plt.plot(np.degrees(thcs), args.kin.vel[cut][sort]+100*i, '.', c=c[i])
         
         #generate model from fit parameters
         velmodel = resdict['vsys'] + np.sin(inc) * (resdict['vt'][i] * np.cos(thcs) \
@@ -864,8 +562,8 @@ def plotdir(directory='/data/manga/digiorgio/nirvana/', fname='*-*_*.nirv', core
 def infobox(plot, resdict, args, cen=True, relative_pab=False):
     #generate velocity models
     velmodel, sigmodel = bisym_model(args,resdict,plot=True,relative_pab=relative_pab)
-    vel_r = args.remap('vel')
-    sig_r = np.sqrt(args.remap('sig_phys2')) if hasattr(args, 'sig_phys2') else args.remap('sig')
+    vel_r = args.kin.remap('vel')
+    sig_r = np.sqrt(args.kin.remap('sig_phys2')) if hasattr(args, 'sig_phys2') else args.kin.remap('sig')
 
     #calculate number of variables
     if 'velmask' in resdict:
@@ -873,11 +571,11 @@ def infobox(plot, resdict, args, cen=True, relative_pab=False):
         fixcent = resdict['vt'][0] == 0
         lenmeds = 6 + 3*(fill - resdict['velmask'].sum() - fixcent) + (fill - resdict['sigmask'].sum())
     else: lenmeds = len(resdict['vt'])
-    nvar = len(args.vel) + len(args.sig) - lenmeds
+    nvar = len(args.kin.vel) + len(args.kin.sig) - lenmeds
 
     #calculate reduced chisq for vel and sig
-    rchisqv = np.sum((vel_r - velmodel)**2 * args.remap('vel_ivar')) / nvar
-    rchisqs = np.sum((sig_r - sigmodel)**2 * args.remap('sig_ivar')) / nvar
+    rchisqv = np.sum((vel_r - velmodel)**2 * args.kin.remap('vel_ivar')) / nvar
+    rchisqs = np.sum((sig_r - sigmodel)**2 * args.kin.remap('sig_ivar')) / nvar
 
     #print global parameters on figure
     plot.axis('off')
@@ -888,7 +586,7 @@ def infobox(plot, resdict, args, cen=True, relative_pab=False):
     plot.set_title(f"{resdict['plate']}-{resdict['ifu']} {resdict['type']}",size=18)
     plot.text(.1, ys[0], r'$i$: %0.1f$^{+%0.1f}_{-%0.1f}$ deg. (phot: %0.1f$^\circ$)'
             %(resdict['inc'], resdict['incu'] - resdict['inc'], 
-            resdict['inc'] - resdict['incl'], args.phot_inc),
+            resdict['inc'] - resdict['incl'], args.kin.phot_inc),
             transform=plot.transAxes, size=fontsize)
     plot.text(.1, ys[1], r'$\phi$: %0.1f$^{+%0.1f}_{-%0.1f}$ deg.'
             %(resdict['pa'], resdict['pau'] - resdict['pa'], 

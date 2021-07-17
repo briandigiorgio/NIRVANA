@@ -10,27 +10,39 @@ import sys
 import os
 import gzip
 import shutil
+from glob import glob
+import traceback
+import pickle
 
-import numpy
+import numpy as np
+import matplotlib.pyplot as plt
+import multiprocessing as mp
 
 from astropy.io import fits
+from astropy.table import Table,Column
+from tqdm import tqdm
 
 # For versioning
 import scipy
 import astropy
 from .. import __version__
 
+from ..models.higher_order import bisym_model
+from ..models.geometry import projected_polar
+from ..models.asymmetry import asymmetry
+from ..data.manga import MaNGAStellarKinematics, MaNGAGasKinematics
+
 def init_record_array(shape, dtype):
     r"""
     Utility function that initializes a record array using a provided
     input data type.  For example::
 
-        dtype = [ ('INDX', numpy.int, (2,) ),
-                  ('VALUE', numpy.float) ]
+        dtype = [ ('INDX', np.int, (2,) ),
+                  ('VALUE', np.float) ]
 
     Defines two columns, one named `INDEX` with two integers per row and
     the one named `VALUE` with a single float element per row.  See
-    `numpy.recarray`_.
+    `np.recarray`_.
     
     Args:
         shape (:obj:`int`, :obj:`tuple`):
@@ -40,10 +52,10 @@ def init_record_array(shape, dtype):
             array.
 
     Returns:
-        `numpy.recarray`_: Zeroed record array
+        `np.recarray`_: Zeroed record array
     """
-    data = numpy.zeros(shape, dtype=dtype)
-    return data.view(numpy.recarray)
+    data = np.zeros(shape, dtype=dtype)
+    return data.view(np.recarray)
 
 
 def rec_to_fits_type(rec_element):
@@ -52,19 +64,19 @@ def rec_to_fits_type(rec_element):
     based on the provided record array element.
     """
     n = 1 if len(rec_element[0].shape) == 0 else rec_element[0].size
-    if rec_element.dtype == numpy.bool:
+    if rec_element.dtype == np.bool:
         return '{0}L'.format(n)
-    if rec_element.dtype == numpy.uint8:
+    if rec_element.dtype == np.uint8:
         return '{0}B'.format(n)
-    if rec_element.dtype == numpy.int16 or rec_element.dtype == numpy.uint16:
+    if rec_element.dtype == np.int16 or rec_element.dtype == np.uint16:
         return '{0}I'.format(n)
-    if rec_element.dtype == numpy.int32 or rec_element.dtype == numpy.uint32:
+    if rec_element.dtype == np.int32 or rec_element.dtype == np.uint32:
         return '{0}J'.format(n)
-    if rec_element.dtype == numpy.int64 or rec_element.dtype == numpy.uint64:
+    if rec_element.dtype == np.int64 or rec_element.dtype == np.uint64:
         return '{0}K'.format(n)
-    if rec_element.dtype == numpy.float32:
+    if rec_element.dtype == np.float32:
         return '{0}E'.format(n)
-    if rec_element.dtype == numpy.float64:
+    if rec_element.dtype == np.float64:
         return '{0}D'.format(n)
     
     # If it makes it here, assume its a string
@@ -143,7 +155,7 @@ def initialize_primary_header(galmeta):
 
     # Add versioning
     hdr['VERSPY'] = ('.'.join([ str(v) for v in sys.version_info[:3]]), 'Python version')
-    hdr['VERSNP'] = (numpy.__version__, 'Numpy version')
+    hdr['VERSNP'] = (np.__version__, 'Numpy version')
     hdr['VERSSCI'] = (scipy.__version__, 'Scipy version')
     hdr['VERSAST'] = (astropy.__version__, 'Astropy version')
     hdr['VERSNIRV'] = (__version__, 'NIRVANA version')
@@ -211,17 +223,14 @@ def finalize_header(hdr, ext, bunit=None, hduclas2='DATA', err=False, qual=False
 
 
 def mask_data_type(bit_type):
-    if bit_type in [numpy.uint64, numpy.int64]:
+    if bit_type in [np.uint64, np.int64]:
         return ('FLAG64BIT', '64-bit mask')
-    if bit_type in [numpy.uint32, numpy.int32]:
+    if bit_type in [np.uint32, np.int32]:
         return ('FLAG32BIT', '32-bit mask')
-    if bit_type in [numpy.uint16, numpy.int16]:
+    if bit_type in [np.uint16, np.int16]:
         return ('FLAG16BIT', '16-bit mask')
-    if bit_type in [numpy.uint8, numpy.int8]:
+    if bit_type in [np.uint8, np.int8]:
         return ('FLAG8BIT', '8-bit mask')
-    if bit_type == numpy.bool:
+    if bit_type == np.bool:
         return ('MASKZERO', 'Binary mask; zero values are good/unmasked')
     raise ValueError('Invalid bit_type: {0}!'.format(str(bit_type)))
-
-
-

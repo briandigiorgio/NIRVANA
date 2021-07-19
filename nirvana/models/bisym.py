@@ -76,7 +76,7 @@ def unifprior(key, params, bounds, indx=0, func=lambda x:x):
     else:
         return (func(bounds[key][1]) - func(bounds[key][0])) * params[key] + func(bounds[key][0])
 
-def ptform(params, args, gaussprior=False):
+def ptform(params, args):
     '''
     Prior transform for :class:`dynesty.NestedSampler` fit. 
     
@@ -90,8 +90,6 @@ def ptform(params, args, gaussprior=False):
         args (:class:`~nirvana.data.fitargs.FitArgs`):
             Object containing all of the data and settings needed for the
             galaxy.  
-        gaussprior (:obj:`bool`, optional):
-            Flag to use the (experimental) truncated normal priors.
 
     Returns:
         :obj:`tuple`: Tuple of parameter values transformed into the prior
@@ -102,67 +100,50 @@ def ptform(params, args, gaussprior=False):
     paramdict = unpack(params, args)
     bounddict = unpack(args.bounds, args, bound=True)
 
-    #attempt at smarter posteriors, currently super slow though
-    #truncated gaussian prior around guess values
-    if gaussprior and args.guess is not None:
-        guessdict = unpack(args.guess,args)
-        incp  = trunc(paramdict['inc'],guessdict['incg'],2,guessdict['incg']-5,guessdict['incg']+5)
-        pap   = trunc(paramdict['pa'],guessdict['pag'],10,0,360)
-        pabp  = 180 * paramdict['pab']
-        vsysp = trunc(paramdict['vsys'],guessdict['vsysg'],1,guessdict['vsysg']-5,guessdict['vsysg']+5)
-        vtp  = trunc(paramdict['vt'],guessdict['vtg'],50,0,400)
-        v2tp = trunc(paramdict['v2t'],guessdict['v2tg'],50,0,200)
-        v2rp = trunc(paramdict['v2r'],guessdict['v2rg'],50,0,200)
-
     #uniform priors defined by bounds
+    #uniform prior on sin(inc)
+    #incfunc = lambda i: np.cos(np.radians(i))
+    #incp = np.degrees(np.arccos(unifprior('inc', paramdict, bounddict,func=incfunc)))
+    #pap = unifprior('pa', paramdict, bounddict)
+    incp = stats.norm.ppf(paramdict['inc'], *bounddict['inc'])
+    pap = stats.norm.ppf(paramdict['pa'], *bounddict['pa'])
+    pabp = unifprior('pab', paramdict, bounddict)
+    vsysp = unifprior('vsys', paramdict, bounddict)
+
+    #continuous prior to correlate bins
+    if args.weight == -1:
+        vtp  = np.array(paramdict['vt'])
+        v2tp = np.array(paramdict['v2t'])
+        v2rp = np.array(paramdict['v2r'])
+        vs = [vtp, v2tp, v2rp]
+        if args.disp:
+            sigp = np.array(paramdict['sig'])
+            vs += [sigp]
+
+        #step outwards from center bin to make priors correlated
+        for vi in vs:
+            mid = len(vi)//2
+            vi[mid] = 400 * vi[mid]
+            for i in range(mid-1, -1+args.fixcent, -1):
+                vi[i] = stats.norm.ppf(vi[i], vi[i+1], 50)
+            for i in range(mid+1, len(vi)):
+                vi[i] = stats.norm.ppf(vi[i], vi[i-1], 50)
+
+    #uncorrelated bins with unif priors
     else:
-        #uniform prior on sin(inc)
-        #incfunc = lambda i: np.cos(np.radians(i))
-        #incp = np.degrees(np.arccos(unifprior('inc', paramdict, bounddict,func=incfunc)))
-        pap = unifprior('pa', paramdict, bounddict)
-        incp = stats.norm.ppf(paramdict['inc'], *bounddict['inc'])
-        #pap = stats.norm.ppf(paramdict['pa'], *bounddict['pa'])
-        pabp = unifprior('pab', paramdict, bounddict)
-        vsysp = unifprior('vsys', paramdict, bounddict)
-
-        #continuous prior to correlate bins
-        if args.weight == -1:
-            vtp  = np.array(paramdict['vt'])
-            v2tp = np.array(paramdict['v2t'])
-            v2rp = np.array(paramdict['v2r'])
-            vs = [vtp, v2tp, v2rp]
-            if args.disp:
-                sigp = np.array(paramdict['sig'])
-                vs += [sigp]
-
-            #step outwards from center bin to make priors correlated
-            for vi in vs:
-                mid = len(vi)//2
-                vi[mid] = 400 * vi[mid]
-                for i in range(mid-1, -1+args.fixcent, -1):
-                    vi[i] = stats.norm.ppf(vi[i], vi[i+1], 50)
-                for i in range(mid+1, len(vi)):
-                    vi[i] = stats.norm.ppf(vi[i], vi[i-1], 50)
-
-        #uncorrelated bins with unif priors
-        else:
-            vtp  = unifprior('vt',  paramdict, bounddict, int(args.fixcent))
-            v2tp = unifprior('v2t', paramdict, bounddict, int(args.fixcent))
-            v2rp = unifprior('v2r', paramdict, bounddict, int(args.fixcent))
-            if args.disp: 
-                sigp = unifprior('sig', paramdict, bounddict)
+        vtp  = unifprior('vt',  paramdict, bounddict, int(args.fixcent))
+        v2tp = unifprior('v2t', paramdict, bounddict, int(args.fixcent))
+        v2rp = unifprior('v2r', paramdict, bounddict, int(args.fixcent))
+        if args.disp: 
+            sigp = unifprior('sig', paramdict, bounddict)
 
     #reassemble params array
     repack = [incp, pap, pabp, vsysp]
 
     #do centers if desired
     if args.nglobs == 6: 
-        if gaussprior:
-            xcp = stats.norm.ppf(paramdict['xc'], guessdict['xc'], 5)
-            ycp = stats.norm.ppf(paramdict['yc'], guessdict['yc'], 5)
-        else:
-            xcp = unifprior('xc', paramdict, bounddict)
-            ycp = unifprior('yc', paramdict, bounddict)
+        xcp = unifprior('xc', paramdict, bounddict)
+        ycp = unifprior('yc', paramdict, bounddict)
         repack += [xcp,ycp]
 
     #repack all the velocities
@@ -389,7 +370,7 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     
     #prior bounds and asymmetry defined based off of guess
     #args.setbounds()
-    args.setbounds(incpad=3, incgauss=True)
+    args.setbounds(incpad=3, papad = 10, incgauss=True, pagauss=True)
     args.getasym()
 
     #open up multiprocessing pool if needed

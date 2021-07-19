@@ -173,7 +173,7 @@ class Kinematics():
                  sb_ivar=None, sb_mask=None, sb_covar=None, sb_anr=None, sig=None, sig_ivar=None,
                  sig_mask=None, sig_covar=None, sig_corr=None, psf_name=None, psf=None,
                  aperture=None, binid=None, grid_x=None, grid_y=None, grid_sb=None, grid_wcs=None,
-                 reff=None, fwhm=None, image=None, phot_inc=None, maxr=None,
+                 reff=None, fwhm=None, image=None, phot_inc=None, phot_pa=None, maxr=None,
                  positive_definite=False, quiet=False):
 
         # Check shape of input arrays
@@ -205,6 +205,7 @@ class Kinematics():
         self.image = image
         self.sb_anr = sb_anr
         self.phot_inc = phot_inc
+        self.phot_pa = phot_pa
         self.maxr = maxr
 
         # Build coordinate arrays

@@ -91,7 +91,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
     #generate velocity models
     velmodel, sigmodel = bisym_model(args,resdict,plot=True,relative_pab=relative_pab)
     vel_r = args.kin.remap('vel')
-    sig_r = np.sqrt(args.kin.remap('sig_phys2')) if hasattr(args, 'sig_phys2') else args.kin.remap('sig')
+    sig_r = np.sqrt(args.kin.remap('sig_phys2')) if hasattr(args.kin, 'sig_phys2') else args.kin.remap('sig')
 
     if args.kin.vel_ivar is None: args.kin.vel_ivar = np.ones_like(args.kin.vel)
     if args.kin.sig_ivar is None: args.kin.sig_ivar = np.ones_like(args.kin.sig)

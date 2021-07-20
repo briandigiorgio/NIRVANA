@@ -370,7 +370,10 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     
     #prior bounds and asymmetry defined based off of guess
     #args.setbounds()
-    args.setbounds(incpad=3, papad = 10, incgauss=True, pagauss=True)
+    if galmeta is not None: 
+        args.setphotpa(galmeta)
+        args.setbounds(incpad=3, papad=10, incgauss=True, pagauss=True)
+    else: args.setbounds(incpad=3, incgauss=True)
     args.getasym()
 
     #open up multiprocessing pool if needed

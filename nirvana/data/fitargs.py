@@ -104,7 +104,9 @@ class FitArgs:
             
             #cut bins where too many spaxels are masked
             bad = (maskfrac > .75)
+            print(self.edges)
             self.edges = [self.edges[0], *self.edges[1:][~bad]]
+            print(self.edges)
 
             #mask spaxels outside last bin edge
             self.kin.vel_mask[r > self.edges[-1]] = True
@@ -203,7 +205,7 @@ class FitArgs:
         self.guess = guess
         return self.guess
 
-    def clip(self, galmeta=None, sigma=10, sbf=.03, anr=5, maxiter=10, smear_dv=50, smear_dsig=50, clip_thresh=.95, verbose=False):
+    def clip(self, galmeta=None, sigma=10, sbf=.03, anr=5, maxiter=10, smear_dv=50, smear_dsig=50, clip_thresh=.80, verbose=False):
         '''
         Filter out bad spaxels in kinematic data.
         
@@ -242,12 +244,12 @@ class FitArgs:
 
         origvel = self.kin.remap('vel')
         origsig = self.kin.remap('sig')
+        nmasked0 = self.kin.vel_mask.sum()
+        ngood = (~self.kin.vel_mask).sum()
 
         #count spaxels in each bin and make 2d maps excluding large bins
         nspax = np.array([(self.kin.remap('binid') == self.kin.binid[i]).sum() for i in range(len(self.kin.binid))])
         binmask = self.kin.remap(nspax) > 10
-        ngood = self.kin.vel_mask.sum()
-        nmasked0 = (~self.kin.vel_mask).astype(bool).sum()
 
         #axisymmetric fit of data
         fit = None

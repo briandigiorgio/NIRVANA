@@ -122,6 +122,7 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
         paramdict = unpack(meds, args, jump=jump, relative_pab=False)
         paramdict['incl'], paramdict['pal'], paramdict['pabl'], paramdict['vsysl'] = lstd[:4]
         paramdict['incu'], paramdict['pau'], paramdict['pabu'], paramdict['vsysu'] = ustd[:4]
+        print('*'*20, paramdict['pab'], paramdict['pabl'], paramdict['pabu'])
         if args.nglobs == 6:
             paramdict['xcl'], paramdict['ycl'] = lstd[4:6]
             paramdict['xcu'], paramdict['ycu'] = ustd[4:6]

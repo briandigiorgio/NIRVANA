@@ -104,9 +104,9 @@ def ptform(params, args):
     #uniform prior on sin(inc)
     #incfunc = lambda i: np.cos(np.radians(i))
     #incp = np.degrees(np.arccos(unifprior('inc', paramdict, bounddict,func=incfunc)))
-    #pap = unifprior('pa', paramdict, bounddict)
+    pap = unifprior('pa', paramdict, bounddict)
     incp = stats.norm.ppf(paramdict['inc'], *bounddict['inc'])
-    pap = stats.norm.ppf(paramdict['pa'], *bounddict['pa'])
+    #pap = stats.norm.ppf(paramdict['pa'], *bounddict['pa'])
     pabp = unifprior('pab', paramdict, bounddict)
     vsysp = unifprior('vsys', paramdict, bounddict)
 
@@ -372,7 +372,7 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     #args.setbounds()
     if galmeta is not None: 
         args.setphotpa(galmeta)
-        args.setbounds(incpad=3, papad=10, incgauss=True, pagauss=True)
+        args.setbounds(incpad=3, incgauss=True)#, papad=10, pagauss=True)
     else: args.setbounds(incpad=3, incgauss=True)
     args.getasym()
 

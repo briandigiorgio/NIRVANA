@@ -1102,13 +1102,13 @@ def unpack(params, args, jump=None, bound=False, relative_pab=False):
     #global parameters with and without center
     paramdict['xc'], paramdict['yc'] = [0,0]
     if args.nglobs == 4:
-        paramdict['inc'],paramdict['pa'],paramdict['pab'],paramdict['vsys'] = params[:args.nglobs]
+        paramdict['inc'], paramdict['pa'], paramdict['pab'], paramdict['vsys'] = params[:args.nglobs]
     elif args.nglobs == 6:
-        paramdict['inc'],paramdict['pa'],paramdict['pab'],paramdict['vsys'],paramdict['xc'],paramdict['yc'] = params[:args.nglobs]
+        paramdict['inc'], paramdict['pa'], paramdict['pab'], paramdict['vsys'], paramdict['xc'], paramdict['yc'] = params[:args.nglobs]
 
     #adjust pab if necessary
-    if not relative_pab:
-        paramdict['pab'] = (paramdict['pab'] + paramdict['pa']) % 360
+    #if not relative_pab:
+    #    paramdict['pab'] = (paramdict['pab'] + paramdict['pa']) % 360
 
     #figure out what indices to get velocities from
     start = args.nglobs

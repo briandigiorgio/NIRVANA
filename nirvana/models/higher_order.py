@@ -37,7 +37,7 @@ def bisym_model(args, paramdict, plot=False, relative_pab=False):
 
     #convert angles to polar and normalize radial coorinate
     inc, pa, pab = np.radians([paramdict['inc'], paramdict['pa'], paramdict['pab']])
-    if not relative_pab: pab = (pab - pa) % (2*np.pi)
+    pab = (pab - pa) % (2*np.pi)
     r, th = projected_polar(args.kin.grid_x-paramdict['xc'], args.kin.grid_y-paramdict['yc'], pa, inc)
 
     #interpolate the velocity arrays over full coordinates

@@ -111,17 +111,19 @@ def main(args):
         if args.mock_inc: args.outfile += f'_i{int(args.mock_inc)}'
         if args.resid: args.outfile += f'_r{args.resid}'
 
+        fitsname = f"{args.dir}nirvana_{plate}-{ifu}_{vftype}" 
+        if args.mock:
+            fitsname += '_mock'
+            if args.mock_inc: fitsname += f'_i{int(args.mock_inc)}'
+            if args.resid: fitsname += f'_r{args.resid}'
+    else: fitsname = args.dir + args.outfile
+
     print('File name:', args.outfile)
     if args.stellar: vftype = 'Stars'
     else: vftype = 'Gas'
 
     fname = args.dir + args.outfile + '.nirv'
     galname = args.dir + args.outfile + '.gal'
-    fitsname = f"{args.dir}nirvana_{plate}-{ifu}_{vftype}"
-    if args.mock:
-        fitsname += '_mock'
-        if args.mock_inc: fitsname += f'_i{int(args.mock_inc)}'
-        if args.resid: fitsname += f'_r{args.resid}'
     fitsname += '.fits'
 
     #check if outfile already exists

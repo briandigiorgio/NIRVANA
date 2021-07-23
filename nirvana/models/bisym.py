@@ -20,7 +20,7 @@ import dynesty
 from .beam import smear, ConvolveFFTW
 from .geometry import projected_polar
 from ..data.manga import MaNGAGasKinematics, MaNGAStellarKinematics
-from ..data.util import trim_shape, unpack
+from ..data.util import trim_shape, unpack, cinv
 from ..data.fitargs import FitArgs
 from ..models.higher_order import bisym_model
 
@@ -231,6 +231,38 @@ def loglike(params, args, squared=False):
 
     return llike
 
+def covarlike(params, args):
+    paramdict = unpack(params, args)
+    velmodel, sigmodel = bisym_model(args, paramdict)
+
+    velresid = (velmodel - args.kin.vel)[~args.kin.vel_mask]
+    vellike = -.5 * velresid.T.dot(args.velcovinv).dot(velresid) + args.velcoeff
+
+    if sigmodel is not None:
+        sigresid = (sigmodel - args.kin.sig)[~args.kin.sig_mask]
+        siglike = -.5 * sigresid.T.dot(args.sigcovinv).dot(sigresid) + args.sigcoeff
+    else: siglike = 0
+
+    if args.weight and args.weight != -1:
+        weightlike =  - smoothing(paramdict['vt'],  args.weight) \
+                      - smoothing(paramdict['v2t'], args.weight) \
+                      - smoothing(paramdict['v2r'], args.weight)
+        if siglike: 
+            weightlike += smoothing(paramdict['sig'], args.weight*.1)
+    else: weightlike = 0
+
+    if hasattr(args, 'penalty') and args.penalty:
+        vtm  = paramdict['vt' ].mean()
+        v2tm = paramdict['v2t'].mean()
+        v2rm = paramdict['v2r'].mean()
+
+        #scaling penalty if 2nd order profs are big
+        penlike = (args.penalty * (v2tm - vtm)/vtm) \
+                + (args.penalty * (v2rm - vtm)/vtm)
+    else: penlike = 0 
+
+    return vellike - siglike - weightlike - penlike 
+
 def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11', nbins=None,
         cores=10, maxr=None, cen=True, weight=10, smearing=True, points=500,
         stellar=False, root=None, verbose=False, disp=True, 
@@ -325,18 +357,19 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     #get info on galaxy and define bins and starting guess
     else:
         if stellar:
-            kin = MaNGAStellarKinematics.from_plateifu(plate, ifu, daptype=daptype, dr=dr,
-                                                        cube_path=root,
-                                                        image_path=root, maps_path=root, 
-                                                        remotedir=remotedir)
+            kin = MaNGAStellarKinematics.from_plateifu(plate, ifu,
+                    daptype=daptype, dr=dr, cube_path=root, image_path=root,
+                    maps_path=root, remotedir=remotedir, covar=True,
+                    positive_definite=True)
         else:
-            kin = MaNGAGasKinematics.from_plateifu(plate, ifu, line='Ha-6564', daptype=daptype,
-                                                    dr=dr,  cube_path=root,
-                                                    image_path=root, maps_path=root, 
-                                                    remotedir=remotedir)
+            kin = MaNGAGasKinematics.from_plateifu(plate, ifu, line='Ha-6564',
+                    daptype=daptype, dr=dr,  cube_path=root, image_path=root,
+                    maps_path=root, remotedir=remotedir, covar=True,
+                    positive_definite=True)
 
         #set basic fit parameters for galaxy
-        args = FitArgs(kin, nglobs, weight, disp, fixcent, floor, penalty, points, smearing, maxr)
+        args = FitArgs(kin, nglobs, weight, disp, fixcent, floor, penalty,
+                points, smearing, maxr)
 
     #set bin edges
     if galmeta is not None: 
@@ -361,6 +394,25 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     args.clip()
     theta0 = args.getguess(galmeta=galmeta)
     ndim = len(theta0)
+
+    #clip and invert covariance matrices
+    if args.kin.vel_covar is not None: 
+        goodvel = ~args.kin.vel_mask
+        goodvelcovar = args.kin.vel_covar[np.ix_(goodvel, goodvel)]
+        #goodvelcovar = args.kin.vel_covar
+        args.velcovinv = cinv(goodvelcovar, upper=True)
+        args.velcoeff = -.5 * (np.log(2 * np.pi) * ndim + np.log(np.linalg.det(args.kin.vel_covar.todense())))
+
+        if args.kin.sig_phys2_covar is not None:
+            goodsig = ~args.kin.sig_mask
+            goodsigcovar = args.kin.sig_covar[np.ix_(goodsig, goodsig)]
+            #goodsigcovar = args.kin.sig_covar
+            args.sigcovinv = cinv(goodsigcovar, upper=True)
+            args.sigcoeff = -.5 * (np.log(2 * np.pi) * ndim + np.log(np.linalg.det(args.kin.sig_covar.todense())))
+
+        else: args.sigcovinv = None
+
+    else: args.velcovinv, args.sigcovinv = (None, None)
 
     #adjust dimensions according to fit params
     nbin = len(args.edges) - args.fixcent
@@ -397,7 +449,8 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
 
     elif method == 'dynesty':
         #dynesty sampler with periodic pa and pab
-        sampler = dynesty.NestedSampler(loglike, ptform, ndim, nlive=points,
+        #sampler = dynesty.NestedSampler(loglike, ptform, ndim, nlive=points,
+        sampler = dynesty.NestedSampler(covarlike, ptform, ndim, nlive=points,
                 periodic=[1,2], pool=pool,
                 ptform_args = [args], logl_args = [args], verbose=verbose)
         sampler.run_nested()

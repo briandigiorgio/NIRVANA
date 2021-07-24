@@ -279,7 +279,7 @@ class FitArgs:
         filledvel[mask] = avel[mask]
 
         #same for sig
-        filledsig = np.ma.array(np.sqrt(self.kin.remap('sig_phys2')), mask=binmask) if self.kin.sig is not None else None
+        filledsig = np.ma.array(np.ma.sqrt(self.kin.remap('sig_phys2')).filled(0.), mask=binmask) if self.kin.sig is not None else None
         if filledsig is not None and asig is not None:
             mask |= filledsig.mask | (filledsig == 0).data
             filledsig = filledsig.data

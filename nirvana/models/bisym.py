@@ -24,6 +24,9 @@ from ..data.util import trim_shape, unpack, cinv
 from ..data.fitargs import FitArgs
 from ..models.higher_order import bisym_model
 
+import warnings
+warnings.simplefilter('ignore', RuntimeWarning)
+
 
 def smoothing(array, weight=1):
     """
@@ -234,13 +237,26 @@ def loglike(params, args, squared=False):
 def covarlike(params, args):
     paramdict = unpack(params, args)
     velmodel, sigmodel = bisym_model(args, paramdict)
-
     velresid = (velmodel - args.kin.vel)[~args.kin.vel_mask]
-    vellike = -.5 * velresid.T.dot(args.velcovinv).dot(velresid) + args.velcoeff
+    sigresid = (sigmodel - args.kin.sig)[~args.kin.sig_mask]
+
+    if not np.isfinite(args.velcovinv).all():
+        raise Exception('nans in velcovinv')
+    if not np.isfinite(args.sigcovinv).all():
+        raise Exception('nans in sigcovinv')
+    if not np.isfinite(args.velcoeff):
+        raise Exception('nans in velcoeff')
+    if not np.isfinite(args.sigcoeff):
+        raise Exception('nans in sigcoeff')
+    if not np.isfinite(velresid).all():
+        raise Exception('nans in velresid')
+    if not np.isfinite(sigresid).all():
+        raise Exception('nans in sigresid')
+
+    vellike = -.5 * velresid.T.dot(args.velcovinv.dot(velresid)) + args.velcoeff
 
     if sigmodel is not None:
-        sigresid = (sigmodel - args.kin.sig)[~args.kin.sig_mask]
-        siglike = -.5 * sigresid.T.dot(args.sigcovinv).dot(sigresid) + args.sigcoeff
+        siglike = -.5 * sigresid.T.dot(args.sigcovinv.dot(sigresid)) + args.sigcoeff
     else: siglike = 0
 
     if args.weight and args.weight != -1:
@@ -261,7 +277,7 @@ def covarlike(params, args):
                 + (args.penalty * (v2rm - vtm)/vtm)
     else: penlike = 0 
 
-    return vellike - siglike - weightlike - penlike 
+    return vellike + siglike + weightlike + penlike 
 
 def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11', nbins=None,
         cores=10, maxr=None, cen=True, weight=10, smearing=True, points=500,
@@ -400,19 +416,34 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         goodvel = ~args.kin.vel_mask
         goodvelcovar = args.kin.vel_covar[np.ix_(goodvel, goodvel)]
         #goodvelcovar = args.kin.vel_covar
-        args.velcovinv = cinv(goodvelcovar, upper=True)
-        args.velcoeff = -.5 * (np.log(2 * np.pi) * ndim + np.log(np.linalg.det(args.kin.vel_covar.todense())))
+        args.velcovinv = cinv(goodvelcovar)
+        sign, logdet = np.linalg.slogdet(goodvelcovar.todense())
+        if sign != 1:
+            raise ValueError('Determinant of velocity covariance is not positive')
+        args.velcoeff = -.5 * (np.log(2 * np.pi) * goodvel.sum() + logdet)
 
         if args.kin.sig_phys2_covar is not None:
             goodsig = ~args.kin.sig_mask
             goodsigcovar = args.kin.sig_covar[np.ix_(goodsig, goodsig)]
             #goodsigcovar = args.kin.sig_covar
-            args.sigcovinv = cinv(goodsigcovar, upper=True)
-            args.sigcoeff = -.5 * (np.log(2 * np.pi) * ndim + np.log(np.linalg.det(args.kin.sig_covar.todense())))
+            args.sigcovinv = cinv(goodsigcovar)
+            sign, logdet = np.linalg.slogdet(goodsigcovar.todense())
+            if sign != 1:
+                raise ValueError('Determinant of dispersion covariance is not positive')
+            args.sigcoeff = -.5 * (np.log(2 * np.pi) * goodsig.sum() + logdet)
 
         else: args.sigcovinv = None
 
     else: args.velcovinv, args.sigcovinv = (None, None)
+
+    if not np.isfinite(args.velcovinv).all():
+        raise Exception('nans in velcovinv')
+    if not np.isfinite(args.sigcovinv).all():
+        raise Exception('nans in sigcovinv')
+    if not np.isfinite(args.velcoeff):
+        raise Exception('nans in velcoeff')
+    if not np.isfinite(args.sigcoeff):
+        raise Exception('nans in sigcoeff')
 
     #adjust dimensions according to fit params
     nbin = len(args.edges) - args.fixcent

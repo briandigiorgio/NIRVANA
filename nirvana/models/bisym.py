@@ -216,6 +216,7 @@ def loglike(params, args, squared=False):
         if sigdataivar is not None: 
             sigdataivar = 1/(1/sigdataivar + args.noise_floor**2)
             siglike = siglike * sigdataivar - .5 * np.log(2*np.pi * sigdataivar)
+        #print(f'vellike = {llike}, siglike = {-.5*np.ma.sum(siglike)}')
         llike -= .5*np.ma.sum(siglike)
 
         #smooth profile
@@ -230,7 +231,7 @@ def loglike(params, args, squared=False):
 
         #scaling penalty if 2nd order profs are big
         llike -= args.penalty * (v2tm - vtm)/vtm
-        llike -= args.penalty * (v2rm - vtm)/vtm
+        llike -= args.penalty * (v2rm - vtm)/vrm
 
     return llike
 
@@ -277,6 +278,7 @@ def covarlike(params, args):
                 + (args.penalty * (v2rm - vtm)/vtm)
     else: penlike = 0 
 
+    #print(f'{vellike = }, {siglike = }, {weightlike = }, {penlike = }')
     return vellike + siglike + weightlike + penlike 
 
 def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11', nbins=None,
@@ -414,20 +416,20 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     #clip and invert covariance matrices
     if args.kin.vel_covar is not None: 
         goodvel = ~args.kin.vel_mask
-        goodvelcovar = args.kin.vel_covar[np.ix_(goodvel, goodvel)]
-        #goodvelcovar = args.kin.vel_covar
+        #goodvelcovar = args.kin.vel_covar[np.ix_(goodvel, goodvel)]
+        goodvelcovar = np.diag(1/args.kin.vel_ivar)[np.ix_(goodvel, goodvel)]# + 1e-10
         args.velcovinv = cinv(goodvelcovar)
-        sign, logdet = np.linalg.slogdet(goodvelcovar.todense())
+        sign, logdet = np.linalg.slogdet(goodvelcovar)#.todense())
         if sign != 1:
             raise ValueError('Determinant of velocity covariance is not positive')
         args.velcoeff = -.5 * (np.log(2 * np.pi) * goodvel.sum() + logdet)
 
         if args.kin.sig_phys2_covar is not None:
             goodsig = ~args.kin.sig_mask
-            goodsigcovar = args.kin.sig_covar[np.ix_(goodsig, goodsig)]
-            #goodsigcovar = args.kin.sig_covar
+            #goodsigcovar = args.kin.sig_covar[np.ix_(goodsig, goodsig)]
+            goodsigcovar = np.diag(1/args.kin.sig_ivar)[np.ix_(goodsig, goodsig)]# + 1e-10
             args.sigcovinv = cinv(goodsigcovar)
-            sign, logdet = np.linalg.slogdet(goodsigcovar.todense())
+            sign, logdet = np.linalg.slogdet(goodsigcovar)#.todense))
             if sign != 1:
                 raise ValueError('Determinant of dispersion covariance is not positive')
             args.sigcoeff = -.5 * (np.log(2 * np.pi) * goodsig.sum() + logdet)

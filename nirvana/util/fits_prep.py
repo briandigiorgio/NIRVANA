@@ -163,7 +163,7 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
 
     return paramdict
 
-def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
+def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
         cen=True, fixcent=True, clip=True, remotedir=None,
         gal=None, galmeta=None):
     """
@@ -222,7 +222,7 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
         with fits.open(f) as fitsfile:
             table = fitsfile[1].data
             maxr = fitsfile[0].header['maxr']
-            smearing = fitsfile[0].header['smearing']
+            smearing = fitsfile[0].header['smearing'] if smearing is None else smearing
 
         #unpack bintable into dict
         keys = table.columns.names
@@ -287,7 +287,7 @@ def fileprep(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None,
 
     #set relevant parameters for galaxy
     if isinstance(kin, FitArgs): args = kin
-    else: args = FitArgs(kin)
+    else: args = FitArgs(kin, smearing=smearing)
     args.setdisp(True)
     args.setnglobs(4) if not cen else args.setnglobs(6)
     args.setfixcent(fixcent)

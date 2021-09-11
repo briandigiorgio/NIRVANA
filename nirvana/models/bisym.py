@@ -15,6 +15,11 @@ try:
 except:
     tqdm = None
 
+try:
+    import cupy as cp
+except:
+    cp = None
+
 import dynesty
 
 from .beam import smear, ConvolveFFTW
@@ -189,8 +194,8 @@ def loglike(params, args, squared=False):
     #inflate ivar with noise floor
     if args.kin.vel_ivar is not None: 
         vel_ivar = 1/(1/args.kin.vel_ivar + args.noise_floor**2)
-        llike = llike * vel_ivar - .5 * np.log(2*np.pi * vel_ivar)
-    llike = -.5 * np.ma.sum(llike)
+        llike = llike * vel_ivar 
+    llike = -.5 * np.ma.sum(llike + np.log(2*np.pi * vel_ivar))
 
     #add in penalty for non smooth rotation curves
     if args.weight != -1:
@@ -261,11 +266,11 @@ def covarlike(params, args):
     else: siglike = 0
 
     if args.weight and args.weight != -1:
-        weightlike =  - smoothing(paramdict['vt'],  args.weight) \
-                      - smoothing(paramdict['v2t'], args.weight) \
-                      - smoothing(paramdict['v2r'], args.weight)
+        weightlike = - smoothing(paramdict['vt'],  args.weight) \
+                     - smoothing(paramdict['v2t'], args.weight) \
+                     - smoothing(paramdict['v2r'], args.weight)
         if siglike: 
-            weightlike += smoothing(paramdict['sig'], args.weight*.1)
+            weightlike -= smoothing(paramdict['sig'], args.weight*.1)
     else: weightlike = 0
 
     if hasattr(args, 'penalty') and args.penalty:
@@ -274,8 +279,8 @@ def covarlike(params, args):
         v2rm = paramdict['v2r'].mean()
 
         #scaling penalty if 2nd order profs are big
-        penlike = (args.penalty * (v2tm - vtm)/vtm) \
-                + (args.penalty * (v2rm - vtm)/vtm)
+        penlike = - (args.penalty * (v2tm - vtm)/vtm) \
+                  - (args.penalty * (v2rm - vtm)/vtm)
     else: penlike = 0 
 
     #print(f'{vellike = }, {siglike = }, {weightlike = }, {penlike = }')
@@ -461,6 +466,15 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     else: args.setbounds(incpad=3, incgauss=True)
     args.getasym()
 
+    if cp is not None:
+        #[exec(f"args.{a}_r = cp.array(args.vel.remap('{a}'))", locals(), globals()) for a in ['vel', 'sig', 'sig_phys2', 'sb', 'vel_ivar', 'sig_ivar', 'sig_phys2_ivar']]
+        args.sb_r = cp.array(args.kin.remap('sb'))
+        args.beam_fft_r = cp.array(args.kin.beam_fft)
+    else:
+        #[exec(f"args.{a}_r = args.vel.remap('{a}')", locals(), globals()) for a in ['vel', 'sig', 'sig_phys2', 'sb', 'vel_ivar', 'sig_ivar', 'sig_phys2_ivar']]
+        args.sb_r = args.kin.remap('sb')
+        args.beam_fft_r = args.kin.beam_fft
+
     #open up multiprocessing pool if needed
     if cores > 1 and method == 'dynesty':
         pool = mp.Pool(cores)
@@ -482,8 +496,8 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
 
     elif method == 'dynesty':
         #dynesty sampler with periodic pa and pab
-        #sampler = dynesty.NestedSampler(loglike, ptform, ndim, nlive=points,
-        sampler = dynesty.NestedSampler(covarlike, ptform, ndim, nlive=points,
+        sampler = dynesty.NestedSampler(loglike, ptform, ndim, nlive=points,
+        #sampler = dynesty.NestedSampler(covarlike, ptform, ndim, nlive=points,
                 periodic=[1,2], pool=pool,
                 ptform_args = [args], logl_args = [args], verbose=verbose)
         sampler.run_nested()

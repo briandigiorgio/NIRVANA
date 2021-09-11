@@ -4,6 +4,11 @@ from .beam import smear, ConvolveFFTW
 from ..data.util import unpack
 from .geometry import projected_polar
 
+try:
+    import cupy as cp
+except:
+    cp = None
+
 def bisym_model(args, paramdict, plot=False, relative_pab=False):
     '''
     Evaluate a bisymmetric velocity field model for given parameters.
@@ -56,17 +61,20 @@ def bisym_model(args, paramdict, plot=False, relative_pab=False):
     #define dispersion and surface brightness if desired
     if args.disp: 
         sigmodel = np.interp(r, args.edges, paramdict['sig'])
-        sb = args.kin.remap('sb', masked=False)
+        #sb = args.kin.remap('sb', masked=False)
     else: 
         sigmodel = None
-        sb = None
+        #sb = None
+
+    if cp is not None:
+        velmodel, sigmodel = cp.array([velmodel, sigmodel])
 
     #apply beam smearing if beam is given
     try: conv
     except: conv = None
     if args.kin.beam_fft is not None:
         if hasattr(args, 'smearing') and not args.smearing: pass
-        else: sbmodel, velmodel, sigmodel = smear(velmodel, args.kin.beam_fft, sb=sb, 
+        else: sbmodel, velmodel, sigmodel = smear(velmodel, args.beam_fft_r, sb=args.sb_r, 
                 sig=sigmodel, beam_fft=True, cnvfftw=conv, verbose=False)
 
     #remasking after convolution

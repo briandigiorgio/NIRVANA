@@ -19,6 +19,10 @@ try:
     import theano.tensor as tt
 except:
     tt = None
+try:
+    import cupy as cp
+except:
+    cp = None
 
 from .util import get_map_bin_transformations, impose_positive_definite
 
@@ -754,3 +758,20 @@ class Kinematics():
                      snr < min_sig_snr)
         self.reject(vel_rej=vel_rej, sig_rej=sig_rej)
         return vel_rej, sig_rej
+
+    def cupy_convert(self):
+        '''
+        Convert all attributes that are numpy arrays to cupy arrays.
+
+        If CuPy is installed correctly and a GPU is available, converting
+        things to CuPy arrays should allow certain tasks to be offloaded to
+        the GPU, potentially speeding up computation considerably.
+        '''
+        if cp is None:
+            raise ImportError('CuPy did not import correctly. Cannot convert arrays')
+
+        attrs = [a for a in dir(self) if '__' not in a]
+        for a in attrs:
+            if isinstance(getattr(self, a), np.ndarray):
+                try: setattr(self, cp.array(getattr(self, a)))
+                except: pass

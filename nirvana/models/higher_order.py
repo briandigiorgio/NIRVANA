@@ -4,10 +4,11 @@ from .beam import smear, ConvolveFFTW
 from ..data.util import unpack
 from .geometry import projected_polar
 
-try:
-    import cupy as cp
-except:
-    cp = None
+#try:
+#    import cupy as cp
+#except:
+#    cp = None
+cp = None
 
 def bisym_model(args, paramdict, plot=False, relative_pab=False):
     '''
@@ -72,12 +73,16 @@ def bisym_model(args, paramdict, plot=False, relative_pab=False):
     #apply beam smearing if beam is given
     try: conv
     except: conv = None
+    #print(conv)
+
     if args.kin.beam_fft is not None:
         if hasattr(args, 'smearing') and not args.smearing: pass
         else: sbmodel, velmodel, sigmodel = smear(velmodel, args.beam_fft_r, sb=args.sb_r, 
                 sig=sigmodel, beam_fft=True, cnvfftw=conv, verbose=False)
 
     #remasking after convolution
+    if cp is not None:
+        velmodel, sigmodel = [velmodel.get(), sigmodel.get()]
     if args.kin.vel_mask is not None: velmodel = np.ma.array(velmodel, mask=args.kin.remap('vel_mask'))
     if args.kin.sig_mask is not None: sigmodel = np.ma.array(sigmodel, mask=args.kin.remap('sig_mask'))
 

@@ -15,10 +15,11 @@ try:
 except:
     tqdm = None
 
-try:
-    import cupy as cp
-except:
-    cp = None
+#try:
+#    import cupy as cp
+#except:
+#    cp = None
+cp = None
 
 import dynesty
 
@@ -164,7 +165,6 @@ def loglike(params, args, squared=False):
     Log likelihood for :class:`dynesty.NestedSampler` fit. 
     
     Makes a model based on current parameters and computes a chi squared with
-    tht
     original data.
 
     Args:
@@ -236,35 +236,46 @@ def loglike(params, args, squared=False):
 
         #scaling penalty if 2nd order profs are big
         llike -= args.penalty * (v2tm - vtm)/vtm
-        llike -= args.penalty * (v2rm - vtm)/vrm
+        llike -= args.penalty * (v2rm - vtm)/vtm
 
     return llike
 
 def covarlike(params, args):
+    '''
+    Log likelihood function utilizing the full covariance matrix of the data.
+
+    Performs the same function as :func:`loglike` but uses the covariance
+    matrix for all of the spaxels rather than just the errors for each
+    individual spaxel. It takes the exact same arguments and outputs the same
+    things too, so it should be able to be switched in and out.
+
+    Args:
+        params (:obj:`tuple`):
+            Tuple of parameters that are being fit. Assumes the standard order
+            of parameters constructed in :func:`nirvana.fitting.fit`.
+        args (:class:`~nirvana.data.fitargs.FitArgs`):
+            Object containing all of the data and settings needed for the
+            galaxy.  
+        squared (:obj:`bool`, optional):
+            Whether to compute the chi squared against the square of the
+            dispersion profile or not. 
+
+    Returns:
+        :obj:`float`: Log likelihood value associated with parameters.
+    '''
+    #unpack, generate models and resids
     paramdict = unpack(params, args)
     velmodel, sigmodel = bisym_model(args, paramdict)
     velresid = (velmodel - args.kin.vel)[~args.kin.vel_mask]
     sigresid = (sigmodel - args.kin.sig)[~args.kin.sig_mask]
 
-    if not np.isfinite(args.velcovinv).all():
-        raise Exception('nans in velcovinv')
-    if not np.isfinite(args.sigcovinv).all():
-        raise Exception('nans in sigcovinv')
-    if not np.isfinite(args.velcoeff):
-        raise Exception('nans in velcoeff')
-    if not np.isfinite(args.sigcoeff):
-        raise Exception('nans in sigcoeff')
-    if not np.isfinite(velresid).all():
-        raise Exception('nans in velresid')
-    if not np.isfinite(sigresid).all():
-        raise Exception('nans in sigresid')
-
+    #calculate loglikes for velocity and dispersion
     vellike = -.5 * velresid.T.dot(args.velcovinv.dot(velresid)) + args.velcoeff
-
     if sigmodel is not None:
         siglike = -.5 * sigresid.T.dot(args.sigcovinv.dot(sigresid)) + args.sigcoeff
     else: siglike = 0
 
+    #smoothing penalties
     if args.weight and args.weight != -1:
         weightlike = - smoothing(paramdict['vt'],  args.weight) \
                      - smoothing(paramdict['v2t'], args.weight) \
@@ -273,6 +284,7 @@ def covarlike(params, args):
             weightlike -= smoothing(paramdict['sig'], args.weight*.1)
     else: weightlike = 0
 
+    #second order penalties
     if hasattr(args, 'penalty') and args.penalty:
         vtm  = paramdict['vt' ].mean()
         v2tm = paramdict['v2t'].mean()
@@ -283,14 +295,13 @@ def covarlike(params, args):
                   - (args.penalty * (v2rm - vtm)/vtm)
     else: penlike = 0 
 
-    #print(f'{vellike = }, {siglike = }, {weightlike = }, {penlike = }')
     return vellike + siglike + weightlike + penlike 
 
 def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11', nbins=None,
         cores=10, maxr=None, cen=True, weight=10, smearing=True, points=500,
         stellar=False, root=None, verbose=False, disp=True, 
         fixcent=True, method='dynesty', remotedir=None, floor=5, penalty=100,
-        mock=None):
+        mock=None, covar=True):
     '''
     Main function for fitting a MaNGA galaxy with a nonaxisymmetric model.
 
@@ -382,12 +393,12 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         if stellar:
             kin = MaNGAStellarKinematics.from_plateifu(plate, ifu,
                     daptype=daptype, dr=dr, cube_path=root, image_path=root,
-                    maps_path=root, remotedir=remotedir, covar=True,
+                    maps_path=root, remotedir=remotedir, covar=covar,
                     positive_definite=True)
         else:
             kin = MaNGAGasKinematics.from_plateifu(plate, ifu, line='Ha-6564',
                     daptype=daptype, dr=dr,  cube_path=root, image_path=root,
-                    maps_path=root, remotedir=remotedir, covar=True,
+                    maps_path=root, remotedir=remotedir, covar=covar,
                     positive_definite=True)
 
         #set basic fit parameters for galaxy
@@ -419,7 +430,7 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     ndim = len(theta0)
 
     #clip and invert covariance matrices
-    if args.kin.vel_covar is not None: 
+    if args.kin.vel_covar is not None and covar: 
         goodvel = ~args.kin.vel_mask
         #goodvelcovar = args.kin.vel_covar[np.ix_(goodvel, goodvel)]
         goodvelcovar = np.diag(1/args.kin.vel_ivar)[np.ix_(goodvel, goodvel)]# + 1e-10
@@ -434,23 +445,24 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
             #goodsigcovar = args.kin.sig_covar[np.ix_(goodsig, goodsig)]
             goodsigcovar = np.diag(1/args.kin.sig_ivar)[np.ix_(goodsig, goodsig)]# + 1e-10
             args.sigcovinv = cinv(goodsigcovar)
-            sign, logdet = np.linalg.slogdet(goodsigcovar)#.todense))
+            sign, logdet = np.linalg.slogdet(goodsigcovar)#.todense())
             if sign != 1:
                 raise ValueError('Determinant of dispersion covariance is not positive')
             args.sigcoeff = -.5 * (np.log(2 * np.pi) * goodsig.sum() + logdet)
 
         else: args.sigcovinv = None
 
+        if not np.isfinite(args.velcovinv).all():
+            raise Exception('nans in velcovinv')
+        if not np.isfinite(args.sigcovinv).all():
+            raise Exception('nans in sigcovinv')
+        if not np.isfinite(args.velcoeff):
+            raise Exception('nans in velcoeff')
+        if not np.isfinite(args.sigcoeff):
+            raise Exception('nans in sigcoeff')
+
     else: args.velcovinv, args.sigcovinv = (None, None)
 
-    if not np.isfinite(args.velcovinv).all():
-        raise Exception('nans in velcovinv')
-    if not np.isfinite(args.sigcovinv).all():
-        raise Exception('nans in sigcovinv')
-    if not np.isfinite(args.velcoeff):
-        raise Exception('nans in velcoeff')
-    if not np.isfinite(args.sigcoeff):
-        raise Exception('nans in sigcoeff')
 
     #adjust dimensions according to fit params
     nbin = len(args.edges) - args.fixcent
@@ -496,8 +508,10 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
 
     elif method == 'dynesty':
         #dynesty sampler with periodic pa and pab
-        sampler = dynesty.NestedSampler(loglike, ptform, ndim, nlive=points,
-        #sampler = dynesty.NestedSampler(covarlike, ptform, ndim, nlive=points,
+        if not covar: sampler = dynesty.NestedSampler(loglike, ptform, ndim, nlive=points,
+                periodic=[1,2], pool=pool,
+                ptform_args = [args], logl_args = [args], verbose=verbose)
+        else: sampler = dynesty.NestedSampler(covarlike, ptform, ndim, nlive=points,
                 periodic=[1,2], pool=pool,
                 ptform_args = [args], logl_args = [args], verbose=verbose)
         sampler.run_nested()

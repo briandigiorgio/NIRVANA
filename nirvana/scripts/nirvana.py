@@ -95,6 +95,8 @@ def main(args):
         print(e)
         galmeta = None
 
+    if args.stellar: vftype = 'Stars'
+    else: vftype = 'Gas'
 
     #make descriptive outfile name
     if args.outfile is None:
@@ -119,8 +121,6 @@ def main(args):
     else: fitsname = args.dir + args.outfile
 
     print('File name:', args.outfile)
-    if args.stellar: vftype = 'Stars'
-    else: vftype = 'Gas'
 
     fname = args.dir + args.outfile + '.nirv'
     galname = args.dir + args.outfile + '.gal'

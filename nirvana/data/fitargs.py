@@ -279,24 +279,27 @@ class FitArgs:
         filledvel[mask] = avel[mask]
 
         #same for sig
-        filledsig = np.ma.array(np.sqrt(self.kin.remap('sig_phys2')), mask=binmask) if self.kin.sig is not None else None
+        filledsig = np.ma.array(np.ma.sqrt(self.kin.remap('sig_phys2')).filled(0.), mask=binmask) if self.kin.sig is not None else None
         if filledsig is not None and asig is not None:
             mask |= filledsig.mask | (filledsig == 0).data
             filledsig = filledsig.data
             filledsig[mask] = asig[mask]
 
+        masks = []
+        labels = []
         #reconvolve psf on top of velocity and dispersion
-        cnvfftw = ConvolveFFTW(self.kin.spatial_shape)
-        smeared = smear(filledvel, self.kin.beam_fft, beam_fft=True, sig=filledsig, sb=None, cnvfftw=cnvfftw)
+        if self.smearing == True and self.kin.beam_fft is not None:
+            cnvfftw = ConvolveFFTW(self.kin.spatial_shape)
+            smeared = smear(filledvel, self.kin.beam_fft, beam_fft=True, sig=filledsig, sb=None, cnvfftw=cnvfftw)
 
-        #cut out spaxels with too high residual because they're probably bad
-        dvmask = self.kin.bin(np.abs(filledvel - smeared[1]) > smear_dv) 
-        masks = [dvmask]
-        labels = ['dv']
-        if self.kin.sig is not None: 
-            dsigmask = self.kin.bin(np.abs(filledsig - smeared[2]) > smear_dsig)
-            masks += [dsigmask]
-            labels += ['dsig']
+            #cut out spaxels with too high residual because they're probably bad
+            dvmask = self.kin.bin(np.abs(filledvel - smeared[1]) > smear_dv) 
+            masks += [dvmask]
+            labels += ['dv']
+            if self.kin.sig is not None: 
+                dsigmask = self.kin.bin(np.abs(filledsig - smeared[2]) > smear_dsig)
+                masks += [dsigmask]
+                labels += ['dsig']
 
         #clip on surface brightness and ANR
         if self.kin.sb is not None: 
@@ -310,7 +313,7 @@ class FitArgs:
             labels += ['anr']
 
         #combine all masks and apply to data
-        mask = np.zeros(dvmask.shape)
+        mask = np.zeros(self.kin.vel_mask.shape)
         for m in masks: mask += m
         mask = mask.astype(bool)
         self.kin.remask(mask)

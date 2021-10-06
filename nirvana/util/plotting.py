@@ -327,7 +327,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     #MaNGA Ha velocity field
     plt.subplot(3,5,3)
     plt.title(r'Velocity Data')
-    plt.imshow(vel_r, cmap='RdBu', origin='lower', vmin=-datavmax, vmax=datavmax)
+    plt.imshow(vel_r, cmap=cmap, origin='lower', vmin=-datavmax, vmax=datavmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)
     cb = plt.colorbar(cax=cax, orientation='horizontal')
@@ -351,7 +351,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     plt.gca().tick_params(direction='in')
 
     plt.subplot(3,5,6)
-    plt.imshow(velmodel, cmap = 'RdBu', origin='lower', vmin=-datavmax, vmax=datavmax)
+    plt.imshow(velmodel, cmap=cmap, origin='lower', vmin=-datavmax, vmax=datavmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     #plt.text(1.15,.5,'=', transform=plt.gca().transAxes, size=30)
     plt.title(r'Model', fontsize=16)
@@ -361,7 +361,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     cb.set_label('km/s', labelpad=-2)
 
     plt.subplot(3,5,7)
-    plt.imshow(vtmodel, cmap = 'RdBu', origin='lower', vmin=-vtvmax, vmax=vtvmax)
+    plt.imshow(vtmodel, cmap=cmap, origin='lower', vmin=-vtvmax, vmax=vtvmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     #plt.text(1.15,.5,'+', transform=plt.gca().transAxes, size=30)
     plt.title(r'$V_t$', fontsize=16)
@@ -371,7 +371,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     cb.set_label('km/s', labelpad=-2)
 
     plt.subplot(3,5,8)
-    plt.imshow(v2tmodel, cmap = 'RdBu', origin='lower', vmin=-v2tvmax, vmax=v2tvmax)
+    plt.imshow(v2tmodel, cmap=cmap, origin='lower', vmin=-v2tvmax, vmax=v2tvmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     #plt.text(1.15,.5,'+', transform=plt.gca().transAxes, size=30)
     plt.title(r'$V_{2t}$', fontsize=16)
@@ -381,7 +381,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     cb.set_label('km/s', labelpad=-2)
 
     plt.subplot(3,5,9)
-    plt.imshow(v2rmodel, cmap = 'RdBu', origin='lower', vmin=-v2rvmax, vmax=v2rvmax)
+    plt.imshow(v2rmodel, cmap=cmap, origin='lower', vmin=-v2rvmax, vmax=v2rvmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     plt.title(r'$V_{2r}$', fontsize=16)
     cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)
@@ -390,7 +390,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     cb.set_label('km/s', labelpad=-2)
 
     plt.subplot(3,5,10)
-    plt.imshow(v2model, cmap = 'RdBu', origin='lower', vmin=-v2vmax, vmax=v2vmax)
+    plt.imshow(v2model, cmap=cmap, origin='lower', vmin=-v2vmax, vmax=v2vmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     plt.title(r'$V_{2t} + V_{2r}$', fontsize=16)
     cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)
@@ -399,7 +399,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     cb.set_label('km/s', labelpad=-2)
 
     plt.subplot(3,5,11)
-    plt.imshow(velresid, cmap='RdBu', origin='lower', vmin=-velvmax, vmax=velvmax)
+    plt.imshow(velresid, cmap=cmap, origin='lower', vmin=-velvmax, vmax=velvmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     plt.title(r'Data $-$ Model', fontsize=16)
     cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)
@@ -408,7 +408,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     cb.set_label('km/s', labelpad=-2)
 
     plt.subplot(3,5,12)
-    plt.imshow(vtresid, cmap='RdBu', origin='lower', vmin=-vtvmax, vmax=vtvmax)
+    plt.imshow(vtresid, cmap=cmap, origin='lower', vmin=-vtvmax, vmax=vtvmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     plt.title(r'Data$- (V_{2t} + V_{2r})$', fontsize=16)
     cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)
@@ -417,7 +417,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     cb.set_label('km/s', labelpad=-2)
 
     plt.subplot(3,5,13)
-    plt.imshow(v2tresid, cmap='RdBu', origin='lower', vmin=-v2tvmax, vmax=v2tvmax)
+    plt.imshow(v2tresid, cmap=cmap, origin='lower', vmin=-v2tvmax, vmax=v2tvmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     plt.title(r'Data$- (V_t + V_{2r})$', fontsize=16)
     cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)
@@ -426,7 +426,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     cb.set_label('km/s', labelpad=-2)
 
     plt.subplot(3,5,14)
-    plt.imshow(v2rresid, cmap='RdBu', origin='lower', vmin=-v2rvmax, vmax=v2rvmax)
+    plt.imshow(v2rresid, cmap=cmap, origin='lower', vmin=-v2rvmax, vmax=v2rvmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     plt.title(r'Data$- (V_t + V_{2t})$', fontsize=16)
     cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)
@@ -435,7 +435,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     cb.set_label('km/s', labelpad=-2)
 
     plt.subplot(3,5,15)
-    plt.imshow(v2resid, cmap='RdBu', origin='lower', vmin=-v2vmax, vmax=v2vmax)
+    plt.imshow(v2resid, cmap=cmap, origin='lower', vmin=-v2vmax, vmax=v2vmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     plt.title(r'Data$- V_t$', fontsize=16)
     cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)

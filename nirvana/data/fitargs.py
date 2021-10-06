@@ -8,6 +8,11 @@ import warnings
 
 from astropy.stats import sigma_clip
 
+try:
+    import pyfftw
+except:
+    pyfftw = None
+
 from ..models.geometry import projected_polar
 from ..models.asymmetry import asymmetry
 from ..models.axisym import AxisymmetricDisk, axisym_iter_fit
@@ -289,7 +294,8 @@ class FitArgs:
         labels = []
         #reconvolve psf on top of velocity and dispersion
         if self.smearing == True and self.kin.beam_fft is not None:
-            cnvfftw = ConvolveFFTW(self.kin.spatial_shape)
+            if pyfftw is not None: cnvfftw = ConvolveFFTW(self.kin.spatial_shape)
+            else: cnvfftw = None
             smeared = smear(filledvel, self.kin.beam_fft, beam_fft=True, sig=filledsig, sb=None, cnvfftw=cnvfftw)
 
             #cut out spaxels with too high residual because they're probably bad

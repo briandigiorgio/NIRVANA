@@ -15,6 +15,11 @@ try:
 except:
     tqdm = None
 
+try:
+    import pyfftw
+except:
+    pyfftw = None
+
 #try:
 #    import cupy as cp
 #except:
@@ -421,7 +426,8 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     #define a variable for speeding up convolutions
     #has to be a global because multiprocessing can't pickle cython
     global conv
-    conv = ConvolveFFTW(args.kin.spatial_shape)
+    if pyfftw is not None: conv = ConvolveFFTW(args.kin.spatial_shape)
+    else: conv = None
 
     #starting positions for all parameters based on a quick fit
     #not used in dynesty

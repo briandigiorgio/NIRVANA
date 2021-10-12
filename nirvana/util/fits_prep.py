@@ -259,27 +259,27 @@ def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
             gal = f[:-5] + '.gal'
         if type(gal) == str: gal = np.load(gal, allow_pickle=True)
 
-        #parse the automatically generated filename
-        if plate is None or ifu is None:
-            fname = re.split('/', f[:-5])[-1]
-            info = re.split('/|-|_', fname)
-            plate = int(info[0]) if plate is None else plate
-            ifu = int(info[1]) if ifu is None else ifu
-            stellar = True if 'stel' in info else False
-            cen = True if 'nocen' not in info else False
-            smearing = True if 'nosmear' not in info else False
-            try: maxr = float([i for i in info if 'r' in i][0][:-1])
-            except: maxr = None
-
-            if 'fixcent' in info: fixcent = True
-            elif 'freecent' in info: fixcent = False
-
         #load input galaxy object
         if gal is not None:
             kin = gal
 
         #load in MaNGA data
         else:
+            #parse the automatically generated filename
+            if plate is None or ifu is None:
+                fname = re.split('/', f[:-5])[-1]
+                info = re.split('/|-|_', fname)
+                plate = int(info[0]) if plate is None else plate
+                ifu = int(info[1]) if ifu is None else ifu
+                stellar = True if 'stel' in info else False
+                cen = True if 'nocen' not in info else False
+                smearing = True if 'nosmear' not in info else False
+                try: maxr = float([i for i in info if 'r' in i][0][:-1])
+                except: maxr = None
+
+                if 'fixcent' in info: fixcent = True
+                elif 'freecent' in info: fixcent = False
+
             if stellar:
                 kin = MaNGAStellarKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing, remotedir=remotedir)
             else:

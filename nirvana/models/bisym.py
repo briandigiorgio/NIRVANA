@@ -160,9 +160,15 @@ def ptform(params, args):
         ycp = unifprior('yc', paramdict, bounddict)
         repack += [xcp,ycp]
 
+    #do scatter terms
+    if args.scatter:
+        velscp = unifprior('vel_scatter', paramdict, bounddict)
+        sigscp = unifprior('sig_scatter', paramdict, bounddict)
+
     #repack all the velocities
     repack += [*vtp, *v2tp, *v2rp]
     if args.disp: repack += [*sigp]
+    if args.scatter: repack += [velscp, sigscp]
     return repack
 
 def loglike(params, args, squared=False):
@@ -198,7 +204,10 @@ def loglike(params, args, squared=False):
 
     #inflate ivar with noise floor
     if args.kin.vel_ivar is not None: 
-        vel_ivar = 1/(1/args.kin.vel_ivar + args.noise_floor**2)
+        if args.scatter: 
+            vel_ivar = 1/(1/args.kin.vel_ivar + paramdict['vel_scatter']**2)
+        else:
+            vel_ivar = 1/(1/args.kin.vel_ivar + args.noise_floor**2)
         llike = llike * vel_ivar 
     llike = -.5 * np.ma.sum(llike + np.log(2*np.pi * vel_ivar))
 
@@ -224,7 +233,10 @@ def loglike(params, args, squared=False):
 
         #inflate ivar with noisefloor
         if sigdataivar is not None: 
-            sigdataivar = 1/(1/sigdataivar + args.noise_floor**2)
+            if args.scatter: 
+                sigdataivar = 1/(1/args.kin.sig_ivar + paramdict['sig_scatter']**2)
+            else:
+                sigdataivar = 1/(1/sigdataivar + args.noise_floor**2)
             siglike = siglike * sigdataivar - .5 * np.log(2*np.pi * sigdataivar)
         #print(f'vellike = {llike}, siglike = {-.5*np.ma.sum(siglike)}')
         llike -= .5*np.ma.sum(siglike)
@@ -306,7 +318,7 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         cores=10, maxr=None, cen=True, weight=10, smearing=True, points=500,
         stellar=False, root=None, verbose=False, disp=True, 
         fixcent=True, method='dynesty', remotedir=None, floor=5, penalty=100,
-        mock=None, covar=False):
+        mock=None, covar=False, scatter=True):
     '''
     Main function for fitting a MaNGA galaxy with a nonaxisymmetric model.
 
@@ -408,7 +420,7 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
 
         #set basic fit parameters for galaxy
         args = FitArgs(kin, nglobs, weight, disp, fixcent, floor, penalty,
-                points, smearing, maxr)
+                points, smearing, maxr, scatter)
 
     #set bin edges
     if galmeta is not None: 
@@ -473,6 +485,7 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     #adjust dimensions according to fit params
     nbin = len(args.edges) - args.fixcent
     if disp: ndim += nbin + args.fixcent
+    if scatter: ndim += 2
     args.setnbins(nbin)
     print(f'{nbin + args.fixcent} radial bins, {ndim} parameters')
     

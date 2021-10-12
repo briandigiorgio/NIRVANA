@@ -27,7 +27,7 @@ class FitArgs:
 
     def __init__(self, kinematics, nglobs=6, weight=10, disp=True,
                 fixcent=True, noisefloor=5, penalty=100, npoints=500,
-                smearing=True, maxr=None, edges=None, guess=None, nbins=None, bounds=None,
+                smearing=True, maxr=None, scatter=False, edges=None, guess=None, nbins=None, bounds=None,
                 arc=None, asymmap=None):
 
         self.nglobs = nglobs
@@ -46,6 +46,7 @@ class FitArgs:
         self.npoints = npoints
         self.smearing = smearing
         self.kin = kinematics
+        self.scatter = scatter
 
     def setedges(self, inc, maxr=None, nbin=False, clipmasked=True):
         '''
@@ -434,7 +435,7 @@ class FitArgs:
 
         inc = self.guess[1] if self.kin.phot_inc is None else self.kin.phot_inc
         pa = self.guess[2] if self.kin.phot_pa is None else self.kin.phot_pa
-        ndim = len(self.guess) + (self.nbins + self.fixcent) * self.disp
+        ndim = len(self.guess) + (self.nbins + self.fixcent) * self.disp + 2*self.scatter
 
         #prior bounds defined based off of guess
         bounds = np.zeros((ndim, 2))
@@ -453,9 +454,13 @@ class FitArgs:
 
         #cap velocities at maximum in vf plus a padding factor
         vmax = min(np.max(np.abs(self.kin.vel))/np.cos(np.radians(inc)) * velpad, velmax)
+        end = self.nglobs + 3*self.nbins
         bounds[self.nglobs:self.nglobs + self.nbins] = (0, vmax)
-        bounds[self.nglobs + self.nbins:self.nglobs + 3*self.nbins] = (0, vmax)
-        if self.disp: bounds[self.nglobs + 3*self.nbins:] = (0, min(np.max(self.kin.sig), sigmax))
+        bounds[self.nglobs + self.nbins:end] = (0, vmax)
+        if self.disp: bounds[end:end + self.nbins + 1] = (0, min(np.max(self.kin.sig), sigmax))
+    
+        if self.scatter: bounds[end + self.nbins + 1:end + self.nbins + 3] = (0,100)
+
         self.bounds = bounds
 
     def getasym(self):

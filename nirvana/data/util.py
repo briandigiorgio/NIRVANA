@@ -1132,4 +1132,10 @@ def unpack(params, args, jump=None, bound=False, relative_pab=False):
         paramdict['sig'] = params[start + 3*jump:end]
     else: end = start + 3*jump
 
+    #get added scatter terms if used
+    if args.scatter:
+        if args.disp:
+            paramdict['vel_scatter'], paramdict['sig_scatter'] = params[end:end + 2]
+        else: paramdict['vel_scatter'] = params[end]
+
     return paramdict

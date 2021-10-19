@@ -234,6 +234,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
         fname = f[f.rfind('/')+1:-5]
         plt.savefig(f'{path}plots/{fname}.pdf', format='pdf')
         plt.close()
+    print(resdict)
 
     return fig
 
@@ -575,12 +576,12 @@ def infobox(plot, resdict, args, cen=True, relative_pab=False):
 
     #calculate reduced chisq for vel and sig
     rchisqv = np.sum((vel_r - velmodel)**2 * args.kin.remap('vel_ivar')) / nvar
-    rchisqs = np.sum((sig_r - sigmodel)**2 * args.kin.remap('sig_ivar')) / nvar
+    rchisqs = np.sum((sig_r - sigmodel)**2 * args.kin.remap('sig_phys2_ivar')**.5) / nvar
 
     #print global parameters on figure
     plot.axis('off')
-    ny = 6 + 2*cen
-    fontsize = 14 - 2*cen
+    ny = 6 + 2*cen + args.scatter
+    fontsize = 14 - 2*cen - args.scatter
     ys = np.linspace(1 - .01*fontsize, 0, ny)
 
     plot.set_title(f"{resdict['plate']}-{resdict['ifu']} {resdict['type']}",size=18)
@@ -610,3 +611,7 @@ def infobox(plot, resdict, args, cen=True, relative_pab=False):
                     (resdict['yc'], abs(resdict['ycu'] - resdict['yc']), 
                     abs(resdict['ycl'] - resdict['yc'])),
                     transform=plot.transAxes, size=fontsize)
+    if args.scatter:
+        plot.text(.1, ys[8], r'$\sigma_v$: %0.1f,   $\sigma_s^2$: %0.1f' 
+                % (resdict['vel_scatter'], resdict['sig_scatter']), 
+                transform=plot.transAxes, size=fontsize)

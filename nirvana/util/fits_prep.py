@@ -302,7 +302,7 @@ def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
     if not isfits: meds = dynmeds(chains)
 
     #get appropriate number of edges  by looking at length of meds
-    nbins = (len(meds) - args.nglobs - fixcent)/4
+    nbins = (len(meds) - args.nglobs - fixcent - 2*args.scatter)/4
     if not nbins.is_integer(): 
         raise ValueError('Dynesty output array has a bad shape.')
     else: nbins = int(nbins)

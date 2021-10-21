@@ -304,6 +304,7 @@ def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
     #get appropriate number of edges  by looking at length of meds
     nbins = (len(meds) - args.nglobs - fixcent - 2*args.scatter)/4
     if not nbins.is_integer(): 
+        print(len(meds), args.nglobs, fixcent, 2*args.scatter, nbins)
         raise ValueError('Dynesty output array has a bad shape.')
     else: nbins = int(nbins)
 
@@ -311,8 +312,8 @@ def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
     if not isfits:
         if gal is None: args.setedges(nbins - 1 + args.fixcent, nbin=True, maxr=maxr)
         resdict = profs(chains, args, stds=True)
-        resdict['plate'] = plate
-        resdict['ifu'] = ifu
+        resdict['plate'] = galmeta.plate if galmeta is not None else None
+        resdict['ifu'] = galmeta.ifu if galmeta is not None else None
         resdict['type'] = 'Stars' if stellar else 'Gas'
     else:
         args.edges = resdict['bin_edges'][~resdict['velmask']]
@@ -322,10 +323,10 @@ def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
 
     return args, resdict
 
-def extractfile(f, remotedir=None, gal=None):
+def extractfile(f, remotedir=None, gal=None, galmeta=None):
     try: 
         #get info out of each file and make bisym model
-        args, resdict = fileprep(f, remotedir=remotedir, gal=gal)
+        args, resdict = fileprep(f, remotedir=remotedir, gal=gal, galmeta=galmeta)
 
         inc, pa, pab, vsys, xc, yc = args.guess[:6]
         arc, asymmap = asymmetry(args.kin, pa, vsys, xc, yc)
@@ -366,29 +367,31 @@ def dictformatting(d, drp=None, dap=None, padding=20, fill=-9999, drpalldir='.',
     if dap is None:
         dapfile = glob(dapalldir + '/dapall*')[0]
         dap = fits.open(dapfile)[1].data
-    try:
-        data = list(d.values())
-        for i in range(len(data)):
-            #put arrays into longer array to make them the same length
-            if padding and type(data[i]) is np.ndarray:
-                dnew = np.ones(padding) * fill
-                dnew[:len(data[i])] = data[i]
-                data[i] = dnew
+    #try:
+    data = list(d.values())
+    for i in range(len(data)):
+        #put arrays into longer array to make them the same length
+        if padding and type(data[i]) is np.ndarray:
+            dnew = np.ones(padding) * fill
+            dnew[:len(data[i])] = data[i]
+            data[i] = dnew
 
-        #make mask to get rid of extra padding in arrays
-        velmask = np.ones(padding,dtype=bool)
-        velmask[:len(d['vt'])] = False
-        sigmask = np.ones(padding,dtype=bool)
-        sigmask[:len(d['sig'])] = False
+    #make mask to get rid of extra padding in arrays
+    velmask = np.ones(padding,dtype=bool)
+    velmask[:len(d['vt'])] = False
+    sigmask = np.ones(padding,dtype=bool)
+    sigmask[:len(d['sig'])] = False
 
-        #corresponding indicies in dapall and drpall
-        drpindex = np.where(drp['plateifu'] == f"{d['plate']}-{d['ifu']}")[0][0]
-        dapindex = np.where(dap['plateifu'] == f"{d['plate']}-{d['ifu']}")[0][0]
-        data += [velmask, sigmask, drpindex, dapindex]
+    #corresponding indicies in dapall and drpall
+    print(d['plate'],d['ifu'])
+    drpindex = np.where(drp['plateifu'] == f"{d['plate']}-{d['ifu']}")[0][0]
+    dapindex = np.where(dap['plateifu'] == f"{d['plate']}-{d['ifu']}")[0][0]
+    data += [velmask, sigmask, drpindex, dapindex]
 
     #failure for empty dict
-    except:
-        data = None
+    #except Exception as e:
+    #    print(e)
+    #    data = None
 
     return data
 
@@ -461,7 +464,7 @@ def imagefits(f, galmeta, gal=None, outfile=None, padding=20, remotedir=None, ou
         except: raise FileNotFoundError('Could not load .gal file')
 
     #get relevant data
-    args, arc, asymmap, resdict = extractfile(f, remotedir=remotedir, gal=gal)
+    args, arc, asymmap, resdict = extractfile(f, remotedir=remotedir, gal=gal, galmeta=galmeta)
     if gal is not None: args = gal
     resdict['bin_edges'] = np.array(args.edges)
     r, th = projected_polar(args.kin.x - resdict['xc'], args.kin.y - resdict['yc'], *np.radians((resdict['pa'], resdict['inc'])))
@@ -472,7 +475,7 @@ def imagefits(f, galmeta, gal=None, outfile=None, padding=20, remotedir=None, ou
     data += [*np.delete(args.bounds.T, slice(7,-1), axis=1)]
 
     names = list(resdict.keys()) + ['velmask','sigmask','drpindex','dapindex','prior_lbound','prior_ubound']
-    dtypes = ['f4','f4','f4','f4','f4','f4','20f4','20f4','20f4','20f4',
+    dtypes = ['f4','f4','f4','f4','f4','f4','20f4','20f4','20f4','20f4', 'f4', 'f4',
               'f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4',
               '20f4','20f4','20f4','20f4','20f4','20f4','20f4','20f4',
               'I','I','S','f4','20f4','20?','20?','I','I','8f4','8f4']

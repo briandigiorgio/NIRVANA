@@ -162,8 +162,8 @@ def ptform(params, args):
 
     #do scatter terms with logunif
     if args.scatter:
-        velscp = unifprior('vel_scatter', paramdict, bounddict, func=np.log10)
-        sigscp = unifprior('sig_scatter', paramdict, bounddict, func=np.log10)
+        velscp = unifprior('vel_scatter', paramdict, bounddict, func=lambda x:10**x)
+        sigscp = unifprior('sig_scatter', paramdict, bounddict, func=lambda x:10**x)
 
     #repack all the velocities
     repack += [*vtp, *v2tp, *v2rp]

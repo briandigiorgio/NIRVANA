@@ -12,11 +12,11 @@ try:
 except:
     pyfftw = None
 
-#try:
-#    import cupy as cp
-#except:
-#    cp = None
-cp = None
+try:
+    import cupy as cp
+except:
+    cp = None
+#cp = None
 
 def gauss2d_kernel(n, sigma):
     """

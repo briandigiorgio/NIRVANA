@@ -20,11 +20,11 @@ try:
 except:
     pyfftw = None
 
-#try:
-#    import cupy as cp
-#except:
-#    cp = None
-cp = None
+try:
+    import cupy as cp
+except:
+    cp = None
+#cp = None
 
 import dynesty
 

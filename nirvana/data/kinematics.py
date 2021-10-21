@@ -19,11 +19,11 @@ try:
     import theano.tensor as tt
 except:
     tt = None
-#try:
-#    import cupy as cp
-#except:
-#    cp = None
-cp = None
+try:
+    import cupy as cp
+except:
+    cp = None
+#cp = None
 
 from .util import get_map_bin_transformations, impose_positive_definite
 

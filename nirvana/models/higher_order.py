@@ -4,11 +4,11 @@ from .beam import smear, ConvolveFFTW
 from ..data.util import unpack
 from .geometry import projected_polar
 
-#try:
-#    import cupy as cp
-#except:
-#    cp = None
-cp = None
+try:
+    import cupy as cp
+except:
+    cp = None
+#cp = None
 
 def bisym_model(args, paramdict, plot=False, relative_pab=False):
     '''

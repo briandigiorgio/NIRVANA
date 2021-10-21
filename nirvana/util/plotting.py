@@ -96,17 +96,14 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
     if args.kin.vel_ivar is None: args.kin.vel_ivar = np.ones_like(args.kin.vel)
     if args.kin.sig_ivar is None: args.kin.sig_ivar = np.ones_like(args.kin.sig)
 
-    #calculate number of variables
-    if 'velmask' in resdict:
-        fill = len(resdict['velmask'])
-        fixcent = resdict['vt'][0] == 0
-        lenmeds = 6 + 3*(fill - resdict['velmask'].sum() - fixcent) + (fill - resdict['sigmask'].sum())
-    else: lenmeds = len(resdict['vt'])
-    nvar = len(args.kin.vel) + len(args.kin.sig) - lenmeds
-
-    #calculate reduced chisq for vel and sig
-    rchisqv = np.sum((vel_r - velmodel)**2 * args.kin.remap('vel_ivar')) / nvar
-    rchisqs = np.sum((sig_r - sigmodel)**2 * args.kin.remap('sig_ivar')) / nvar
+    #calculate chisq maps
+    vel_ivar = args.kin.remap('vel_ivar')
+    sig_ivar = args.kin.remap('sig_phys2_ivar')**.5
+    if args.scatter:
+        vel_ivar = 1/(1/vel_ivar + resdict['vel_scatter']**2)
+        sig_ivar = 1/(1/sig_ivar + resdict['sig_scatter']**2)
+    velchisq = (vel_r - velmodel)**2 * vel_ivar
+    sigchisq = (sig_r - sigmodel)**2 * sig_ivar
 
     #print global parameters on figure
     fig = plt.figure(figsize = (12,9))
@@ -182,7 +179,6 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
     #Chisq from vel fit
     plt.subplot(3,4,8)
     plt.title('Velocity Chi Squared')
-    velchisq = (vel_r - velmodel)**2 * args.kin.remap('vel_ivar')
     plt.imshow(velchisq, 'jet', origin='lower', vmin=0, vmax=50)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
@@ -221,7 +217,6 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
     #Chisq from sig fit
     plt.subplot(3,4,12)
     plt.title('Dispersion Chi Squared')
-    sigchisq = (sig_r - sigmodel)**2 * args.kin.remap('sig_ivar')
     plt.imshow(sigchisq, 'jet', origin='lower', vmin=0, vmax=50)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     cax = mal(plt.gca()).append_axes('right', size='5%', pad=.05)
@@ -575,8 +570,13 @@ def infobox(plot, resdict, args, cen=True, relative_pab=False):
     nvar = len(args.kin.vel) + len(args.kin.sig) - lenmeds
 
     #calculate reduced chisq for vel and sig
-    rchisqv = np.sum((vel_r - velmodel)**2 * args.kin.remap('vel_ivar')) / nvar
-    rchisqs = np.sum((sig_r - sigmodel)**2 * args.kin.remap('sig_phys2_ivar')**.5) / nvar
+    vel_ivar = args.kin.remap('vel_ivar')
+    sig_ivar = args.kin.remap('sig_phys2_ivar')**.5
+    if args.scatter:
+        vel_ivar = 1/(1/vel_ivar + resdict['vel_scatter']**2)
+        sig_ivar = 1/(1/sig_ivar + resdict['sig_scatter']**2)
+    rchisqv = np.sum((vel_r - velmodel)**2 * vel_ivar) / nvar
+    rchisqs = np.sum((sig_r - sigmodel)**2 * sig_ivar) / nvar
 
     #print global parameters on figure
     plot.axis('off')

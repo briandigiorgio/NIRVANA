@@ -160,10 +160,10 @@ def ptform(params, args):
         ycp = unifprior('yc', paramdict, bounddict)
         repack += [xcp,ycp]
 
-    #do scatter terms
+    #do scatter terms with logunif
     if args.scatter:
-        velscp = unifprior('vel_scatter', paramdict, bounddict)
-        sigscp = unifprior('sig_scatter', paramdict, bounddict)
+        velscp = unifprior('vel_scatter', paramdict, bounddict, func=np.log10)
+        sigscp = unifprior('sig_scatter', paramdict, bounddict, func=np.log10)
 
     #repack all the velocities
     repack += [*vtp, *v2tp, *v2rp]
@@ -213,9 +213,11 @@ def loglike(params, args, squared=False):
 
     #add in penalty for non smooth rotation curves
     if args.weight != -1:
-        llike = llike - smoothing(paramdict['vt'],  args.weight) \
-                      - smoothing(paramdict['v2t'], args.weight) \
-                      - smoothing(paramdict['v2r'], args.weight)
+        if args.scatter: velweight = args.weight / paramdict['vel_scatter']
+        else: velweight = args.weight
+        llike = llike - smoothing(paramdict['vt'],  velweight) \
+                      - smoothing(paramdict['v2t'], velweight) \
+                      - smoothing(paramdict['v2r'], velweight)
 
     #add in sigma model if applicable
     if sigmodel is not None:
@@ -238,22 +240,26 @@ def loglike(params, args, squared=False):
             else:
                 sigdataivar = 1/(1/sigdataivar + args.noise_floor**2)
             siglike = siglike * sigdataivar - .5 * np.log(2*np.pi * sigdataivar)
-        #print(f'vellike = {llike}, siglike = {-.5*np.ma.sum(siglike)}')
+
         llike -= .5*np.ma.sum(siglike)
 
         #smooth profile
         if args.weight != -1:
-            llike -= smoothing(paramdict['sig'], args.weight*.1)
+            if args.scatter: sigweight = args.weight / paramdict['sig_scatter']
+            else: sigweight = args.weight
+            llike -= smoothing(paramdict['sig'], sigweight*.1)
 
     #apply a penalty to llike if 2nd order terms are too large
     if hasattr(args, 'penalty') and args.penalty:
+        if args.scatter: penalty = args.penalty / paramdict['vel_scatter']
+        else: penalty = args.penalty
         vtm  = paramdict['vt' ].mean()
         v2tm = paramdict['v2t'].mean()
         v2rm = paramdict['v2r'].mean()
 
         #scaling penalty if 2nd order profs are big
-        llike -= args.penalty * (v2tm - vtm)/vtm
-        llike -= args.penalty * (v2rm - vtm)/vtm
+        llike -= penalty * (v2tm - vtm)/vtm
+        llike -= penalty * (v2rm - vtm)/vtm
 
     return llike
 

@@ -223,6 +223,7 @@ def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
             table = fitsfile[1].data
             maxr = fitsfile[0].header['maxr']
             smearing = fitsfile[0].header['smearing'] if smearing is None else smearing
+            scatter = fitsfile[0].header['scatter']
 
         #unpack bintable into dict
         keys = table.columns.names
@@ -239,8 +240,10 @@ def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
                 kin = MaNGAStellarKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir)
             else:
                 kin = MaNGAGasKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir)
+            scatter = ('vel_scatter' in resdict.keys()) and (resdict['vel_scatter' != 0)
         else:
             kin = gal
+            scatter = gal.scatter
 
         fill = len(resdict['velmask'])
         fixcent = resdict['vt'][0] == 0
@@ -367,31 +370,31 @@ def dictformatting(d, drp=None, dap=None, padding=20, fill=-9999, drpalldir='.',
     if dap is None:
         dapfile = glob(dapalldir + '/dapall*')[0]
         dap = fits.open(dapfile)[1].data
-    #try:
-    data = list(d.values())
-    for i in range(len(data)):
-        #put arrays into longer array to make them the same length
-        if padding and type(data[i]) is np.ndarray:
-            dnew = np.ones(padding) * fill
-            dnew[:len(data[i])] = data[i]
-            data[i] = dnew
+    try:
+        data = list(d.values())
+        for i in range(len(data)):
+            #put arrays into longer array to make them the same length
+            if padding and type(data[i]) is np.ndarray:
+                dnew = np.ones(padding) * fill
+                dnew[:len(data[i])] = data[i]
+                data[i] = dnew
 
-    #make mask to get rid of extra padding in arrays
-    velmask = np.ones(padding,dtype=bool)
-    velmask[:len(d['vt'])] = False
-    sigmask = np.ones(padding,dtype=bool)
-    sigmask[:len(d['sig'])] = False
+        #make mask to get rid of extra padding in arrays
+        velmask = np.ones(padding,dtype=bool)
+        velmask[:len(d['vt'])] = False
+        sigmask = np.ones(padding,dtype=bool)
+        sigmask[:len(d['sig'])] = False
 
-    #corresponding indicies in dapall and drpall
-    print(d['plate'],d['ifu'])
-    drpindex = np.where(drp['plateifu'] == f"{d['plate']}-{d['ifu']}")[0][0]
-    dapindex = np.where(dap['plateifu'] == f"{d['plate']}-{d['ifu']}")[0][0]
-    data += [velmask, sigmask, drpindex, dapindex]
+        #corresponding indicies in dapall and drpall
+        print(d['plate'],d['ifu'])
+        drpindex = np.where(drp['plateifu'] == f"{d['plate']}-{d['ifu']}")[0][0]
+        dapindex = np.where(dap['plateifu'] == f"{d['plate']}-{d['ifu']}")[0][0]
+        data += [velmask, sigmask, drpindex, dapindex]
 
-    #failure for empty dict
-    #except Exception as e:
-    #    print(e)
-    #    data = None
+    failure for empty dict
+    except Exception as e:
+        print(e)
+        data = None
 
     return data
 
@@ -471,6 +474,10 @@ def imagefits(f, galmeta, gal=None, outfile=None, padding=20, remotedir=None, ou
     r = args.kin.remap(r)
     th = args.kin.remap(th)
 
+    if not args.scatter or 'vel_scatter' not in resdict.keys():
+        resdict['vel_scatter'] = 0
+        resdict['sig_scatter'] = 0
+
     data = dictformatting(resdict, padding=padding, drpalldir=drpalldir, dapalldir=dapalldir)
     data += [*np.delete(args.bounds.T, slice(7,-1), axis=1)]
 
@@ -511,6 +518,7 @@ def imagefits(f, galmeta, gal=None, outfile=None, padding=20, remotedir=None, ou
     hdr['smearing'] = (args.smearing, 'Whether PSF smearing was used')
     hdr['ivar_flr'] = (args.noise_floor, 'Noise added to ivar arrays in quadrature')
     hdr['penalty'] = (args.penalty, 'Penalty for large 2nd order terms')
+    hdr['scatter'] = (args.scatter, 'Whether intrinsic scatter was included')
 
     avmax, ainc, apa, ahrot, avsys = args.getguess(simple=True, galmeta=galmeta)
     hdr['a_vmax'] = (avmax, 'Axisymmetric asymptotic velocity in km/s')
@@ -522,7 +530,7 @@ def imagefits(f, galmeta, gal=None, outfile=None, padding=20, remotedir=None, ou
     t = Table(names=names, dtype=dtypes)
     t.add_row(data)
     reordered = ['plate','ifu','type','drpindex','dapindex','bin_edges','prior_lbound','prior_ubound',
-          'xc','yc','inc','pa','pab','vsys','vt','v2t','v2r','sig','velmask','sigmask',
+          'xc','yc','inc','pa','pab','vsys','vt','v2t','v2r','sig','velmask','sigmask', 'vel_scatter', 'sig_scatter',
           'xcl','ycl','incl','pal','pabl','vsysl','vtl','v2tl','v2rl','sigl',
           'xcu','ycu','incu','pau','pabu','vsysu','vtu','v2tu','v2ru','sigu','a_rc']
     t = t[reordered]

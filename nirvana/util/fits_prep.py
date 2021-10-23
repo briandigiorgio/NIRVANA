@@ -240,7 +240,7 @@ def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
                 kin = MaNGAStellarKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir)
             else:
                 kin = MaNGAGasKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir)
-            scatter = ('vel_scatter' in resdict.keys()) and (resdict['vel_scatter' != 0)
+            scatter = ('vel_scatter' in resdict.keys()) and (resdict['vel_scatter'] != 0)
         else:
             kin = gal
             scatter = gal.scatter
@@ -290,7 +290,7 @@ def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
 
     #set relevant parameters for galaxy
     if isinstance(kin, FitArgs): args = kin
-    else: args = FitArgs(kin, smearing=smearing)
+    else: args = FitArgs(kin, smearing=smearing, scatter=scatter)
     args.setdisp(True)
     args.setnglobs(4) if not cen else args.setnglobs(6)
     args.setfixcent(fixcent)
@@ -391,7 +391,7 @@ def dictformatting(d, drp=None, dap=None, padding=20, fill=-9999, drpalldir='.',
         dapindex = np.where(dap['plateifu'] == f"{d['plate']}-{d['ifu']}")[0][0]
         data += [velmask, sigmask, drpindex, dapindex]
 
-    failure for empty dict
+    #failure for empty dict
     except Exception as e:
         print(e)
         data = None

@@ -77,7 +77,12 @@ def bisym_model(args, paramdict, plot=False, relative_pab=False):
 
     if args.kin.beam_fft is not None:
         if hasattr(args, 'smearing') and not args.smearing: pass
-        else: sbmodel, velmodel, sigmodel = smear(velmodel, args.beam_fft_r, sb=args.sb_r, 
+        else: 
+            try:
+                sbmodel, velmodel, sigmodel = smear(velmodel, args.beam_fft_r, sb=args.sb_r, 
+                sig=sigmodel, beam_fft=True, cnvfftw=conv, verbose=False)
+            except:
+                sbmodel, velmodel, sigmodel = smear(velmodel, args.kin.beam_fft, sb=args.kin.remap('sb'), 
                 sig=sigmodel, beam_fft=True, cnvfftw=conv, verbose=False)
 
     #remasking after convolution

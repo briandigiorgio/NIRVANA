@@ -482,10 +482,10 @@ def imagefits(f, galmeta, gal=None, outfile=None, padding=20, remotedir=None, ou
     data += [*np.delete(args.bounds.T, slice(7,-1), axis=1)]
 
     names = list(resdict.keys()) + ['velmask','sigmask','drpindex','dapindex','prior_lbound','prior_ubound']
-    dtypes = ['f4','f4','f4','f4','f4','f4','20f4','20f4','20f4','20f4', 'f4', 'f4',
+    dtypes = ['f4','f4','f4','f4','f4','f4','20f4','20f4','20f4','20f4',
               'f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4',
               '20f4','20f4','20f4','20f4','20f4','20f4','20f4','20f4',
-              'I','I','S','f4','20f4','20?','20?','I','I','8f4','8f4']
+              'I','I','S','f4','20f4','f4','f4','20?','20?','I','I','8f4','8f4']
 
     #add parameters to the header
     #if galmeta==None:

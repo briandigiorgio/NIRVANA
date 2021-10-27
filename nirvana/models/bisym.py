@@ -20,11 +20,11 @@ try:
 except:
     pyfftw = None
 
-try:
-    import cupy as cp
-except:
-    cp = None
-#cp = None
+#try:
+#    import cupy as cp
+#except:
+#    cp = None
+cp = None
 
 import dynesty
 
@@ -324,7 +324,7 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         cores=10, maxr=None, cen=True, weight=10, smearing=True, points=500,
         stellar=False, root=None, verbose=False, disp=True, 
         fixcent=True, method='dynesty', remotedir=None, floor=5, penalty=100,
-        mock=None, covar=False, scatter=True):
+        mock=None, covar=False, scatter=False):
     '''
     Main function for fitting a MaNGA galaxy with a nonaxisymmetric model.
 

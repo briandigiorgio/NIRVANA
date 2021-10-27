@@ -247,7 +247,7 @@ def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
 
         fill = len(resdict['velmask'])
         fixcent = resdict['vt'][0] == 0
-        lenmeds = 6 + 3*(fill - resdict['velmask'].sum() - fixcent) + (fill - resdict['sigmask'].sum())
+        lenmeds = 6 + 3*(fill - resdict['velmask'].sum() - fixcent) + (fill - resdict['sigmask'].sum()) + 2*scatter
         meds = np.zeros(lenmeds)
 
     else:

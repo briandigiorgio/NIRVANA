@@ -15,16 +15,6 @@ from astropy.stats import sigma_clip
 import matplotlib.pyplot as plt
 import warnings
 
-try:
-    import theano.tensor as tt
-except:
-    tt = None
-#try:
-#    import cupy as cp
-#except:
-#    cp = None
-cp = None
-
 from .util import get_map_bin_transformations, impose_positive_definite
 
 from ..models.beam import construct_beam, ConvolveFFTW, smear
@@ -508,7 +498,7 @@ class Kinematics():
             m = mask
 
         # Check the shapes (overkill if the user selected an attribute...)    
-        if d.shape != self.vel.shape and tt is not None and type(d) is not tt.TensorVariable:
+        if d.shape != self.vel.shape:
             raise ValueError('To remap, data must have the same shape as the internal data '
                              'attributes: {0}'.format(self.vel.shape))
         if m is not None and m.shape != self.vel.shape:
@@ -759,20 +749,3 @@ class Kinematics():
                      snr < min_sig_snr)
         self.reject(vel_rej=vel_rej, sig_rej=sig_rej)
         return vel_rej, sig_rej
-
-    def cupy_convert(self):
-        '''
-        Convert all attributes that are numpy arrays to cupy arrays.
-
-        If CuPy is installed correctly and a GPU is available, converting
-        things to CuPy arrays should allow certain tasks to be offloaded to
-        the GPU, potentially speeding up computation considerably.
-        '''
-        if cp is None:
-            raise ImportError('CuPy did not import correctly. Cannot convert arrays')
-
-        attrs = [a for a in dir(self) if '__' not in a]
-        for a in attrs:
-            if isinstance(getattr(self, a), np.ndarray):
-                try: setattr(self, cp.array(getattr(self, a)))
-                except: pass

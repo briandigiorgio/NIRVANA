@@ -77,9 +77,9 @@ def bisym_model(args, paramdict, plot=False, relative_pab=False):
 
 
     #apply beam smearing if beam is given
-    conv = ConvolveFFTW(args.kin.spatial_shape)
-    #try: conv
-    #except: conv = None
+    #conv = ConvolveFFTW(args.kin.spatial_shape)
+    try: conv
+    except: conv = None
 
     if args.kin.beam_fft is not None:
         if hasattr(args, 'smearing') and not args.smearing: pass

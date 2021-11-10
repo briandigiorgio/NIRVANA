@@ -314,6 +314,7 @@ class FitArgs:
 
         #clip on surface brightness and ANR
         if self.kin.sb is not None: 
+            self.kin.sb[self.kin.sb < 0] = 0.
             sbmask = (self.kin.sb < sbf) | (self.kin.sb > 50)
             masks += [sbmask]
             labels += ['sb']

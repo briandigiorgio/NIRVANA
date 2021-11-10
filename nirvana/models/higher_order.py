@@ -85,7 +85,7 @@ def bisym_model(args, paramdict, plot=False, relative_pab=False):
         if hasattr(args, 'smearing') and not args.smearing: pass
         else: 
             sbmodel, velmodel, sigmodel = smear(velmodel, args.kin.beam_fft, sb=args.kin.remap('sb'), 
-            sig=sigmodel, beam_fft=True, cnvfftw=conv, verbose=True)
+            sig=sigmodel, beam_fft=True, cnvfftw=conv, verbose=False)
         if debug:
             plt.subplot(222)
             plt.imshow(velmodel, cmap='jet', origin='lower', vmin=-200, vmax=200)
@@ -104,9 +104,9 @@ def bisym_model(args, paramdict, plot=False, relative_pab=False):
 
     #return a 2D array for plotting reasons
     if plot:
-        velremap = args.kin.remap(binvel, masked=True)
+        velremap = args.kin.remap(binvel, args.kin.vel_mask)
         if sigmodel is not None: 
-            sigremap = args.kin.remap(binsig, masked=True)
+            sigremap = args.kin.remap(binsig, args.kin.vel_mask)
             if debug:
                 plt.subplot(224)
                 plt.imshow(velremap, cmap='jet', origin='lower', vmin=-200, vmax=200)

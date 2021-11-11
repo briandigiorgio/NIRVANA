@@ -215,6 +215,17 @@ class ConvolveFFTW:
         self.ifft()
         return self.dcnv.real.copy()
 
+    def __reduce__(self):
+        '''
+        Internal method for pickling.
+
+        Returns:
+            :obj:`tuple`: Tuple of the class type and the arguments needed for
+            instantiating the class.
+        '''
+            
+        return (self.__class__, (self.shape, ))
+
     def fft(self, data, copy=True, shift=False):
         """
         Calculate the FFT of the provided data array.

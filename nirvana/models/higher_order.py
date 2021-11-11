@@ -4,11 +4,7 @@ from .beam import smear, ConvolveFFTW
 from ..data.util import unpack
 from .geometry import projected_polar
 
-#try:
-#    import cupy as cp
-#except:
-#    cp = None
-cp = None
+import matplotlib.pyplot as plt
 
 def bisym_model(args, paramdict, plot=False, relative_pab=False):
     '''
@@ -66,30 +62,40 @@ def bisym_model(args, paramdict, plot=False, relative_pab=False):
     else: 
         sigmodel = None
         #sb = None
+    debug=False
+    if debug:
+        plt.figure(figsize=(8,8))
+        plt.subplot(221)
+        plt.imshow(velmodel, cmap='jet', origin='lower', vmin=-200, vmax=200)
+        #plt.subplot(222)
+        #plt.imshow(sigmodel, cmap='jet', origin='lower')
+        #plt.subplot(223)
+        #plt.imshow(args.kin.remap('sb'), cmap='jet', origin='lower')
+        #plt.subplot(224)
+        #plt.imshow(args.kin.remap('sb')==0, cmap='jet', origin='lower')
+        #return
 
-    if cp is not None:
-        velmodel, sigmodel = cp.array([velmodel, sigmodel])
 
     #apply beam smearing if beam is given
+    #conv = ConvolveFFTW(args.kin.spatial_shape)
     try: conv
     except: conv = None
-    #print(conv)
 
     if args.kin.beam_fft is not None:
         if hasattr(args, 'smearing') and not args.smearing: pass
         else: 
-            try:
-                sbmodel, velmodel, sigmodel = smear(velmodel, args.beam_fft_r, sb=args.sb_r, 
-                sig=sigmodel, beam_fft=True, cnvfftw=conv, verbose=False)
-            except:
-                sbmodel, velmodel, sigmodel = smear(velmodel, args.kin.beam_fft, sb=args.kin.remap('sb'), 
-                sig=sigmodel, beam_fft=True, cnvfftw=conv, verbose=False)
+            sbmodel, velmodel, sigmodel = smear(velmodel, args.kin.beam_fft, sb=args.kin.remap('sb'), 
+            sig=sigmodel, beam_fft=True, cnvfftw=conv, verbose=False)
+        if debug:
+            plt.subplot(222)
+            plt.imshow(velmodel, cmap='jet', origin='lower', vmin=-200, vmax=200)
 
     #remasking after convolution
-    if cp is not None:
-        velmodel, sigmodel = [velmodel.get(), sigmodel.get()]
     if args.kin.vel_mask is not None: velmodel = np.ma.array(velmodel, mask=args.kin.remap('vel_mask'))
     if args.kin.sig_mask is not None: sigmodel = np.ma.array(sigmodel, mask=args.kin.remap('sig_mask'))
+    if debug:
+        plt.subplot(223)
+        plt.imshow(velmodel, cmap='jet', origin='lower', vmin=-200, vmax=200)
 
     #rebin data
     binvel = np.ma.MaskedArray(args.kin.bin(velmodel), mask=args.kin.vel_mask)
@@ -98,9 +104,12 @@ def bisym_model(args, paramdict, plot=False, relative_pab=False):
 
     #return a 2D array for plotting reasons
     if plot:
-        velremap = args.kin.remap(binvel, masked=True)
+        velremap = args.kin.remap(binvel, args.kin.vel_mask)
         if sigmodel is not None: 
-            sigremap = args.kin.remap(binsig, masked=True)
+            sigremap = args.kin.remap(binsig, args.kin.vel_mask)
+            if debug:
+                plt.subplot(224)
+                plt.imshow(velremap, cmap='jet', origin='lower', vmin=-200, vmax=200)
             return velremap, sigremap
         return velremap
 

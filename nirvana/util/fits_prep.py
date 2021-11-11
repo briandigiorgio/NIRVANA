@@ -234,6 +234,9 @@ def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
         for s in ['sig','sigl','sigu']:
             resdict[s] = resdict[s][resdict['sigmask'] == 0]
 
+        #failsafe
+        if 'Stars' in f: resdict['type'] = 'Stars'
+
         #get galaxy object
         if gal is None:
             if resdict['type'] == 'Stars':
@@ -249,6 +252,7 @@ def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
         fixcent = resdict['vt'][0] == 0
         lenmeds = 6 + 3*(fill - resdict['velmask'].sum() - fixcent) + (fill - resdict['sigmask'].sum()) + 2*scatter
         meds = np.zeros(lenmeds)
+
 
     else:
         isfits = False
@@ -288,6 +292,7 @@ def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
             else:
                 kin = MaNGAGasKinematics.from_plateifu(plate,ifu, ignore_psf=not smearing, remotedir=remotedir)
 
+        print(stellar)
     #set relevant parameters for galaxy
     if isinstance(kin, FitArgs): args = kin
     else: args = FitArgs(kin, smearing=smearing, scatter=scatter)

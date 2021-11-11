@@ -25,12 +25,13 @@ class FitArgs:
     data.
     '''
 
-    def __init__(self, kinematics, nglobs=6, weight=10, disp=True,
+    def __init__(self, kinematics, veltype='Gas', nglobs=6, weight=10, disp=True,
                 fixcent=True, noisefloor=5, penalty=100, npoints=500,
                 smearing=True, maxr=None, scatter=False, plate=None, ifu=None, 
                 edges=None, guess=None, nbins=None, bounds=None,
                 arc=None, asymmap=None):
 
+        self.veltype = veltype
         self.nglobs = nglobs
         self.weight = weight
         self.edges = edges
@@ -313,14 +314,21 @@ class FitArgs:
 
         #clip on surface brightness and ANR
         if self.kin.sb is not None: 
-            sbmask = self.kin.sb < sbf
+            self.kin.sb[self.kin.sb < 0] = 0.
+            sbmask = (self.kin.sb < sbf) | (self.kin.sb > 50)
             masks += [sbmask]
             labels += ['sb']
 
         if self.kin.sb_anr is not None:
-            anrmask = self.kin.sb_anr < anr
+            anrmask = (self.kin.sb_anr < anr) | (self.kin.sb_anr > 1000)
             masks += [anrmask]
             labels += ['anr']
+
+        #cut out spaxels with erroneously small errors
+        ivarmask = (self.kin.vel_ivar < 1e-5) | (self.kin.sb_ivar < 1e-5)\
+                 | (self.kin.sig_ivar < 1e-5)
+        masks += [ivarmask]
+        labels += ['ivar']
 
         #combine all masks and apply to data
         mask = np.zeros(self.kin.vel_mask.shape)
@@ -376,17 +384,17 @@ class FitArgs:
                 labels += ['resid', 'chisq']
                 print(f'Clipping converged after {niter} iterations')
 
-            plt.figure(figsize = (16,8))
-            plt.subplot(241)
+            plt.figure(figsize = (12,12))
+            plt.subplot(331)
             plt.axis('off')
             plt.imshow(origvel, cmap='jet', origin='lower')
             plt.title('Original vel')
-            plt.subplot(242)
+            plt.subplot(332)
             plt.axis('off')
             plt.imshow(origsig, cmap='jet', origin='lower')
             plt.title('Original sig')
             for i in range(len(masks)):
-                plt.subplot(243+i)
+                plt.subplot(333+i)
                 plt.axis('off')
                 plt.imshow(self.kin.remap(masks[i]), origin='lower')
                 plt.title(labels[i])

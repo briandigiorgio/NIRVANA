@@ -12,11 +12,7 @@ try:
 except:
     pyfftw = None
 
-#try:
-#    import cupy as cp
-#except:
-#    cp = None
-cp = None
+import matplotlib.pyplot as plt
 
 def gauss2d_kernel(n, sigma):
     """
@@ -88,16 +84,11 @@ def convolve_fft(data, kernel, kernel_fft=False, return_fft=False):
         print(f'nans in data: {(~np.isfinite(data)).sum()}, nans in kernel: {(~np.isfinite(kernel)).sum()}')
         raise ValueError('Data and kernel must both have valid values.')
 
-    if cp is None or any([isinstance(x, np.ndarray) for x in [data, kernel]]):
-        xp = np
-    else:
-        xp = cp
-
-    datafft = xp.fft.fftn(data)
-    kernfft = kernel if kernel_fft else np.fft.fftn(xp.fft.ifftshift(kernel))
+    datafft = np.fft.fftn(data)
+    kernfft = kernel if kernel_fft else np.fft.fftn(np.fft.ifftshift(kernel))
     fftmult = datafft * kernfft
 
-    return fftmult if return_fft else xp.fft.ifftn(fftmult).real
+    return fftmult if return_fft else np.fft.ifftn(fftmult).real
 
 
 class ConvolveFFTW:
@@ -342,41 +333,47 @@ def smear(v, beam, beam_fft=False, sb=None, sig=None, cnvfftw=None, verbose=Fals
     if sig is not None and sig.shape != v.shape:
         raise ValueError('Input velocity dispersion and velocity field array sizes must match.')
 
-    _cnv = convolve_fft if cnvfftw is None or cp is not None else cnvfftw
-
-    if cp is None or any([isinstance(x, np.ndarray) for x in [v, sb, sig, beam]]):
-        xp = np
-    else:
-        xp = cp
+    _cnv = convolve_fft if cnvfftw is None else cnvfftw
 
     # Pre-compute the beam FFT
-    bfft = beam if beam_fft else (xp.fft.fftn(xp.fft.ifftshift(beam))
+    bfft = beam if beam_fft else (np.fft.fftn(np.fft.ifftshift(beam))
                                     if cnvfftw is None else cnvfftw.fft(beam, shift=True))
 
     # Get the first moment of the beam-smeared intensity distribution
     if verbose: print('Convolving surface brightness...')
-    mom0 = _cnv(xp.ones(v.shape, dtype=float) if sb is None else sb, bfft, kernel_fft=True)
+    mom0 = _cnv(np.ones(v.shape, dtype=float) if sb is None else sb, bfft, kernel_fft=True)
 #    mom0 = None if sb is None else _cnv(sb, bfft, kernel_fft=True)
 
     # First moment
     if verbose: print('Convolving velocity field...',sb,v)
     mom1 = _cnv(v if sb is None else sb*v, bfft, kernel_fft=True)
+    if verbose:
+        plt.figure(figsize=(8,8))
+        plt.subplot(221)
+        plt.imshow(sb, origin='lower')
+        plt.subplot(222)
+        plt.imshow(mom0, origin='lower')
+        plt.subplot(223)
+        plt.imshow(np.log10(np.abs(mom1)), origin='lower')
     if mom0 is not None:
         mom1 /= (mom0 + (mom0 == 0.0))
+    if verbose:
+        plt.subplot(224)
+        plt.imshow(mom1, origin='lower')
 
     if sig is None:
         # Sigma not provided so we're done
         return mom0, mom1, None
 
     # Second moment
-    _sig = xp.square(v) + xp.square(sig)
+    _sig = np.square(v) + np.square(sig)
     if verbose: print('Convolving velocity dispersion...')
     mom2 = _cnv(_sig if sb is None else sb*_sig, bfft, kernel_fft=True)
     if mom0 is not None:
         mom2 /= (mom0 + (mom0 == 0.0))
     mom2 -= mom1**2
     mom2[mom2 < 0] = 0.0
-    return mom0, mom1, xp.sqrt(mom2)
+    return mom0, mom1, np.sqrt(mom2)
 
 
 def deriv_smear(v, dv, beam, beam_fft=False, sb=None, dsb=None, sig=None, dsig=None, cnvfftw=None):

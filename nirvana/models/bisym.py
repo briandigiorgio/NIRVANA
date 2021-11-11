@@ -8,8 +8,6 @@ import multiprocessing as mp
 import numpy as np
 from scipy import stats, optimize
 
-import matplotlib.pyplot as plt
-
 try:
     from tqdm import tqdm
 except:
@@ -19,12 +17,6 @@ try:
     import pyfftw
 except:
     pyfftw = None
-
-#try:
-#    import cupy as cp
-#except:
-#    cp = None
-cp = None
 
 import dynesty
 
@@ -38,6 +30,7 @@ from ..models.higher_order import bisym_model
 import warnings
 warnings.simplefilter('ignore', RuntimeWarning)
 
+import matplotlib.pyplot as plt
 
 def smoothing(array, weight=1):
     """
@@ -201,6 +194,9 @@ def loglike(params, args, squared=False):
 
     #compute chi squared value with error if possible
     llike = (velmodel - args.kin.vel)**2
+    #plt.figure()
+    #plt.imshow(args.kin.remap('vel'), cmap='jet', origin='lower')
+    #plt.show()
 
     #inflate ivar with noise floor
     if args.kin.vel_ivar is not None: 
@@ -425,7 +421,8 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
                     positive_definite=True)
 
         #set basic fit parameters for galaxy
-        args = FitArgs(kin, nglobs, weight, disp, fixcent, floor, penalty,
+        veltype = 'Stars' if stellar else 'Gas'
+        args = FitArgs(kin, veltype, nglobs, weight, disp, fixcent, floor, penalty,
                 points, smearing, maxr, scatter)
 
     #set bin edges
@@ -442,7 +439,6 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         raise ValueError('Galaxy unsuitable: too few radial bins')
 
     #define a variable for speeding up convolutions
-    #has to be a global because multiprocessing can't pickle cython
     global conv
     if pyfftw is not None: conv = ConvolveFFTW(args.kin.spatial_shape)
     else: conv = None
@@ -455,7 +451,6 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
 
     #clip and invert covariance matrices
     if args.kin.vel_covar is not None and covar: 
-        goodvel = ~args.kin.vel_mask
         #goodvelcovar = args.kin.vel_covar[np.ix_(goodvel, goodvel)]
         goodvelcovar = np.diag(1/args.kin.vel_ivar)[np.ix_(goodvel, goodvel)]# + 1e-10
         args.velcovinv = cinv(goodvelcovar)
@@ -502,15 +497,6 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         args.setbounds(incpad=3, incgauss=True)#, papad=10, pagauss=True)
     else: args.setbounds(incpad=3, incgauss=True)
     args.getasym()
-
-    if cp is not None:
-        #[exec(f"args.{a}_r = cp.array(args.vel.remap('{a}'))", locals(), globals()) for a in ['vel', 'sig', 'sig_phys2', 'sb', 'vel_ivar', 'sig_ivar', 'sig_phys2_ivar']]
-        args.sb_r = cp.array(args.kin.remap('sb'))
-        args.beam_fft_r = cp.array(args.kin.beam_fft)
-    else:
-        #[exec(f"args.{a}_r = args.vel.remap('{a}')", locals(), globals()) for a in ['vel', 'sig', 'sig_phys2', 'sb', 'vel_ivar', 'sig_ivar', 'sig_phys2_ivar']]
-        args.sb_r = args.kin.remap('sb')
-        args.beam_fft_r = args.kin.beam_fft
 
     #open up multiprocessing pool if needed
     if cores > 1 and method == 'dynesty':

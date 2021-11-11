@@ -439,9 +439,9 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         raise ValueError('Galaxy unsuitable: too few radial bins')
 
     #define a variable for speeding up convolutions
-    global conv
-    if pyfftw is not None: conv = ConvolveFFTW(args.kin.spatial_shape)
-    else: conv = None
+    #global conv
+    if pyfftw is not None: args.conv = ConvolveFFTW(args.kin.spatial_shape)
+    else: args.conv = None
 
     #starting positions for all parameters based on a quick fit
     #not used in dynesty

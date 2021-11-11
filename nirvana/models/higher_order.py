@@ -78,14 +78,14 @@ def bisym_model(args, paramdict, plot=False, relative_pab=False):
 
     #apply beam smearing if beam is given
     #conv = ConvolveFFTW(args.kin.spatial_shape)
-    try: conv
-    except: conv = None
+    #try: conv
+    #except: conv = None
 
     if args.kin.beam_fft is not None:
         if hasattr(args, 'smearing') and not args.smearing: pass
         else: 
             sbmodel, velmodel, sigmodel = smear(velmodel, args.kin.beam_fft, sb=args.kin.remap('sb'), 
-            sig=sigmodel, beam_fft=True, cnvfftw=conv, verbose=False)
+            sig=sigmodel, beam_fft=True, cnvfftw=args.conv, verbose=False)
         if debug:
             plt.subplot(222)
             plt.imshow(velmodel, cmap='jet', origin='lower', vmin=-200, vmax=200)

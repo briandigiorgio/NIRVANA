@@ -12,8 +12,6 @@ try:
 except:
     pyfftw = None
 
-import matplotlib.pyplot as plt
-
 def gauss2d_kernel(n, sigma):
     """
     Return a circular 2D Gaussian.
@@ -358,19 +356,8 @@ def smear(v, beam, beam_fft=False, sb=None, sig=None, cnvfftw=None, verbose=Fals
     # First moment
     if verbose: print('Convolving velocity field...',sb,v)
     mom1 = _cnv(v if sb is None else sb*v, bfft, kernel_fft=True)
-    if verbose:
-        plt.figure(figsize=(8,8))
-        plt.subplot(221)
-        plt.imshow(sb, origin='lower')
-        plt.subplot(222)
-        plt.imshow(mom0, origin='lower')
-        plt.subplot(223)
-        plt.imshow(np.log10(np.abs(mom1)), origin='lower')
     if mom0 is not None:
         mom1 /= (mom0 + (mom0 == 0.0))
-    if verbose:
-        plt.subplot(224)
-        plt.imshow(mom1, origin='lower')
 
     if sig is None:
         # Sigma not provided so we're done

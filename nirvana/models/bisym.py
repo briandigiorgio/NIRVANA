@@ -30,8 +30,6 @@ from ..models.higher_order import bisym_model
 import warnings
 warnings.simplefilter('ignore', RuntimeWarning)
 
-import matplotlib.pyplot as plt
-
 def smoothing(array, weight=1):
     """
     A penalty function for encouraging smooth arrays. 
@@ -194,9 +192,6 @@ def loglike(params, args, squared=False):
 
     #compute chi squared value with error if possible
     llike = (velmodel - args.kin.vel)**2
-    #plt.figure()
-    #plt.imshow(args.kin.remap('vel'), cmap='jet', origin='lower')
-    #plt.show()
 
     #inflate ivar with noise floor
     if args.kin.vel_ivar is not None: 
@@ -319,7 +314,7 @@ def covarlike(params, args):
 def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11', nbins=None,
         cores=10, maxr=None, cen=True, weight=10, smearing=True, points=500,
         stellar=False, root=None, verbose=False, disp=True, 
-        fixcent=True, method='dynesty', remotedir=None, floor=5, penalty=100,
+        fixcent=True, remotedir=None, floor=5, penalty=100,
         mock=None, covar=False, scatter=False):
     '''
     Main function for fitting a MaNGA galaxy with a nonaxisymmetric model.
@@ -367,9 +362,6 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
             2010. Not currently functional
         fixcent (:obj:`bool`, optional):
             Flag for whether to fix the center velocity bin at 0.
-        method (:obj:`str`, optional):
-            Which fitting method to use. Defaults to `'dynesty'` but can also
-            be 'lsq'`.
         remotedir (:obj:`str`, optional):
             If a directory is given, it will download data from sas into that
             base directory rather than looking for it locally
@@ -438,8 +430,7 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     if len(args.edges) - fixcent < 3:
         raise ValueError('Galaxy unsuitable: too few radial bins')
 
-    #define a variable for speeding up convolutions
-    #global conv
+    #set up fftw for speeding up convolutions
     if pyfftw is not None: args.conv = ConvolveFFTW(args.kin.spatial_shape)
     else: args.conv = None
 
@@ -491,7 +482,6 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     print(f'{nbin + args.fixcent} radial bins, {ndim} parameters')
     
     #prior bounds and asymmetry defined based off of guess
-    #args.setbounds()
     if galmeta is not None: 
         args.setphotpa(galmeta)
         args.setbounds(incpad=3, incgauss=True)#, papad=10, pagauss=True)
@@ -499,37 +489,20 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     args.getasym()
 
     #open up multiprocessing pool if needed
-    if cores > 1 and method == 'dynesty':
+    if cores > 1:
         pool = mp.Pool(cores)
         pool.size = cores
     else: pool = None
 
-    if method == 'lsq':
-        #minfunc = lambda x: loglike(x, args)
-        def minfunc(params):
-            velmodel, sigmodel = bisym_model(args, unpack(params, args))
-            velchisq = (velmodel - args.kin.vel)**2 * args.kin.vel_ivar
-            sigchisq = (sigmodel - args.kin.sig)**2 * args.kin.sig_ivar
-            return velchisq + sigchisq
+    #dynesty sampler with periodic pa and pab
+    if not covar: sampler = dynesty.NestedSampler(loglike, ptform, ndim, nlive=points,
+            periodic=[1,2], pool=pool,
+            ptform_args = [args], logl_args = [args], verbose=verbose)
+    else: sampler = dynesty.NestedSampler(covarlike, ptform, ndim, nlive=points,
+            periodic=[1,2], pool=pool,
+            ptform_args = [args], logl_args = [args], verbose=verbose)
+    sampler.run_nested()
 
-        lsqguess = np.append(args.guess, [np.median(args.sig)] * (args.nbins + args.fixcent))
-        sampler = optimize.least_squares(minfunc, x0=lsqguess, method='trf',
-                  bounds=(args.bounds[:,0], args.bounds[:,1]), verbose=2, diff_step=[.01] * len(lsqguess))
-        args.guess = lsqguess
-
-    elif method == 'dynesty':
-        #dynesty sampler with periodic pa and pab
-        if not covar: sampler = dynesty.NestedSampler(loglike, ptform, ndim, nlive=points,
-                periodic=[1,2], pool=pool,
-                ptform_args = [args], logl_args = [args], verbose=verbose)
-        else: sampler = dynesty.NestedSampler(covarlike, ptform, ndim, nlive=points,
-                periodic=[1,2], pool=pool,
-                ptform_args = [args], logl_args = [args], verbose=verbose)
-        sampler.run_nested()
-
-        if pool is not None: pool.close()
-
-    else:
-        raise ValueError('Choose a valid fitting method: dynesty or lsq')
+    if pool is not None: pool.close()
 
     return sampler, args

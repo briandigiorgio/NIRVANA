@@ -208,6 +208,9 @@ def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
             not found and are remotely downloaded.
         gal (:class:`~nirvana.data.fitargs.FitArgs`, optional):
             Galaxy object to use instead of loading the galaxy from scratch.
+        galmeta (:class:`~nirvana.data.manga.MaNGAGlobalPar`, optional):
+            Info on MaNGA galaxy used for plate and ifu
+
         
         Returns:
             :class:`~nirvana.data.fitargs.FitArgs`: Galaxy object containing
@@ -332,6 +335,39 @@ def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
     return args, resdict
 
 def extractfile(f, remotedir=None, gal=None, galmeta=None):
+    '''
+    Take a filename, open it, and extract the info needed for output files.
+
+    Tries to open a file using :func:`~nirvana.util.fits_prep.fileprep` to get
+    the :class:`~nirvana.data.fitargs.FitArgs` object and the dictionary of its
+    fit parameters. Then get its asymmetry parameter and map, returning all of
+    that.
+
+    Args:
+        f (:obj:`str`):
+            Complete filename to be extracted with
+            :func:`~nirvana.util.fits_prep.fileprep`.
+        remotedir (:obj:`str`, optional):
+            Directory to look for downloaded data in.
+        gal (:class:`~nirvana.data.fitargs.FitArgs`, optional):
+            Pre loaded galaxy object to use instead of reloading galaxy
+        galmeta (:class:`~nirvana.data.manga.MaNGAGlobalPar`, optional):
+            Global data used for :func:`~nirvana.util.fits_prep.fileprep`.
+
+    Returns:
+        :class:`~nirvana.data.fitargs.FitArgs`: Galaxy object
+
+        :obj:`float`: Asymmetry parameter
+
+        `numpy.ndarray`_: 2D map of spatially resolved asymmetry
+
+        :obj:`dict`: Dictionary of fit parameters
+
+    Raises:
+        Exception:
+            Raised if any part of the file extraction process fails. Should
+            provide a useful error message.
+    '''
     try: 
         #get info out of each file and make bisym model
         args, resdict = fileprep(f, remotedir=remotedir, gal=gal, galmeta=galmeta)
@@ -350,7 +386,28 @@ def extractfile(f, remotedir=None, gal=None, galmeta=None):
 
 def extractdir(cores=10, directory='/data/manga/digiorgio/nirvana/'):
     '''
-    Scan an entire directory for nirvana output files and extract useful data from them.
+    Scan an entire directory for nirvana output files and extract useful data
+    from them.
+
+    Looks for all available .nirv files in a given directory and runs
+    :func:`~nirvana.util.fits_prep.extractfile` on all of them, producing
+    arrays of the outputs. Uses multiprocessing for parallel loading of files.
+
+    Args:
+        cores (:obj:`int`, optional):
+            Number of cores to use for multiprocessing.
+        directory (:obj:`str`, optional):
+            Directory to look for .nirv files in.
+
+    Returns:
+        `numpy.ndarray`_: array of :class:`~nirvana.data.fitargs.FitArgs`
+        galaxy objects
+
+        `numpy.ndarray`_: array of :obj:`float` asymmetry parameters
+
+        `numpy.ndarray`_: array of 2D maps of spatially resolved asymmetry
+
+        `numpy.ndarray`_: array of :obj:`dict` dictionaries of fit parameters
     '''
 
     #find nirvana files
@@ -368,6 +425,42 @@ def extractdir(cores=10, directory='/data/manga/digiorgio/nirvana/'):
     return galaxies, arcs, asyms, dicts
 
 def dictformatting(d, drp=None, dap=None, padding=20, fill=-9999, drpalldir='.', dapalldir='.'):
+    '''
+    Reformat results dictionaries so they can be put into FITS tables.
+
+    Take the dictionaries that come out of
+    :func:`~nirvana.util.fits_prep.fileprep` and make their velocity profiles a
+    standard length to accommodate limitations of the FITS format. Also apply a
+    mask to the profiles with filler values.
+
+    Args:
+        d (:obj:`dict`):
+            Dictionary of fit results.
+        drp (`numpy.ndarray`_, optional):
+            Data array from DRPAll file
+        dap (`numpy.ndarray`_, optional):
+            Data array from DAPAll file
+        padding (:obj:`int`, optional):
+            Maximum length to pad velocity profiles out to
+        fill (:obj:`float`, optional):
+            Value to fill in while padding velocity profiles
+        drpalldir (:obj:`str`, optional):
+            Path to look for DRPAll files for. If the DRPAll array isn't
+            already supplied, it will look in this directory for files that
+            match 'drpall*' and load the first one.
+        dapalldir (:obj:`str`, optional):
+            Path to look for DAPAll files for. If the DAPAll array isn't
+            already supplied, it will look in this directory for files that
+            match 'dapall*' and load the first one.
+
+    Returns:
+        :obj:`dict`: Reformatted dictionary.
+
+    Raises:
+        Exception:
+            Raised if dictionary is empty or isn't in the correct format
+    '''
+
     #load dapall and drpall
     if drp is None:
         drpfile = glob(drpalldir + '/drpall*')[0]
@@ -403,21 +496,46 @@ def dictformatting(d, drp=None, dap=None, padding=20, fill=-9999, drpalldir='.',
 
     return data
 
-def makealltable(fname='', dir='.', vftype='', outfile=None, padding=20):
+def makealltable(fname='', dir='.', vftype='', outfile=None):
     '''
-    Take a list of dictionaries from extractdir and turn them into an astropy table (and a fits file if a filename is given).
+    Combine the fit parameter tables for all of the FITS files in a given
+    directory of a given velocity field type into one table.
+
+    Looks for all of the FITS files matching a certain filename and velocity
+    field type (stars or gas) and combines their tables of fit parameters into
+    one giant Astropy table. This can also be saved as another FITS file if a
+    filename is given.
+
+    Args:
+        fname (:obj:`str`, optional):
+            All FITS files containing this string will be loaded and combined
+        dir (:obj:`str`, optional):
+            Directory to look for FITS files in
+        vftype (:obj:`str`, optional):
+            Specific type of velocity field to get the FITS files for ('Stars' or 'Gas')
+        outfile (:obj:`str`, optional):
+            If given, the output table will be written to this filename
+
+    Returns:
+        :class:`~astropy.table.Table`: table of combined fit data
+
+    Raises:
+        FileNotFoundError:
+            Raised if no FITS files matching the description are found
     '''
 
     #load dapall and drpall
     drp = fits.open('/data/manga/spectro/redux/MPL-11/drpall-v3_1_1.fits')[1].data
     dap = fits.open('/data/manga/spectro/analysis/MPL-11/dapall-v3_1_1-3.1.0.fits')[1].data
 
+    #look for fits files
     fs = glob(f'{dir}/{fname}*{vftype}.fits')
     if len(fs) == 0:
         raise FileNotFoundError(f'No matching FITS files found in directory "{dir}"')
     else:
         print(len(fs), 'files found...')
 
+    #combine all fits tables into one list
     tables = []
     for f in tqdm(fs):
         try: 
@@ -435,9 +553,12 @@ def makealltable(fname='', dir='.', vftype='', outfile=None, padding=20):
             dtype = tables[i].dtype
         except: i += 1
 
+    #put all of the data from the tables into one array
     data = np.zeros(len(tables), dtype=dtype)
     for i in range(len(tables)):
         data[i] = tables[i]
+
+    #turn array into an astropy table
     t = Table(data)
 
     #apparently numpy doesn't handle its own uint and bool dtypes correctly
@@ -455,7 +576,20 @@ def maskedarraytofile(array, name=None, fill=0, hdr=None):
     '''
     Write a masked array to an HDU. 
     
-    Numpy says it's not implemented yet so I'm implementing it.
+    Numpy says it's not implemented yet so I'm implementing it. It takes a masked array, replaces the masked areas with a fill value, then writes it to an HDU.
+
+    Args:
+        array (`numpy.ma.array`_):
+            Masked array to be written to an HDU
+        name (:obj:`str`, optional):
+            Name for the HDU
+        fill (:obj:`float`, optional):
+            Fill value to put in masked areas
+        hdr (:class:`~astropy.fits.Header`, optional):
+            Header for resulting HDU
+
+    Returns:
+        :class:`~astropy.fits.ImageHDU`: HDU of the masked array
     '''
     array[array.mask] = fill
     array = array.data

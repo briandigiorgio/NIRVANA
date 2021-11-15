@@ -30,7 +30,7 @@ from ..data.fitargs import FitArgs
 from ..data.util import unpack
 from .fileio import initialize_primary_header, add_wcs, finalize_header
 
-def dynmeds(samp, stds=False, fixcent=True):
+def dynmeds(samp, stds=False):
     """
     Get median values for each variable's posterior in a
     `dynesty.NestedSampler`_ sampler.
@@ -78,7 +78,7 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
     Turn a sampler output by `nirvana` into a set of rotation curves.
     
     Args:
-        samp (:obj:`str`, `dynesty.NestedSampler`_, `dynesty.results.Results`_):
+        samp (:obj:`str`, :class:`~dynesty.NestedSampler`, :class:`~dynesty.results.Results`):
             Sampler, results, or file of dumped results from
             :func:`~nirvana.fitting.fit`
         args (:class:`~nirvana.data.fitargs.FitArgs`):
@@ -93,7 +93,7 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
             Number of radial bins in the sampler. Will be calculated
             automatically if not specified.
         **kwargs:
-            args for :func:`plt.plot`.
+            args for :func:`matplotlib.pyplot.plot`.
 
     Returns:
         :obj:`dict`: Dictionary with all of the median values of the
@@ -598,28 +598,71 @@ def maskedarraytofile(array, name=None, fill=0, hdr=None):
 
 def imagefits(f, galmeta, gal=None, outfile=None, padding=20, remotedir=None, outdir='', drpalldir='.', dapalldir='.'):
     '''
-    Make a fits file for an individual galaxy with its fit parameters and relevant data.
+    Make a FITS file for an individual galaxy with its fit parameters and
+    relevant data.
+
+    Take an output .nirv file (and optionally also the .gal file), load in all
+    of the data, reformat things so they can be put into a useful FITS file,
+    and write all of the relevant parameters, maps, and data into one FITS file
+    with several HDUs and useful headers.
+
+    Args:
+        f (:obj:`str`):
+            Filename of .nirv file to read and convert into a FITS file
+        galmeta (:class:`~nirvana.data.manga.MaNGAGlobalPar`):
+            Metadata for the galaxy
+        gal (:obj:`bool` or :class:`~nirvana.data.fitargs.FitArgs`, optional):
+            If `True`, will look for a .gal file with the same filename as `f`
+            in the same directory and load that in to use for galaxy data. If
+            :class:`~nirvana.data.fitargs.FitArgs`, will just use that object
+            instead. Otherwise, it will load from scratch.
+        outfile (:obj:`str`, optional):
+            Custom name for output FITS file. Will default to standardized one.
+        padding (:obj:`int`, optional):
+            Maximum number of radial velocity bins. Used to set size of FITS
+            tables.
+        remotedir (:obj:`str`, optional):
+            Remote directory to look for downloaded MaNGA data
+        outdir (:obj:`str`, optional):
+            Path to directory to save FITS file in
+        drpalldir (:obj:`str`, optional):
+            Path to look for DRPAll files for. If the DRPAll array isn't
+            already supplied, it will look in this directory for files that
+            match 'drpall*' and load the first one.
+        dapalldir (:obj:`str`, optional):
+            Path to look for DAPAll files for. If the DAPAll array isn't
+            already supplied, it will look in this directory for files that
+            match 'dapall*' and load the first one.
+            
+    Raises:
+        FileNotFoundError:
+            Raised if it can't find a .gal file with the same name as `f` when
+            user said there should be one
     '''
 
+    #load .gal file of same name rather than loading galaxy from scratch
     if gal==True: 
         try: gal = pickle.load(open(f[:-4] + 'gal', 'rb'))
         except: raise FileNotFoundError('Could not load .gal file')
 
     #get relevant data
     args, arc, asymmap, resdict = extractfile(f, remotedir=remotedir, gal=gal, galmeta=galmeta)
-    if gal is not None: args = gal
+    if gal is not None and gal: args = gal
     resdict['bin_edges'] = np.array(args.edges)
     r, th = projected_polar(args.kin.x - resdict['xc'], args.kin.y - resdict['yc'], *np.radians((resdict['pa'], resdict['inc'])))
     r = args.kin.remap(r)
     th = args.kin.remap(th)
 
+    #add scatter if necessary
     if not args.scatter or 'vel_scatter' not in resdict.keys():
         resdict['vel_scatter'] = 0
         resdict['sig_scatter'] = 0
 
+    #pad rotation curves
     data = dictformatting(resdict, padding=padding, drpalldir=drpalldir, dapalldir=dapalldir)
     data += [*np.delete(args.bounds.T, slice(7,-1), axis=1)]
 
+    #define column names and data types in order of resdict
     names = list(resdict.keys()) + ['velmask','sigmask','drpindex','dapindex','prior_lbound','prior_ubound']
     dtypes = ['f4','f4','f4','f4','f4','f4','20f4','20f4','20f4','20f4',
               'f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4','f4',
@@ -627,9 +670,6 @@ def imagefits(f, galmeta, gal=None, outfile=None, padding=20, remotedir=None, ou
               'I','I','S','f4','20f4','f4','f4','20?','20?','I','I','8f4','8f4']
 
     #add parameters to the header
-    #if galmeta==None:
-        #drpallfile = glob(drpalldir + '/drpall*')[0]
-        #galmeta = MaNGAGlobalPar(resdict['plate'], resdict['ifu'], drpall_file=drpallfile)
     hdr = initialize_primary_header(galmeta)
     maphdr = add_wcs(hdr, args.kin)
     psfhdr = hdr.copy()
@@ -668,14 +708,17 @@ def imagefits(f, galmeta, gal=None, outfile=None, padding=20, remotedir=None, ou
     #make table of fit data
     t = Table(names=names, dtype=dtypes)
     t.add_row(data)
+
+    #reorder all of the columns to a more sensical one than is in resdict
     reordered = ['plate','ifu','type','drpindex','dapindex','bin_edges','prior_lbound','prior_ubound',
           'xc','yc','inc','pa','pab','vsys','vt','v2t','v2r','sig','velmask','sigmask', 'vel_scatter', 'sig_scatter',
           'xcl','ycl','incl','pal','pabl','vsysl','vtl','v2tl','v2rl','sigl',
           'xcu','ycu','incu','pau','pabu','vsysu','vtu','v2tu','v2ru','sigu','a_rc']
     t = t[reordered]
+
+    #start creating list of HDUs
     bintable = fits.BinTableHDU(t, name='fit_params', header=hdr)
     hdus = [fits.PrimaryHDU(header=hdr), bintable]
-
     hdus += [maskedarraytofile(r, name='ell_r', hdr=finalize_header(maphdr, 'ell_r'))]
     hdus += [maskedarraytofile(th, name='ell_theta', hdr=finalize_header(maphdr, 'ell_th'))]
 
@@ -722,7 +765,7 @@ def imagefits(f, galmeta, gal=None, outfile=None, padding=20, remotedir=None, ou
 
 def fig2data(fig):
     '''
-    Take a `matplolib` figure and return it as an array of RGBA values.
+    Take a :class:`~matplotlib.pyplot.figure.Figure` and return it as an array of RGBA values.
 
     Stolen from somewhere on Stack Overflow.
 

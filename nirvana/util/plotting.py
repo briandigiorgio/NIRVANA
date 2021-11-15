@@ -76,6 +76,8 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
         remotedir (:obj:`str`, optional):
             Directory to load MaNGA data files from, or save them if they are
             not found and are remotely downloaded.
+        gal (:class:`~nirvana.data.fitargs.FitArgs`, optional):
+            Pre existing galaxy object to use instead of loading from scratch
     """
 
     #check if plot file already exists

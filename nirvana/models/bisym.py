@@ -71,6 +71,8 @@ def unifprior(key, params, bounds, indx=0, func=lambda x:x):
             format produced :func:`nirvana.fitting.unpack`.
         indx (:obj:`int`, optional):
             If the parameter is an array, what index of the array to start at.
+        func (:obj:`function`, optional):
+            Function used to map input values to bounds. Defaults to uniform.
     
     Returns:
         :obj:`float` or `numpy.ndarray`_ of transformed fit parameters.
@@ -162,7 +164,7 @@ def ptform(params, args):
     if args.scatter: repack += [velscp, sigscp]
     return repack
 
-def loglike(params, args, squared=False):
+def loglike(params, args):
     '''
     Log likelihood for :class:`dynesty.NestedSampler` fit. 
     
@@ -176,9 +178,6 @@ def loglike(params, args, squared=False):
         args (:class:`~nirvana.data.fitargs.FitArgs`):
             Object containing all of the data and settings needed for the
             galaxy.  
-        squared (:obj:`bool`, optional):
-            Whether to compute the chi squared against the square of the
-            dispersion profile or not. 
 
     Returns:
         :obj:`float`: Log likelihood value associated with parameters.
@@ -212,17 +211,10 @@ def loglike(params, args, squared=False):
 
     #add in sigma model if applicable
     if sigmodel is not None:
-        #compute chisq with squared sigma or not
-        if squared:
-            sigdata = args.kin.sig_phys2
-            sigdataivar = args.kin.sig_phys2_ivar if args.kin.sig_phys2_ivar is not None else np.ones_like(sigdata)
-            siglike = (sigmodel**2 - sigdata)**2
-
-        #calculate chisq with unsquared data
-        else:
-            sigdata = np.sqrt(args.kin.sig_phys2)
-            sigdataivar = np.sqrt(args.kin.sig_phys2_ivar) if args.kin.sig_phys2_ivar is not None else np.ones_like(sigdata)
-            siglike = (sigmodel - sigdata)**2
+        #compute chisq
+        sigdata = np.sqrt(args.kin.sig_phys2)
+        sigdataivar = np.sqrt(args.kin.sig_phys2_ivar) if args.kin.sig_phys2_ivar is not None else np.ones_like(sigdata)
+        siglike = (sigmodel - sigdata)**2
 
         #inflate ivar with noisefloor
         if sigdataivar is not None: 
@@ -270,9 +262,6 @@ def covarlike(params, args):
         args (:class:`~nirvana.data.fitargs.FitArgs`):
             Object containing all of the data and settings needed for the
             galaxy.  
-        squared (:obj:`bool`, optional):
-            Whether to compute the chi squared against the square of the
-            dispersion profile or not. 
 
     Returns:
         :obj:`float`: Log likelihood value associated with parameters.
@@ -376,6 +365,12 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
             A tuple of the `params` and `args` objects output by
             :func:`nirvana.plotting.fileprep` to fit instead of real data. Can
             be used to fit a galaxy with known parameters for testing purposes.
+        covar (:obj:`bool`, optional):
+            Whether to use the (currently nonfunctional) covariance likelihood
+            rather than the normal one
+        scatter (:obj:`bool`, optional):
+            Whether to include intrinsic scatter as a fit parameter. Currently
+            not working well.
 
     Returns:
         :class:`dynesty.NestedSampler`: Sampler from `dynesty` containing
@@ -383,10 +378,17 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         :class:`~nirvana.data.fitargs.FitArgs`: Object with all of the relevant
         data for the galaxy as well as the parameters used for the fit.
     '''
+
+    #set number of global parameters 
+    #inc, pa, pab, vsys by default, xc and yc optionally
     nglobs = 6 if cen else 4
+
+    #set up mock galaxy data with real residuals if desired
     if mock is not None:
         args, params, residnum = mock
         args.kin.vel, args.kin.sig = bisym_model(args, params)
+
+        #add in real residuals from fit
         if residnum:
             try:
                 residlib = np.load('residlib.dict', allow_pickle=True)

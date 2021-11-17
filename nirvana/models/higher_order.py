@@ -37,8 +37,10 @@ def bisym_model(args, paramdict, plot=False, relative_pab=False):
 
     #convert angles to polar and normalize radial coorinate
     inc, pa, pab = np.radians([paramdict['inc'], paramdict['pa'], paramdict['pab']])
-    pab = (pab - pa) % (2*np.pi)
     r, th = projected_polar(args.kin.grid_x-paramdict['xc'], args.kin.grid_y-paramdict['yc'], pa, inc)
+
+    #correct definition of pab for later
+    pab = .5 * (pab - pa) % (2*np.pi)
 
     #interpolate the velocity arrays over full coordinates
     if len(args.edges) != len(paramdict['vt']):
@@ -52,20 +54,18 @@ def bisym_model(args, paramdict, plot=False, relative_pab=False):
              - v2tvals * np.cos(2 * (th - pab)) * np.cos(th) \
              - v2rvals * np.sin(2 * (th - pab)) * np.sin(th))
 
-
     #define dispersion and surface brightness if desired
     if args.disp: 
         sigmodel = np.interp(r, args.edges, paramdict['sig'])
     else: 
         sigmodel = None
 
-
     #apply beam smearing if beam is given
     if args.kin.beam_fft is not None:
         conv = args.conv if hasattr(args, 'conv') else None
         if hasattr(args, 'smearing') and not args.smearing: pass
         else: 
-            sbmodel, velmodel, sigmodel = smear(velmodel, args.kin.beam_fft, sb=args.kin.remap('sb'), 
+            sbmodel, velmodel, sigmodel = smear(velmodel, args.kin.beam_fft, sb=args.kin.remap('sb').filled(0.), 
             sig=sigmodel, beam_fft=True, cnvfftw=conv, verbose=False)
 
     #remasking after convolution

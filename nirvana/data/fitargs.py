@@ -285,6 +285,7 @@ class FitArgs:
         #have to do this so the convolution doesn't barf
         filledvel = np.ma.array(self.kin.remap('vel'), mask=binmask)
         mask = filledvel.mask | binmask.data | (filledvel == 0).data
+        origmask = mask
         filledvel = filledvel.data
         filledvel[mask] = avel[mask]
 
@@ -315,13 +316,13 @@ class FitArgs:
         #clip on surface brightness and ANR
         if self.kin.sb is not None: 
             self.kin.sb[self.kin.sb < 0] = 0.
-            self.kin.sb[self.kin.sb > 100] = 0.
-            sbmask = (self.kin.sb < sbf) | (self.kin.sb > 50)
+            self.kin.sb[self.kin.sb > 300] = 0.
+            sbmask = (self.kin.sb < sbf) | (self.kin.sb > 300)
             masks += [sbmask]
             labels += ['sb']
 
         if self.kin.sb_anr is not None:
-            anrmask = (self.kin.sb_anr < anr) | (self.kin.sb_anr > 1000)
+            anrmask = (self.kin.sb_anr < anr) | (self.kin.sb_anr > 10000)
             masks += [anrmask]
             labels += ['anr']
 
@@ -376,6 +377,8 @@ class FitArgs:
 
             #apply mask to data
             self.kin.remask(clipmask)
+
+        self.kin.sb_mask = sbmask + self.kin.bin(origmask)
 
         #make a plot of all of the masks if desired
         if verbose: 

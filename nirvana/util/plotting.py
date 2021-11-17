@@ -513,6 +513,9 @@ def safeplot(f, func='sum', **kwargs):
     Args:
         f (:obj:`str`):
             Name of the `.fits` file you want to plot.
+        func (:obj:`str`, optional):
+            Use `sum` to plot data with
+            :func:`~nirvana.util.plotting.summaryplot` or `sep` to plot using
         kwargs (optional):
             Arguments for `~nirvana.plotting.summaryplot`.
     '''
@@ -520,6 +523,8 @@ def safeplot(f, func='sum', **kwargs):
     try:
         if func == 'sum': summaryplot(f, save=True, **kwargs)
         elif func == 'sep': separate_components(f, save=True, **kwargs)
+        else:
+            raise UserInputError('Plotting function must be "sum" or "sep"')
     except Exception:
         print(f, 'failed')
         print(traceback.format_exc())
@@ -546,6 +551,10 @@ def plotdir(directory='/data/manga/digiorgio/nirvana/', fname='*-*_*.nirv', core
             many cores and don't call `plt.ioff()` before this, this function
             may crash the desktop environment of your operating system because
             it tries to open too many windows at once.
+        func (:obj:`str`, optional):
+            Use `sum` to plot data with
+            :func:`~nirvana.util.plotting.summaryplot` or `sep` to plot using
+            :func:`~nirvana.util.plotting.separatecomponents`
         kwargs (optional):
             Arguments for `~nirvana.plotting.summaryplot`.
     '''

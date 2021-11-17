@@ -114,7 +114,7 @@ def profs(samp, args, plot=None, stds=False, jump=None, **kwargs):
     '''
 
     #get and unpack median values for params
-    meds = dynmeds(samp, stds=stds, fixcent=args.fixcent)
+    meds = dynmeds(samp, stds=stds)
 
     #get standard deviations and put them into the dictionary
     if stds:
@@ -238,7 +238,7 @@ def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
             resdict[s] = resdict[s][resdict['sigmask'] == 0]
 
         #failsafe
-        if 'Stars' in f: resdict['type'] = 'Stars'
+        if 'Stars' in f or 'stel' in f: resdict['type'] = 'Stars'
 
         #get galaxy object
         if gal is None:
@@ -268,6 +268,7 @@ def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
         if gal is None and '.nirv' in f and os.path.isfile(f[:-5] + '.gal'):
             gal = f[:-5] + '.gal'
         if type(gal) == str: gal = np.load(gal, allow_pickle=True)
+        if 'Stars' in f or 'stel' in f: stellar=True
 
         #load input galaxy object
         if gal is not None:

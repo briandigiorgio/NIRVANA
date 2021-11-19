@@ -160,7 +160,7 @@ def main(args):
     pickle.dump(gal, open(galname, 'wb'))
     if args.fits: 
         try:
-            imagefits(fname, galmeta, gal, outfile=fitsname, remotedir=args.remote) 
+            imagefits(fname, galmeta, gal, outfile=fitsname, remotedir=args.remote, drpalldir=args.drpall_dir, dapalldir=args.drpall_dir) 
             os.remove(fname)
             os.remove(galname)
         except Exception:

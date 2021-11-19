@@ -109,14 +109,12 @@ class FitArgs:
             for i in range(len(self.edges)-1):
                 mcut = (mr > self.edges[i]) * (mr < self.edges[i+1])
                 cut = (r > self.edges[i]) * (r < self.edges[i+1])
-                nspax[i] = np.sum(mcut)
-                maskfrac[i] = np.sum(self.kin.vel_mask[cut])/cut.sum()
+                #nspax[i] = np.sum(mcut)
+                maskfrac[i] = 1 - mcut.sum()/cut.sum()
             
             #cut bins where too many spaxels are masked
             bad = (maskfrac > .75)
-            print(self.edges)
             self.edges = [self.edges[0], *self.edges[1:][~bad]]
-            print(self.edges)
 
             #mask spaxels outside last bin edge
             self.kin.vel_mask[r > self.edges[-1]] = True

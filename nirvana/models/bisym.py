@@ -424,6 +424,7 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         if mock is None: args.kin.phot_inc = galmeta.guess_inclination()
         args.kin.reff = galmeta.reff
 
+    args.clip()
     inc = args.getguess(galmeta=galmeta)[1] if args.kin.phot_inc is None else args.kin.phot_inc
     if nbins is not None: args.setedges(nbins, nbin=True, maxr=maxr)
     else: args.setedges(inc, maxr=maxr)
@@ -438,7 +439,6 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
 
     #starting positions for all parameters based on a quick fit
     #not used in dynesty
-    args.clip()
     theta0 = args.getguess(galmeta=galmeta)
     ndim = len(theta0)
 

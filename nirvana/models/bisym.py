@@ -304,7 +304,7 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         cores=10, maxr=None, cen=True, weight=10, smearing=True, points=500,
         stellar=False, root=None, verbose=False, disp=True, 
         fixcent=True, remotedir=None, floor=5, penalty=100,
-        mock=None, covar=False, scatter=False):
+        mock=None, covar=False, scatter=False, maxbins=10):
     '''
     Main function for fitting a MaNGA galaxy with a nonaxisymmetric model.
 
@@ -371,6 +371,9 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         scatter (:obj:`bool`, optional):
             Whether to include intrinsic scatter as a fit parameter. Currently
             not working well.
+        maxbins (:obj:`int`, optional):
+            Maximum number of radial bins to allow. Overridden by ``nbins`` if
+            it's larger.
 
     Returns:
         :class:`dynesty.NestedSampler`: Sampler from `dynesty` containing
@@ -419,15 +422,27 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         args = FitArgs(kin, veltype, nglobs, weight, disp, fixcent, floor, penalty,
                 points, smearing, maxr, scatter)
 
-    #set bin edges
+    #get galaxy metadata
     if galmeta is not None: 
         if mock is None: args.kin.phot_inc = galmeta.guess_inclination()
         args.kin.reff = galmeta.reff
 
+    #clip bad regions of the data
     args.clip()
-    inc = args.getguess(galmeta=galmeta)[1] if args.kin.phot_inc is None else args.kin.phot_inc
-    if nbins is not None: args.setedges(nbins, nbin=True, maxr=maxr)
-    else: args.setedges(inc, maxr=maxr)
+
+    #set bins manually if nbins is specified
+    if nbins is not None: 
+        if nbins > maxbins: maxbins = nbins
+        args.setedges(nbins, nbin=True, maxr=maxr)
+
+    #set bins automatically based off of FWHM and photometric inc
+    else: 
+        inc = args.getguess(galmeta=galmeta)[1] if args.kin.phot_inc is None else args.kin.phot_inc
+        args.setedges(inc, maxr=maxr)
+
+        #keep number of bins under specified limit
+        if len(args.edges) > maxbins + 1 + args.fixcent:
+            args.setedges(maxbins, nbin=True, maxr=maxr)
 
     #discard if number of bins is too small
     if len(args.edges) - fixcent < 3:

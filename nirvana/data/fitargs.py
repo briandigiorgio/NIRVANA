@@ -86,7 +86,7 @@ class FitArgs:
             maxr = np.max(np.sqrt(x**2 + y**2))
 
         #specify number of bins manually if desired
-        if nbin: self.edges = np.linspace(0, maxr, inc+1)
+        if nbin: self.edges = np.linspace(0, maxr, inc + 1 + self.fixcent)
 
         #calculate nyquist bin width based off fwhm and inc
         else:

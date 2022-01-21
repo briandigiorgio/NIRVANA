@@ -492,7 +492,7 @@ def dictformatting(d, drp=None, dap=None, padding=20, fill=-9999, drpalldir='.',
 
     #failure for empty dict
     except Exception as e:
-        print(e)
+        print(traceback.format_exc())
         data = None
 
     return data

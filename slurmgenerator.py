@@ -94,15 +94,19 @@ export MANGA_SPECTRO_ANALYSIS=$MANGA_SPECTRO/analysis/\n\n')
 echo {platesi[j]} {ifusi[j]} gas \n\
 mkdir {progressdir}/{platesi[j]}/ \n\
 mkdir {progressdir}/{platesi[j]}/{ifusi[j]}/ \n\
-touch {progresspath}/gas.start \n\
-nirvana {platesi[j]} {ifusi[j]} -c 40 --root {rootdir} --dir {outdir} --remote {remotedir} {"--nosmear" * args.nosmear} > {progresspath}/gas.log 2> {progresspath}/gas.err\n\
-touch {progressdir}/{platesi[j]}/{ifusi[j]}/gas.finish \n \n\
+time=$(date +"%y-%m-%d_%H-%M") \n\
+touch {progresspath}/gas_$time.start \n\
+nirvana {platesi[j]} {ifusi[j]} -c 40 --root {rootdir} --dir {outdir} --remote {remotedir} {"--nosmear" * args.nosmear} > {progresspath}/gas_$time.log 2> {progresspath}/gas_$time.err\n\
+time=$(date +"%y-%m-%d_%H-%M") \n\
+touch {progressdir}/{platesi[j]}/{ifusi[j]}/gas_$time.finish \n \n\
 ln -s {outdir}/nirvana_{platesi[j]}-{ifusi[j]}_Gas.fits {progresspath}/gas.fits\n\
 \
 echo {platesi[j]} {ifusi[j]} stellar \n\
-touch {progresspath}/stellar.start \n\
-nirvana {platesi[j]} {ifusi[j]} -s -c 40 --root {rootdir} --dir {outdir} --remote {remotedir} {"--nosmear" * args.nosmear} > {progresspath}/stellar.log 2> {progresspath}/stellar.err\n\
-touch {progresspath}/stellar.finish \n\
+time=$(date +"%y-%m-%d_%H-%M") \n\
+touch {progresspath}/stellar_$time.start \n\
+nirvana {platesi[j]} {ifusi[j]} -s -c 40 --root {rootdir} --dir {outdir} --remote {remotedir} {"--nosmear" * args.nosmear} > {progresspath}/stellar_$time.log 2> {progresspath}/stellar_$time.err\n\
+time=$(date +"%y-%m-%d_%H-%M") \n\
+touch {progresspath}/stellar_$time.finish \n\
 ln -s {outdir}/nirvana_{platesi[j]}-{ifusi[j]}_Stars.fits {progresspath}/stellar.fits\n\
 date\n\n')
         run(['sbatch',fname])

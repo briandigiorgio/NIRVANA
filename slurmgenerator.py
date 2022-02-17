@@ -23,13 +23,27 @@ parser.add_argument('--clobber', action='store_true',
                     help='Overwrite existing slurm files')
 parser.add_argument('--ad', action='store_true',
                     help='Use the plateifus from nirvana_test_sample.txt')
+parser.add_argument('--b2', action='store_true',
+                    help='Use the plateifus from GZ:3D 20 percent bar sample')
+parser.add_argument('--b4', action='store_true',
+                     help='Use the plateifus from GZ:3D 40 percent bar sample')
 parser.add_argument('--nosmear', action='store_true',
                     help="Don't smear with PSF")
+parser.add_argument('--nostel', action='store_true',
+                    help="Don't fit the stellar velocity fields")
+parser.add_argument('--dryrun', action='store_true',
+                    help="Generate slurms but don't actually run them")
 args = parser.parse_args()
 
 if __name__ == '__main__':
     if args.ad:
         plates, ifus = np.genfromtxt('/home/bdigiorg/nirvana_testing_sample.txt').T
+        drp = {'plate':plates, 'ifudsgn':ifus}
+    elif args.b2:
+        plates, ifus = np.genfromtxt('/home/bdigiorg/GZ3D_barred_20percent.txt').T
+        drp = {'plate':plates, 'ifudsgn':ifus}
+    elif args.b4:
+        plates, ifus = np.genfromtxt('/home/bdigiorg/GZ3D_barred_40percent.txt').T
         drp = {'plate':plates, 'ifudsgn':ifus}
     else:
         drp = fits.open('/home/bdigiorg/drpall-v3_1_1.fits')[1].data
@@ -100,14 +114,18 @@ nirvana {platesi[j]} {ifusi[j]} -c 40 --root {rootdir} --dir {outdir} --remote {
 time=$(date +"%y-%m-%d_%H-%M") \n\
 touch {progressdir}/{platesi[j]}/{ifusi[j]}/gas_$time.finish \n \n\
 ln -s {outdir}/nirvana_{platesi[j]}-{ifusi[j]}_Gas.fits {progresspath}/gas.fits\n\
-\
+\ ')
+                if not args.nostel:
+                    f.write(f'\
 echo {platesi[j]} {ifusi[j]} stellar \n\
 time=$(date +"%y-%m-%d_%H-%M") \n\
 touch {progresspath}/stellar_$time.start \n\
 nirvana {platesi[j]} {ifusi[j]} -s -c 40 --root {rootdir} --dir {outdir} --remote {remotedir} {"--nosmear" * args.nosmear} > {progresspath}/stellar_$time.log 2> {progresspath}/stellar_$time.err\n\
 time=$(date +"%y-%m-%d_%H-%M") \n\
 touch {progresspath}/stellar_$time.finish \n\
-ln -s {outdir}/nirvana_{platesi[j]}-{ifusi[j]}_Stars.fits {progresspath}/stellar.fits\n\
-date\n\n')
-        run(['sbatch',fname])
-        time.sleep(.1)
+ln -s {outdir}/nirvana_{platesi[j]}-{ifusi[j]}_Stars.fits {progresspath}/stellar.fits\n\ ')
+                f.write('date\n\n')
+
+        if not args.dryrun:
+            run(['sbatch',fname])
+            time.sleep(.1)

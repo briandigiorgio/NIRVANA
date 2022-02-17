@@ -456,7 +456,7 @@ class FitArgs:
         else: bounds[0] = (max(inc - incpad, 5), min(inc + incpad, 85))
         if pagauss: bounds[1] = (pa, papad)
         else: bounds[1] = (theta0[1] - papad, theta0[1] + papad)
-        bounds[2] = (0, 180) #uninformed
+        bounds[2] = (0, 360) #uninformed
         bounds[3] = (theta0[3] - vsyspad, theta0[3] + vsyspad)
         if self.nglobs == 6: #assumes (0,0) is the best guess for center
             bounds[4] = (-cenpad, cenpad)

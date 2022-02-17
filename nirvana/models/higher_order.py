@@ -39,9 +39,6 @@ def bisym_model(args, paramdict, plot=False, relative_pab=False):
     inc, pa, pab = np.radians([paramdict['inc'], paramdict['pa'], paramdict['pab']])
     r, th = projected_polar(args.kin.grid_x-paramdict['xc'], args.kin.grid_y-paramdict['yc'], pa, inc)
 
-    #correct definition of pab for later
-    pab = .5 * (pab - pa) % (2*np.pi)
-
     #interpolate the velocity arrays over full coordinates
     if len(args.edges) != len(paramdict['vt']):
         raise ValueError(f"Bin edge and velocity arrays are not the same shape: {len(args.edges)} and {len(paramdict['vt'])}")
@@ -51,8 +48,8 @@ def bisym_model(args, paramdict, plot=False, relative_pab=False):
 
     #spekkens and sellwood 2nd order vf model (from andrew's thesis)
     velmodel = paramdict['vsys'] + np.sin(inc) * (vtvals * np.cos(th) \
-             - v2tvals * np.cos(2 * (th - pab)) * np.cos(th) \
-             - v2rvals * np.sin(2 * (th - pab)) * np.sin(th))
+             - v2tvals * np.cos(2 * th - pab) * np.cos(th) \
+             - v2rvals * np.sin(2 * th - pab) * np.sin(th))
 
     #define dispersion and surface brightness if desired
     if args.disp: 

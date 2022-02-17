@@ -329,6 +329,14 @@ def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
         resdict['type'] = 'Stars' if stellar else 'Gas'
     else:
         args.edges = resdict['bin_edges'][~resdict['velmask']]
+        with fits.open(f) as fitsfile:
+            args.kin.vel = args.kin.bin(fitsfile['vel'].data)
+            args.kin.vel_ivar = args.kin.bin(fitsfile['vel_ivar'].data)
+            args.kin.sig_phys2 = args.kin.bin(fitsfile['sigsqr'].data)
+            args.kin.sig = args.kin.bin(fitsfile['sig_ivar'].data)
+            args.kin.sb = args.kin.bin(fitsfile['sb'].data)
+            args.kin.sb_ivar = args.kin.bin(fitsfile['sb_ivar'].data)
+            args.kin.vel_mask = np.array(args.kin.bin(fitsfile['vel_mask'].data), dtype=bool)
 
     args.getguess(galmeta=galmeta)
     args.getasym()

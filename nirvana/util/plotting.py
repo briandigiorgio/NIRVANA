@@ -236,7 +236,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
     return fig
 
 def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, cen=True,
-        fixcent=True, save=False, clobber=False, remotedir=None, gal=None, relative_pab=False, cmap='RdBu'):
+        fixcent=True, save=False, clobber=False, remotedir=None, gal=None, relative_pab=False, cmap='RdBu',mock=None):
     """
     Make a plot `nirvana` output file with the different velocity components
     searated.
@@ -347,6 +347,28 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     plt.ylabel(r'$v$ (km/s)')
     plt.title('Velocity Profiles')
     plt.gca().tick_params(direction='in')
+
+    if mock is not None:
+        margs, mresdict = fileprep(mock)
+        ls = [r'$V_t$',r'$V_{2t}$',r'$V_{2r}$']
+        cs = ['C0', 'C1', 'C2']
+        for i,v in enumerate(['vt', 'v2t', 'v2r']):
+            plt.plot(margs.edges, mresdict[v], label=ls[i], ls='--',c=cs[i]) 
+
+        #errors = [[mresdict['vtl'], mresdict['vtu']], [mresdict['v2tl'], mresdict['v2tu']], [mresdict['v2rl'], mresdict['v2ru']]]
+        #for i,p in enumerate(errors):
+        #    plt.fill_between(margs.edges, p[0], p[1], alpha=.5) 
+        plt.ylim(bottom=0)
+        plt.legend(loc=2)
+        plt.xlabel('Radius (arcsec)', labelpad=-1)
+        plt.ylabel(r'$v$ (km/s)')
+        plt.title('Mock Velocity Profiles')
+        plt.gca().tick_params(direction='in')
+
+        plt.subplot(3,5,5)
+        ax = plt.gca()
+        infobox(ax, mresdict, margs, title='Mock Params')
+
 
     plt.subplot(3,5,6)
     plt.imshow(velmodel, cmap=cmap, origin='lower', vmin=-datavmax, vmax=datavmax)
@@ -566,7 +588,7 @@ def plotdir(directory='/data/manga/digiorgio/nirvana/', fname='*-*_*.nirv', core
     with mp.Pool(cores) as p:
         p.map(partial(safeplot, func=func), fs)
 
-def infobox(plot, resdict, args, cen=True, relative_pab=False):
+def infobox(plot, resdict, args, cen=True, relative_pab=False, title=None):
     #generate velocity models
     velmodel, sigmodel = bisym_model(args,resdict,plot=True,relative_pab=relative_pab)
     vel_r = args.kin.remap('vel')
@@ -595,7 +617,8 @@ def infobox(plot, resdict, args, cen=True, relative_pab=False):
     fontsize = 14 - 2*cen - args.scatter
     ys = np.linspace(1 - .01*fontsize, 0, ny)
 
-    plot.set_title(f"{resdict['plate']}-{resdict['ifu']} {resdict['type']}",size=18)
+    title = f"{resdict['plate']}-{resdict['ifu']} {resdict['type']}" if title is None else title
+    plot.set_title(title, size=18)
     plot.text(.1, ys[0], r'$i$: %0.1f$^{+%0.1f}_{-%0.1f}$ deg. (phot: %0.1f$^\circ$)'
             %(resdict['inc'], resdict['incu'] - resdict['inc'], 
             resdict['inc'] - resdict['incl'], args.kin.phot_inc),

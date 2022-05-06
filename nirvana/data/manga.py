@@ -128,10 +128,11 @@ def manga_versions():
     """
     return {'DR15': {'DRP': 'v2_4_3', 'DAP': '2.2.1', 'collab': False},
             'MPL-10': {'DRP': 'v3_0_1', 'DAP': '3.0.1', 'collab': True},
-            'MPL-11': {'DRP': 'v3_1_1', 'DAP': '3.1.0', 'collab': True}}
+            'MPL-11': {'DRP': 'v3_1_1', 'DAP': '3.1.0', 'collab': True},
+            'DR17': {'DRP': 'v3_1_1', 'DAP': '3.1.0', 'collab': False}}
 
 # TODO: Split this into catalog paths and galaxy paths
-def manga_paths(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11', redux_path=None,
+def manga_paths(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='DR17', redux_path=None,
                 analysis_path=None, raw=False, relative=False):
     """
     Construct a set of directory paths for the MaNGA data.
@@ -203,7 +204,7 @@ def manga_paths(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11', redu
 
 
 # TODO: Split this into catalog files and galaxy files
-def manga_file_names(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11'):
+def manga_file_names(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='DR17'):
     """
     Construct MaNGA file names.
 
@@ -232,7 +233,7 @@ def manga_file_names(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11')
                 f'dapall-{drpver}-{dapver}.fits', f'manga-{plate}-{ifu}-MAPS-{daptype}.fits.gz'
 
 
-def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11',
+def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='DR17',
                               redux_path=None, cube_path=None, image_path=None, analysis_path=None,
                               maps_path=None, check=True, remotedir=None, rawpaths=False):
     """
@@ -335,7 +336,7 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
 
 # TODO: Break this into two functions to download the DRPall and DAPall file
 # separately?
-def download_catalogs(dr='MPL-11', oroot=None, redux_path=None, analysis_path=None, overwrite=True,
+def download_catalogs(dr='DR17', oroot=None, redux_path=None, analysis_path=None, overwrite=True,
                       sasurl='https://data.sdss.org/sas/mangawork/manga/spectro'):
     """
     Download the two main MaNGA catalog files, the DRPall and DAPall files.
@@ -434,7 +435,7 @@ def download_catalogs(dr='MPL-11', oroot=None, redux_path=None, analysis_path=No
     return files
 
 
-def download_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11', oroot=None, 
+def download_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='DR17', oroot=None, 
                       redux_path=None, analysis_path=None, overwrite=True,
                       sasurl='https://data.sdss.org/sas/mangawork/manga/spectro'):
     """
@@ -789,7 +790,7 @@ class MaNGAKinematics(Kinematics):
     This class *should not* be instantiated by itself.
     """
     @classmethod
-    def from_plateifu(cls, plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-11',
+    def from_plateifu(cls, plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='DR17',
                       redux_path=None, cube_path=None, image_path=None, analysis_path=None,
                       maps_path=None, ignore_psf=False, remotedir=None, **kwargs):
         """
@@ -1196,7 +1197,7 @@ class MaNGAGlobalPar(GlobalPar):
             Additional arguments passed directly to the nominal
             instantiation method.
     """
-    def __init__(self, plate, ifu, redux_path=None, dr='MPL-11', drpall_file=None,
+    def __init__(self, plate, ifu, redux_path=None, dr='DR17', drpall_file=None,
                  drpall_path=None, **kwargs):
 
         if drpall_file is None:

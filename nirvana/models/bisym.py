@@ -390,6 +390,7 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     if mock is not None:
         args, params, residnum = mock
         args.kin.vel, args.kin.sig = bisym_model(args, params)
+        args.penalty = penalty
 
         #add in real residuals from fit
         if residnum:

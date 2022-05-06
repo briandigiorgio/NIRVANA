@@ -27,10 +27,14 @@ parser.add_argument('--b2', action='store_true',
                     help='Use the plateifus from GZ:3D 20 percent bar sample')
 parser.add_argument('--b4', action='store_true',
                      help='Use the plateifus from GZ:3D 40 percent bar sample')
+parser.add_argument('--control', action='store_true',
+                     help='Use the plateifus from GZ3D 20% bar control sample')
 parser.add_argument('--nosmear', action='store_true',
                     help="Don't smear with PSF")
 parser.add_argument('--nostel', action='store_true',
                     help="Don't fit the stellar velocity fields")
+parser.add_argument('--nogas', action='store_true',
+                    help="Don't fit the gas velocity fields")
 parser.add_argument('--dryrun', action='store_true',
                     help="Generate slurms but don't actually run them")
 args = parser.parse_args()
@@ -44,6 +48,9 @@ if __name__ == '__main__':
         drp = {'plate':plates, 'ifudsgn':ifus}
     elif args.b4:
         plates, ifus = np.genfromtxt('/home/bdigiorg/GZ3D_barred_40percent.txt').T
+        drp = {'plate':plates, 'ifudsgn':ifus}
+    elif args.control:
+        plates, ifus = np.genfromtxt('/home/bdigiorg/GZ20control_new.txt').T
         drp = {'plate':plates, 'ifudsgn':ifus}
     else:
         drp = fits.open('/home/bdigiorg/drpall-v3_1_1.fits')[1].data
@@ -104,7 +111,8 @@ export MANGA_SPECTRO_ANALYSIS=$MANGA_SPECTRO/analysis/\n\n')
 
             for j in range(len(platesi)):
                 progresspath = f'{progressdir}/{platesi[j]}/{ifusi[j]}/'
-                f.write(f'\
+                if not args.nogas:
+                    f.write(f'\
 echo {platesi[j]} {ifusi[j]} gas \n\
 mkdir {progressdir}/{platesi[j]}/ \n\
 mkdir {progressdir}/{platesi[j]}/{ifusi[j]}/ \n\

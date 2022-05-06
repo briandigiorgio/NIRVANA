@@ -118,6 +118,7 @@ def main(args):
             fitsname += '_mock'
             if args.mock_inc: fitsname += f'_i{int(args.mock_inc)}'
             if args.resid: fitsname += f'_r{args.resid}'
+            if args.penalty != 500: fitsname += f'_p{args.penalty}'
     else: fitsname = args.dir + args.outfile
 
     print('File name:', args.outfile)

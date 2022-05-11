@@ -677,6 +677,8 @@ def imagefits(f, galmeta, gal=None, outfile=None, padding=20, remotedir=None, ou
 
     #pad rotation curves
     data = dictformatting(resdict, padding=padding, drpalldir=drpalldir, dapalldir=dapalldir)
+    if data is None:
+        raise ValueError('dictformatting failed, data not defined.')
     data += [*np.delete(args.bounds.T, slice(7,-1), axis=1)]
 
     #define column names and data types in order of resdict

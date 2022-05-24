@@ -15,7 +15,7 @@ from astropy.stats import sigma_clip
 import matplotlib.pyplot as plt
 import warnings
 
-from .util import get_map_bin_transformations, impose_positive_definite
+from .util import get_map_bin_transformations, impose_positive_definite, gaussian_deviates
 
 from ..models.beam import construct_beam, ConvolveFFTW, smear
 from ..models.geometry import projected_polar
@@ -749,3 +749,79 @@ class Kinematics():
                      snr < min_sig_snr)
         self.reject(vel_rej=vel_rej, sig_rej=sig_rej)
         return vel_rej, sig_rej
+
+    def deviate(self, size=None, rng=None, sigma='draw'):
+        r"""
+        Draw Gaussian deviates from the velocity and velocity dispersion error
+        distributions.
+        This is basically a wrapper for
+        :func:`~nirvana.data.util.gaussian_deviates`.  One deviate is drawn for
+        each of the valid velocity and velocity dispersion measurements.
+        Multiple sets of deviates can be drawn using ``size``.
+        This function is primarily for use with mock observations.  For example,
+        if you have a :class:`Kinematics` object (``kin``) with an observed set
+        of data, you can generate a mock dataset based on the
+        :class:`~nirvana.models.axisym.AxisymmetricDisk`::
+            import numpy
+            from nirvana.models.oned import HyperbolicTangent, Exponential
+            from nirvana.models.axisym import AxisymmetricDisk
+            disk = AxisymmetricDisk(rc=HyperbolicTangent(), dc=Exponential())
+            p0 = numpy.array([-0.2, -0.08, 166.3, 53.0, 25.6, 217.0, 2.82, 189.7, 16.2])
+            noisefree_mock = disk.mock_observation(p0, kin=kin)
+        And then generate deviates using this method and add them to a new
+        kinematics object::
+            # Generate 10 sets of deviates
+            vgpm, dv, sgpm, ds \
+                    = noisefree_mock.deviate(size=10, sigma='ignore' if disk.dc is None else 'draw')
+            # Use them in a simulation of fitting the mock data
+            _vel = noisefree_mock.vel.copy()
+            _sig = noisefree_mock.sig.copy()
+            noisy_mock = noisefree_mock.copy()
+            for i in range(10):
+                noisy_mock.vel[vgpm] = _vel[vgpm] + dv[i]
+                if disk.dc is not None:
+                    _sig[sgpm] += ds[i]
+                    noisy_mock.update_sigma(sig=_sig)
+                    _sig[sgpm] -= ds[i]
+                disk.lsq_fit(noisy_mock)
+        
+        Args:
+            size (:obj:`int`, optional):
+                The number of draws to make.  Each draw generates a deviate for
+                each of the valid measurements.  None is identical to
+                ``size=1``.
+            rng (`numpy.random.Generator`, optional):
+                Generator object to use.  If None, a new Generator is
+                instantiated.
+            sigma (:obj:`str`, optional):
+                Treatment for the velocity dispersion.  Options are:
+                    - 'draw': Draw Gaussian deviates from ``sig_ivar`` or
+                      ``sig_covar``, if they exist.
+                    - 'drawsqr': Draw Gaussian deviates from ``sig_phys2_ivar``
+                      or ``sig_phys2_covar``, if they exist.
+                    - 'ignore': Do not draw any deviates for the dispersion,
+                      even if the error distributions exist.
+                
+        Returns:
+            :obj:`tuple`: Good-value masks and deviates for the velocity and
+            velocity dispersion, respectively.  If neither :attr:`vel_ivar` nor
+            `vel_covar` are available, the first two objects returned are None;
+            similarly for the second two objects if dispersion errors are not
+            available or ignored.  The shape of the good pixel masks is always
+            the same as the internal velocity and dispersion arrays.  The shape
+            of the returned deviate arrays is ``(size,n_good)``, where ``size``
+            is the provided keyword argument and ``n_good`` is the number of
+            valid kinematic measurements.
+        """
+        if sigma == 'ignore':
+            s_ret = (None, None)
+        elif sigma == 'draw':
+            s_ret = gaussian_deviates(ivar=self.sig_ivar, mask=self.sig_mask, covar=self.sig_covar,
+                                      size=size, rng=rng)
+        elif sigma == 'drawsqr':
+            s_ret = gaussian_deviates(ivar=self.sig_phys2_ivar, mask=self.sig_mask,
+                                      covar=self.sig_phys2_covar, size=size, rng=rng)
+        else:
+            raise ValueError('Value for sigma must be ignore, draw, or drawsqr.')
+        return gaussian_deviates(ivar=self.vel_ivar, mask=self.vel_mask, covar=self.vel_covar,
+                                 size=size, rng=rng) + s_ret

@@ -1139,3 +1139,63 @@ def unpack(params, args, jump=None, bound=False, relative_pab=False):
         else: paramdict['vel_scatter'] = params[end]
 
     return paramdict
+
+def gaussian_deviates(ivar=None, mask=None, covar=None, size=None, rng=None):
+    """
+    Draw Gaussian deviates from the provided characterization of the error
+    distributions.
+    One deviate is draw for each of the unmasked measurements.  Multiple sets of
+    deviates can be drawn using ``size``.
+    If both are provided, ``covar`` takes precedence over ``ivar``.  If neither
+    are provided, the function returns a tuple of two None values.
+    .. warning::
+        Draws from `numpy.random.Generator.multivariate_normal`_ will issue a
+        RuntimeWarning if the provided covariance matrix is not
+        positive-semidefinite.
+    Args:
+        ivar (`numpy.ndarray`_, optional):
+            1D array with inverse variances of the error distribution.
+        mask (`numpy.ndarray`_, optional):
+            Bad-pixel mask for the variance data.  If None, all data is
+            considered good.  If provided, no data is drawn for data flagged as
+            bad.  Shape must match ``ivar`` or one axis of ``covar``.
+        covar (`scipy.sparse.csr_matrix`_):
+            Covariance matrix.  If provided, takes precedence over inverse
+            variance vector.
+        size (:obj:`int`, optional):
+            Number of realizations to draw.  None is identical to ``size=1``.
+        rng (`numpy.random.Generator`_, optional):
+            Random number generator instance.  If None, a new one will be
+            instantiated.
+
+    Returns:
+        :obj:`tuple`: A tuple of two `numpy.ndarray`_ objects with a good-pixel
+        mask selecting the data with a drawn deviate from the provided array(s)
+        and the set of Gaussian deviates.  The shape of the latter is
+        ``(ngood,)``, if ``size=1``, or ``(size,ngood)``, where ``ngood`` is the
+        number of good data values and ``size`` is the provided keyword
+        argument.  If both ``ivar`` and ``covar`` are None, the returned value
+        is ``(None, None)``.
+    """
+    if ivar is None and covar is None:
+        # Nothing to do
+        return None, None
+
+    if rng is None:
+        # Instantiate a new random number generator
+        rng = np.random.default_rng()
+
+    # Deal with the mask
+    n = covar.shape[0] if ivar is None else ivar.size
+    gpm = np.ones(n, dtype=bool) if mask is None else np.logical_not(mask)
+
+    if covar is None:
+        # Return independent draws
+        if size is not None and size > 1:
+            return gpm, rng.normal(size=(size, np.sum(gpm))) / np.sqrt(ivar[gpm])[None,:]
+        return gpm, rng.normal(size=np.sum(gpm)) / np.sqrt(ivar[gpm])
+
+    # Return draws from a multivariate Gaussian
+    return gpm, rng.multivariate_normal(np.zeros(np.sum(gpm), dtype=float),
+                                        covar[np.ix_(gpm, gpm)].toarray(),
+                                        size=size if size is not None and size > 1 else None)

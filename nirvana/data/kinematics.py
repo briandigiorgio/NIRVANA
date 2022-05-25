@@ -750,7 +750,7 @@ class Kinematics():
         self.reject(vel_rej=vel_rej, sig_rej=sig_rej)
         return vel_rej, sig_rej
 
-    def deviate(self, size=None, rng=None, sigma='draw'):
+    def deviate(self, size=None, rng=None, sigma='draw', mask=True):
         r"""
         Draw Gaussian deviates from the velocity and velocity dispersion error
         distributions.
@@ -813,15 +813,21 @@ class Kinematics():
             is the provided keyword argument and ``n_good`` is the number of
             valid kinematic measurements.
         """
+        if use_mask: 
+            vel_mask = self.vel_mask
+            sig_mask = self.sig_mask
+        else:
+            vel_mask, sig_mask = (None, None)
+
         if sigma == 'ignore':
             s_ret = (None, None)
         elif sigma == 'draw':
-            s_ret = gaussian_deviates(ivar=self.sig_ivar, mask=self.sig_mask, covar=self.sig_covar,
+            s_ret = gaussian_deviates(ivar=self.sig_ivar, mask=sig_mask, covar=self.sig_covar,
                                       size=size, rng=rng)
         elif sigma == 'drawsqr':
-            s_ret = gaussian_deviates(ivar=self.sig_phys2_ivar, mask=self.sig_mask,
+            s_ret = gaussian_deviates(ivar=self.sig_phys2_ivar, mask=sig_mask,
                                       covar=self.sig_phys2_covar, size=size, rng=rng)
         else:
             raise ValueError('Value for sigma must be ignore, draw, or drawsqr.')
-        return gaussian_deviates(ivar=self.vel_ivar, mask=self.vel_mask, covar=self.vel_covar,
+        return gaussian_deviates(ivar=self.vel_ivar, mask=vel_mask, covar=self.vel_covar,
                                  size=size, rng=rng) + s_ret

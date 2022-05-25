@@ -750,7 +750,7 @@ class Kinematics():
         self.reject(vel_rej=vel_rej, sig_rej=sig_rej)
         return vel_rej, sig_rej
 
-    def deviate(self, size=None, rng=None, sigma='draw', mask=True):
+    def deviate(self, size=None, rng=None, sigma='draw', use_mask=True):
         r"""
         Draw Gaussian deviates from the velocity and velocity dispersion error
         distributions.

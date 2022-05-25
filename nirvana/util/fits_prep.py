@@ -249,9 +249,9 @@ def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
                 analysispath, reduxpath = (None, None)
 
             if resdict['type'] == 'Stars':
-                kin = MaNGAStellarKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir, analysis_path=analysispath, redux_path=reduxpath)
+                kin = MaNGAStellarKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir, analysis_path=analysispath, redux_path=reduxpath, covar=True)
             else:
-                kin = MaNGAGasKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir, analysis_path=analysispath, redux_path=reduxpath)
+                kin = MaNGAGasKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir, analysis_path=analysispath, redux_path=reduxpath, covar=True)
             scatter = ('vel_scatter' in resdict.keys()) and (resdict['vel_scatter'] != 0)
         else:
             kin = gal

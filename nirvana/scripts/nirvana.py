@@ -73,7 +73,7 @@ def parse_args(options=None):
     parser.add_argument('-i', '--mock-inc', type=float, default=0,
                         help='change the inclination of the mock galaxy')
     parser.add_argument('--resid', type=str, default='',
-                        help='Resuidual from residlib to add on top of vel')
+                        help='Resuidual from residlib to add on top of vel, auto for automatically generated residual')
 
     return parser.parse_args() if options is None else parser.parse_args(options)
 

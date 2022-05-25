@@ -394,15 +394,19 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
 
         #add in real residuals from fit
         if residnum:
-            try:
-                residlib = np.load('residlib.dict', allow_pickle=True)
+            #try:
                 vel2d = args.kin.remap('vel')
-                resid = trim_shape(residlib[residnum], vel2d)
+                if 'auto' in residnum:
+                    deviate = args.kin.deviate(size=1, use_mask=False)
+                    resid = args.kin.remap(deviate[1])
+                else:
+                    residlib = np.load('nirvana/residlib.dict', allow_pickle=True)
+                    resid = trim_shape(residlib[residnum], vel2d)
                 newvel = vel2d + resid
                 args.kin.vel = args.kin.bin(newvel)
                 args.kin.remask(resid.mask)
-            except:
-                raise ValueError('Could not apply residual correctly. Check that residlib.dict is in the appropriate place')
+            #except:
+            #    raise ValueError('Could not apply residual correctly. Check that residlib.dict is in the appropriate place')
 
 
     #get info on galaxy and define bins and starting guess

@@ -1199,3 +1199,4 @@ def gaussian_deviates(ivar=None, mask=None, covar=None, size=None, rng=None):
     return gpm, rng.multivariate_normal(np.zeros(np.sum(gpm), dtype=float),
                                         covar[np.ix_(gpm, gpm)].toarray(),
                                         size=size if size is not None and size > 1 else None)
+

@@ -14,6 +14,7 @@ from scipy import linalg
 from astropy.stats import sigma_clip
 import matplotlib.pyplot as plt
 import warnings
+from copy import deepcopy
 
 from .util import get_map_bin_transformations, impose_positive_definite, gaussian_deviates
 
@@ -831,3 +832,30 @@ class Kinematics():
             raise ValueError('Value for sigma must be ignore, draw, or drawsqr.')
         return gaussian_deviates(ivar=self.vel_ivar, mask=vel_mask, covar=self.vel_covar,
                                  size=size, rng=rng) + s_ret
+
+    def renorm_var(self, factor):
+        '''
+        Renormalize the inverse variances and covariance matrices for the velocity, dispersion, and surface brightness by a given factor.
+
+        This changes all of the terms in the variance and covariance so that they are rescaled to mimic observations at a higher/lower S/N. The overall effect on spaxel errors should be the square root of the given factor. All of the corresponding attributes of the class are changed.
+
+        Args:
+            factor (:obj:`float`):
+                Factor by which to multiply the variances.
+        '''
+
+        #iterate through velocity, dispersion, surface brightness
+        for ext in ['vel', 'sig', 'sb']:
+            #get old values
+            oldcovar = getattr(self, f'{ext}_covar')
+            oldvar = 1/getattr(self, f'{ext}_ivar')
+            
+            #make new variance and covariance
+            newvar = oldvar * factor
+            i, j, c = sparse.find(oldcovar)
+            newcovar = sparse.coo_matrix((c*np.sqrt(newvar[i]*newvar[j]/(oldvar[i]*oldvar[j])), (i,j)),
+                                     shape=oldcovar.shape).tocsr()
+
+            #set attributes
+            setattr(self, f'{ext}_ivar', 1/newvar)
+            setattr(self, f'{ext}_covar', newcovar)

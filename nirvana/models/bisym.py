@@ -304,7 +304,7 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         cores=10, maxr=None, cen=True, weight=10, smearing=True, points=500,
         stellar=False, root=None, verbose=False, disp=True, 
         fixcent=True, remotedir=None, floor=5, penalty=100,
-        mock=None, covar=False, scatter=False, maxbins=10):
+        mock=None, covar=False, scatter=False, maxbins=10, renorm=1):
     '''
     Main function for fitting a MaNGA galaxy with a nonaxisymmetric model.
 
@@ -374,6 +374,8 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         maxbins (:obj:`int`, optional):
             Maximum number of radial bins to allow. Overridden by ``nbins`` if
             it's larger.
+        renorm (:obj:`float`, optional):
+            Factor by which to rescale the variances and covariances of the data
 
     Returns:
         :class:`dynesty.NestedSampler`: Sampler from `dynesty` containing
@@ -432,8 +434,8 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
         if mock is None: args.kin.phot_inc = galmeta.guess_inclination()
         args.kin.reff = galmeta.reff
 
-    #clip bad regions of the data
-    args.clip()
+    if renorm != 1: args.kin.renorm_var(renorm) #renorm variances
+    args.clip() #clip bad regions of the data
 
     #set bins manually if nbins is specified
     if nbins is not None: 

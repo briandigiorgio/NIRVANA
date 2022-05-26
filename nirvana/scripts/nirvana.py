@@ -74,6 +74,8 @@ def parse_args(options=None):
                         help='change the inclination of the mock galaxy')
     parser.add_argument('--resid', type=str, default='',
                         help='Resuidual from residlib to add on top of vel, auto for automatically generated residual')
+    parser.add_argument('--renorm', type=float, default=1,
+                        help='Factor by which to scale variances')
 
     return parser.parse_args() if options is None else parser.parse_args(options)
 
@@ -112,12 +114,14 @@ def main(args):
         if args.mock: args.outfile += '_mock'
         if args.mock_inc: args.outfile += f'_i{int(args.mock_inc)}'
         if args.resid: args.outfile += f'_r{args.resid}'
+        if args.renorm != 1: args.outfile += f'_v{args.renorm}'
 
         fitsname = f"{args.dir}nirvana_{plate}-{ifu}_{vftype}" 
         if args.mock:
             fitsname += '_mock'
             if args.mock_inc: fitsname += f'_i{int(args.mock_inc)}'
             if args.resid: fitsname += f'_r{args.resid}'
+            if args.renorm != 1: fitsname += f'_v{args.renorm}'
             if args.penalty != 500: fitsname += f'_p{args.penalty}'
     else: fitsname = args.dir + args.outfile
 
@@ -146,7 +150,7 @@ def main(args):
         if args.mock_inc: 
             params['inc'] = args.mock_inc
             mockgal.kin.phot_inc = args.mock_inc
-        mock = (mockgal, params, args.resid)
+        if renorm != 1: mockgal.renorm_var(args.renorm)
     else: mock = None
 
     #run fit with supplied args
@@ -154,7 +158,7 @@ def main(args):
                   weight=args.weight, maxr=args.maxr, smearing=args.smearing, root=args.root,
                   verbose=args.verbose, disp=args.disp, points=args.points, 
                   stellar=args.stellar, cen=args.cen, fixcent=args.fixcent,
-                  remotedir=args.remote, mock=mock, penalty=args.penalty)
+                  remotedir=args.remote, mock=mock, penalty=args.penalty, renorm=args.renorm)
 
     #write out with sampler results or just FITS table
     pickle.dump(samp.results, open(fname, 'wb'))

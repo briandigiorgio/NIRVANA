@@ -146,7 +146,7 @@ class BitMask:
 
         # Read the keys, values, and descriptions
         keys = numpy.array(cnfg.sections())
-        vals = numpy.zeros(keys.size, dtype=numpy.int)
+        vals = numpy.zeros(keys.size, dtype=int)
         descr = numpy.zeros(keys.size, dtype=object)
         for i,k in enumerate(keys):
             vals[i] = cnfg[k]['value']

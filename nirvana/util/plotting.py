@@ -20,6 +20,7 @@ import pickle
 from glob import glob
 from tqdm import tqdm
 from astropy.io import fits
+from scipy.signal import savgol_filter
 
 from ..models.higher_order import bisym_model
 from ..models.beam import smear, ConvolveFFTW
@@ -31,7 +32,7 @@ from .fits_prep import fileprep, dynmeds, profs
 
 
 def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, cen=True,
-                fixcent=True, save=False, clobber=False, remotedir=None, gal=None, relative_pab=False):
+                fixcent=True, save=False, clobber=False, remotedir=None, gal=None, relative_pab=False, rootdir=None):
     """
     Make a summary plot for a `nirvana` output file with MaNGA velocity
     field.
@@ -50,6 +51,8 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
             of the rest of the parameters by itself.
         plate (:obj:`int`, optional):
             MaNGA plate number for desired galaxy. Can be auto filled by `f`.
+            Can also be :class:`nirvana.data.fitargs.args` if f
+            is a sampler. 
         ifu (:obj:`int`, optional):
             MaNGA IFU number for desired galaxy. Can be auto filled by `f`.
         smearing (:obj:`bool`, optional):
@@ -88,7 +91,12 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
             raise ValueError('Plot file already exists')
 
     #unpack input file into useful objects
-    args, resdict = fileprep(f, plate, ifu, smearing, stellar, maxr, cen, fixcent, remotedir=remotedir, gal=gal)
+    if type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler:
+        args = plate
+        resdict = profs(f, args, stds=True)
+        resdict['type'] = ''
+    else:
+        args, resdict = fileprep(f, plate, ifu, smearing, stellar, maxr, cen, fixcent, remotedir=remotedir, gal=gal, rootdir=rootdir)
 
     #generate velocity models
     velmodel, sigmodel = bisym_model(args,resdict,plot=True,relative_pab=relative_pab)
@@ -236,7 +244,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
     return fig
 
 def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, cen=True,
-        fixcent=True, save=False, clobber=False, remotedir=None, gal=None, relative_pab=False, cmap='RdBu',mock=None):
+        fixcent=True, save=False, clobber=False, remotedir=None, gal=None, relative_pab=False, cmap='RdBu',mock=None, rootdir=None, gz=True, offset=0):
     """
     Make a plot `nirvana` output file with the different velocity components
     searated.
@@ -255,7 +263,8 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
             Sampler, results, or file of dumped results from `dynesty` fit.
         plate (:obj:`int`, optional):
             MaNGA plate number for desired galaxy. Must be specified if
-            `auto=False`.
+            `auto=False`. Can also be :class:`nirvana.data.fitargs.args` if f
+            is a sampler. 
         ifu (:obj:`int`, optional):
             MaNGA IFU design number for desired galaxy. Must be specified if
             `auto=False`.
@@ -268,8 +277,15 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
             Flag for whether the position of the center was fit.
         
     """
+zz
+    print(rootdir)
+    if type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler:
+        args = plate
+        resdict = profs(f, args, stds=True)
+        resdict['type'] = ''
+    else:
+        args, resdict = fileprep(f, plate, ifu, smearing, stellar, maxr, cen, fixcent, remotedir=remotedir, gal=gal, rootdir=rootdir)
 
-    args, resdict = fileprep(f, plate, ifu, smearing, stellar, maxr, cen, fixcent, remotedir=remotedir, gal=gal)
     z = np.zeros(len(resdict['vt']))
     vtdict, v2tdict, v2rdict = [resdict.copy(), resdict.copy(), resdict.copy()]
     vtdict['v2t'] = z
@@ -293,7 +309,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     #must set all masked areas to 0 or else vmax calculations barf
     for v in [vel_r, velmodel, vtmodel, v2tmodel, v2rmodel]:
         v.data[v.mask] = 0
-        v -= resdict['vsys'] #recenter at 0
+        v -= resdict['vsys'] + offset #recenter at 0
 
     v2model = v2tmodel + v2rmodel
     v2model.data[v2model.mask] = 0
@@ -319,7 +335,65 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
 
     #image
     plt.subplot(3,5,2)
-    plt.imshow(args.kin.image)
+    if gz:
+        with fits.open(f) as fitsfile:
+            mangaid = fitsfile[0].header['mangaid']
+        with fits.open(glob(f'/media/brian/bdigiorg/GZ3D/gz3d_{mangaid}*.fits.gz')[0]) as gz:
+            for i in range(len(gz)):
+                gz[i].data = np.flip(gz[i].data, 0)
+
+            plt.imshow(gz[0].data, origin='lower')
+            bar = gz[4].data
+            xx = np.linspace(0,bar.shape[0],bar.shape[0])
+            yy = np.linspace(0,bar.shape[1],bar.shape[1])
+            x,y = np.meshgrid(xx,yy)
+            
+            if bar.any():
+                xx = np.linspace(0,bar.shape[0],bar.shape[0])
+                yy = np.linspace(0,bar.shape[1],bar.shape[1])
+                x,y = np.meshgrid(xx,yy)
+                xcen = np.average(x, weights=bar)
+                ycen = np.average(y, weights=bar)
+                x -= xcen
+                y -= ycen
+                r = np.sqrt(x**2 + y**2)
+                th = (np.degrees(np.arctan2(y,x))) % 180
+
+                degs = np.linspace(0,180,181)
+                tots = np.zeros(180)
+                for i in range(180):
+                    cut = (th > degs[i]) & (th < degs[i+1])
+                    tots[i] = np.sum(bar[cut])
+                smoothtots = savgol_filter(tots, 19, 2)
+                maxbin = degs[np.argmax(smoothtots)]
+
+                centtots = np.zeros(180)
+                centdegs = (degs-maxbin)
+                for i in range(180):
+                    cut = ((th-maxbin)%180 > degs[i]) & ((th-maxbin)%180 < degs[i+1])
+                    centtots[i] = np.sum(bar[cut])
+                cen = (np.average((degs[:-1]+90)%180 - 90, weights=centtots))
+                gzpab = (maxbin + cen + 90) % 180
+
+                _pab, _pa, _inc = np.radians((resdict['pab'], resdict['pa'], resdict['inc']))
+                adjust = _pab > np.pi
+                _pab -= _pa
+                projpab = np.arctan(np.tan(_pab) * np.cos(_inc)) + _pa
+                npab = (np.degrees(projpab) % 180 + 180*adjust) % 360
+                
+                plt.contour(gz[4].data,colors='w',levels=1, linestyles='--', alpha=.5)
+                plt.plot(x[0]+xcen, x[0]*np.tan(np.radians(gzpab - 90)) + ycen, 'g', label=f'GZ:3D ({gzpab:.1f}$^\circ$)')
+                plt.plot(x[0]+xcen, x[0]*np.tan(np.radians(npab - 90)) + ycen, 'w', label=f'Nirvana ({npab:.1f}$^\circ$)')
+                
+            else: 
+                xcen, ycen = (0,0)
+                    
+            plt.xlim((0,gz[0].data.shape[0]))
+            plt.ylim((0,gz[0].data.shape[1]))
+            plt.legend()
+
+    else:
+        if args.kin.image is not None: plt.imshow(args.kin.image)
     plt.axis('off')
 
     #MaNGA Ha velocity field
@@ -381,7 +455,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     cb.set_label('km/s', labelpad=-2)
 
     plt.subplot(3,5,7)
-    plt.imshow(vtmodel, cmap=cmap, origin='lower', vmin=-vtvmax, vmax=vtvmax)
+    plt.imshow(vtmodel+offset, cmap=cmap, origin='lower', vmin=-vtvmax, vmax=vtvmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     #plt.text(1.15,.5,'+', transform=plt.gca().transAxes, size=30)
     plt.title(r'$V_t$', fontsize=16)
@@ -391,7 +465,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     cb.set_label('km/s', labelpad=-2)
 
     plt.subplot(3,5,8)
-    plt.imshow(v2tmodel, cmap=cmap, origin='lower', vmin=-v2tvmax, vmax=v2tvmax)
+    plt.imshow(v2tmodel+offset, cmap=cmap, origin='lower', vmin=-v2tvmax, vmax=v2tvmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     #plt.text(1.15,.5,'+', transform=plt.gca().transAxes, size=30)
     plt.title(r'$V_{2t}$', fontsize=16)
@@ -401,7 +475,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     cb.set_label('km/s', labelpad=-2)
 
     plt.subplot(3,5,9)
-    plt.imshow(v2rmodel, cmap=cmap, origin='lower', vmin=-v2rvmax, vmax=v2rvmax)
+    plt.imshow(v2rmodel+offset, cmap=cmap, origin='lower', vmin=-v2rvmax, vmax=v2rvmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     plt.title(r'$V_{2r}$', fontsize=16)
     cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)
@@ -410,7 +484,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     cb.set_label('km/s', labelpad=-2)
 
     plt.subplot(3,5,10)
-    plt.imshow(v2model, cmap=cmap, origin='lower', vmin=-v2vmax, vmax=v2vmax)
+    plt.imshow(v2model+offset, cmap=cmap, origin='lower', vmin=-v2vmax, vmax=v2vmax)
     plt.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     plt.title(r'$V_{2t} + V_{2r}$', fontsize=16)
     cax = mal(plt.gca()).append_axes('bottom', size='5%', pad=0)
@@ -471,7 +545,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
         plt.savefig(f'{path}plots/sepcomp_{fname}.pdf', format='pdf')
         plt.close()
 
-def sinewave(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, cen=True): 
+def sinewave(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, cen=True, remotedir=None, gal=None, relative_pab=False, cmap='RdBu',mock=None, rootdir=None, gz=True):
     """
     Compare the `nirvana` fit to the data azimuthally in radial bins.
 
@@ -502,7 +576,7 @@ def sinewave(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None, c
     """
 
     #prep the data, parameters, and coordinates
-    args, resdict, chains, meds = fileprep(f, plate, ifu, smearing, stellar, maxr, cen, fixcent)
+    args, resdict = fileprep(f, plate, ifu, smearing, stellar, maxr, cen, remotedir=remotedir, gal=gal, rootdir=rootdir)
     inc, pa, pab = np.radians([resdict['inc'], resdict['pa'], resdict['pab']])
     r,th = projected_polar(args.kin.x, args.kin.y, pa, inc)
 
@@ -586,7 +660,7 @@ def plotdir(directory='/data/manga/digiorgio/nirvana/', fname='*-*_*.nirv', core
     if len(fs) == 0: raise FileNotFoundError('No files found')
     else: print(len(fs), 'files found')
     with mp.Pool(cores) as p:
-        p.map(partial(safeplot, func=func), fs)
+        p.map(partial(safeplot, func=func, **kwargs), fs)
 
 def infobox(plot, resdict, args, cen=True, relative_pab=False, title=None):
     #generate velocity models
@@ -617,11 +691,12 @@ def infobox(plot, resdict, args, cen=True, relative_pab=False, title=None):
     fontsize = 14 - 2*cen - args.scatter
     ys = np.linspace(1 - .01*fontsize, 0, ny)
 
-    title = f"{resdict['plate']}-{resdict['ifu']} {resdict['type']}" if title is None else title
-    plot.set_title(title, size=18)
+    if 'plate' in resdict:
+        title = f"{resdict['plate']}-{resdict['ifu']} {resdict['type']}" if title is None else title
+        plot.set_title(title, size=18)
     plot.text(.1, ys[0], r'$i$: %0.1f$^{+%0.1f}_{-%0.1f}$ deg. (phot: %0.1f$^\circ$)'
             %(resdict['inc'], resdict['incu'] - resdict['inc'], 
-            resdict['inc'] - resdict['incl'], args.kin.phot_inc),
+            resdict['inc'] - resdict['incl'], args.kin.phot_inc if args.kin.phot_inc is not None else np.nan),
             transform=plot.transAxes, size=fontsize)
     plot.text(.1, ys[1], r'$\phi$: %0.1f$^{+%0.1f}_{-%0.1f}$ deg.'
             %(resdict['pa'], resdict['pau'] - resdict['pa'], 
@@ -634,18 +709,16 @@ def infobox(plot, resdict, args, cen=True, relative_pab=False, title=None):
             resdict['vsys'] - resdict['vsysl']),transform=plot.transAxes, size=fontsize)
     plot.text(.1, ys[4], r'$\chi_v^2$: %0.1f,   $\chi_s^2$: %0.1f' % (rchisqv, rchisqs), 
             transform=plot.transAxes, size=fontsize)
-    plot.text(.1, ys[5], 'Asymmetry: %0.3f' % args.arc,
-            transform=plot.transAxes, size=fontsize)
     if cen: 
-        plot.text(.1, ys[6], r'$x_c: %0.1f$" $ ^{+%0.1f}_{-%0.1f}$' %  
+        plot.text(.1, ys[5], r'$x_c: %0.1f$" $ ^{+%0.1f}_{-%0.1f}$' %  
                     (resdict['xc'], abs(resdict['xcu'] - resdict['xc']),
                     abs(resdict['xcl'] - resdict['xc'])), 
                     transform=plot.transAxes, size=fontsize)
-        plot.text(.1, ys[7], r'$y_c: %0.1f$" $ ^{+%0.1f}_{-%0.1f}$' %  
+        plot.text(.1, ys[6], r'$y_c: %0.1f$" $ ^{+%0.1f}_{-%0.1f}$' %  
                     (resdict['yc'], abs(resdict['ycu'] - resdict['yc']), 
                     abs(resdict['ycl'] - resdict['yc'])),
                     transform=plot.transAxes, size=fontsize)
     if args.scatter:
-        plot.text(.1, ys[8], r'$\sigma_v$: %0.1f,   $\sigma_s^2$: %0.1f' 
+        plot.text(.1, ys[7], r'$\sigma_v$: %0.1f,   $\sigma_s^2$: %0.1f' 
                 % (resdict['vel_scatter'], resdict['sig_scatter']), 
                 transform=plot.transAxes, size=fontsize)

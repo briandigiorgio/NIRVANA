@@ -188,7 +188,7 @@ class Kinematics():
                 raise ValueError('All arrays provided to Kinematics must have the same shape.')
         if (x is None and y is not None) or (x is not None and y is None):
             raise ValueError('Must provide both x and y or neither.')
-        if binid is not None and grid_x is None or grid_y is None:
+        if binid is not None and (grid_x is None or grid_y is None):
             raise ValueError('If the data are binned, you must provide the pixel-by-pixel input '
                              'coordinate grids, grid_x and grid_y.')
 

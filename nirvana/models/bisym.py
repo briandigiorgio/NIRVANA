@@ -162,6 +162,20 @@ def ptform(params, args):
     repack += [*vtp, *v2tp, *v2rp]
     if args.disp: repack += [*sigp]
     if args.scatter: repack += [velscp, sigscp]
+    if np.isnan(repack).any():
+        bad = []
+        if np.isnan(incp): bad += ['incp']
+        if np.isnan(pap): bad += ['pap']
+        if np.isnan(pabp): bad += ['pabp']
+        if np.isnan(vsysp): bad += ['vsysp']
+        if np.isnan(xcp): bad += ['xcp']
+        if np.isnan(ycp): bad += ['ycp']
+        if np.isnan(vtp).any(): bad += ['vtp']
+        if np.isnan(v2tp).any(): bad += ['v2tp']
+        if np.isnan(v2rp).any(): bad += ['v2rp']
+        if np.isnan(sigp).any(): bad += ['sigp']
+        raise ValueError(f'Bad ptform: the following variables are nan: {bad}')
+    
     return repack
 
 def loglike(params, args):
@@ -191,6 +205,9 @@ def loglike(params, args):
 
     #compute chi squared value with error if possible
     llike = (velmodel - args.kin.vel)**2
+    if not np.isfinite(llike.any()):
+        print(llike)
+        raise ValueError("Log Likelihood isn't finite at position 1")
 
     #inflate ivar with noise floor
     if args.kin.vel_ivar is not None: 
@@ -200,6 +217,9 @@ def loglike(params, args):
             vel_ivar = 1/(1/args.kin.vel_ivar + args.noise_floor**2)
         llike = llike * vel_ivar 
     llike = -.5 * np.ma.sum(llike + np.log(2*np.pi * vel_ivar))
+    if not np.isfinite(llike.any()):
+        raise ValueError("Log Likelihood isn't finite at position 2")
+
 
     #add in penalty for non smooth rotation curves
     if args.weight != -1:
@@ -208,6 +228,9 @@ def loglike(params, args):
         llike = llike - smoothing(paramdict['vt'],  velweight) \
                       - smoothing(paramdict['v2t'], velweight) \
                       - smoothing(paramdict['v2r'], velweight)
+    if not np.isfinite(llike.any()):
+        raise ValueError("Log Likelihood isn't finite at position 3")
+
 
     #add in sigma model if applicable
     if sigmodel is not None:
@@ -231,6 +254,9 @@ def loglike(params, args):
             if args.scatter: sigweight = args.weight / paramdict['sig_scatter']
             else: sigweight = args.weight
             llike -= smoothing(paramdict['sig'], sigweight*.1)
+    if not np.isfinite(llike.any()):
+        raise ValueError("Log Likelihood isn't finite at position 4")
+
 
     #apply a penalty to llike if 2nd order terms are too large
     if hasattr(args, 'penalty') and args.penalty:
@@ -243,6 +269,9 @@ def loglike(params, args):
         #scaling penalty if 2nd order profs are big
         llike -= penalty * (v2tm - vtm)/vtm
         llike -= penalty * (v2rm - vtm)/vtm
+    if not np.isfinite(llike.any()):
+        raise ValueError("Log Likelihood isn't finite at position 5")
+
 
     return llike
 
@@ -521,10 +550,10 @@ def fit(plate, ifu, galmeta = None, daptype='HYB10-MILESHC-MASTARHC2', dr='MPL-1
     #dynesty sampler with periodic pa and pab
     if not covar: sampler = dynesty.NestedSampler(loglike, ptform, ndim, nlive=points,
             periodic=[1,2], pool=pool,
-            ptform_args = [args], logl_args = [args], verbose=verbose)
+            ptform_args = [args], logl_args = [args])#, verbose=verbose)
     else: sampler = dynesty.NestedSampler(covarlike, ptform, ndim, nlive=points,
             periodic=[1,2], pool=pool,
-            ptform_args = [args], logl_args = [args], verbose=verbose)
+            ptform_args = [args], logl_args = [args])#, verbose=verbose)
     sampler.run_nested()
 
     if pool is not None: pool.close()

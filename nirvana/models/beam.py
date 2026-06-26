@@ -8,7 +8,7 @@ from IPython import embed
 import numpy as np
 
 try:
-    import pyfftw
+    import xarray, pyfftw
 except:
     pyfftw = None
 
@@ -75,6 +75,8 @@ def convolve_fft(data, kernel, kernel_fft=False, return_fft=False):
             Raised if ``data`` and ``kernel`` do not have the same
             shape or if any of their values are not finite.
     """
+    if isinstance(data, np.ma.core.MaskedArray):
+        data = data.data
     if data.shape != kernel.shape:
         raise ValueError('Data and kernel must have the same shape.')
     if not np.all(np.isfinite(data)) or not np.all(np.isfinite(kernel)):

@@ -256,8 +256,11 @@ class FitArgs:
         ngood = (~self.kin.vel_mask).sum()
 
         #count spaxels in each bin and make 2d maps excluding large bins
-        nspax = np.array([(self.kin.remap('binid') == self.kin.binid[i]).sum() for i in range(len(self.kin.binid))])
-        binmask = self.kin.remap(nspax) > 10
+        if self.kin.binid is not None:
+            nspax = np.array([(self.kin.remap('binid') == self.kin.binid[i]).sum() for i in range(len(self.kin.binid))])
+            binmask = self.kin.remap(nspax) > 10
+        else:
+            binmask = np.ones_like(self.kin.remap('sb'))
 
         #axisymmetric fit of data
         fit = None
@@ -282,7 +285,7 @@ class FitArgs:
         #get the vel field, fill masked areas with axisym model
         #have to do this so the convolution doesn't barf
         filledvel = np.ma.array(self.kin.remap('vel'), mask=binmask)
-        mask = filledvel.mask | binmask.data | (filledvel == 0).data
+        mask = filledvel.mask | binmask.data.astype(bool) | (filledvel == 0).data
         origmask = mask
         filledvel = filledvel.data
         filledvel[mask] = avel[mask]
@@ -301,6 +304,14 @@ class FitArgs:
             if pyfftw is not None: cnvfftw = ConvolveFFTW(self.kin.spatial_shape)
             else: cnvfftw = None
             smeared = smear(filledvel, self.kin.beam_fft, beam_fft=True, sig=filledsig, sb=None, cnvfftw=cnvfftw)
+            plt.figure(figsize=(12,4))
+            plt.subplot(131)
+            plt.imshow(smeared[0])
+            plt.subplot(132)
+            plt.imshow(smeared[1])
+            plt.subplot(133)
+            plt.imshow(smeared[2])
+            plt.show()
 
             #cut out spaxels with too high residual because they're probably bad
             dvmask = self.kin.bin(np.abs(filledvel - smeared[1]) > smear_dv) 
@@ -355,6 +366,18 @@ class FitArgs:
             residmask = sigma_clip(resid, sigma=sigma, masked=True).mask
             chisqmask = sigma_clip(chisq, sigma=sigma, masked=True).mask
             clipmask = (mask + residmask + chisqmask).astype(bool)
+            '''
+            plt.figure()
+            plt.subplot(221)
+            plt.imshow(self.kin.remap(clipmask))
+            plt.subplot(222)
+            plt.imshow(self.kin.remap(mask))
+            plt.subplot(223)
+            plt.imshow(self.kin.remap(residmask))
+            plt.subplot(224)
+            plt.imshow(self.kin.remap(chisqmask))
+            plt.show()
+            '''
 
             #iterate
             nmaskedold = nmasked
@@ -386,6 +409,7 @@ class FitArgs:
                 labels += ['resid', 'chisq']
                 print(f'Clipping converged after {niter} iterations')
 
+            print(f'nmasked0: {nmasked0}, nmasked: {nmasked}')
             plt.figure(figsize = (12,12))
             plt.subplot(331)
             plt.axis('off')
@@ -446,8 +470,8 @@ class FitArgs:
         if not hasattr(self, 'nbins'): 
             raise AttributeError('Must define nbins first')
 
-        inc = self.guess[1] if self.kin.phot_inc is None else self.kin.phot_inc
-        pa = self.guess[2] if self.kin.phot_pa is None else self.kin.phot_pa
+        inc = self.guess[0] if self.kin.phot_inc is None else self.kin.phot_inc
+        pa = self.guess[1] if self.kin.phot_pa is None else self.kin.phot_pa
         ndim = len(self.guess) + (self.nbins + self.fixcent) * self.disp + 2*self.scatter
 
         #prior bounds defined based off of guess
@@ -456,7 +480,7 @@ class FitArgs:
         else: bounds[0] = (max(inc - incpad, 5), min(inc + incpad, 85))
         if pagauss: bounds[1] = (pa, papad)
         else: bounds[1] = (theta0[1] - papad, theta0[1] + papad)
-        bounds[2] = (0, 360) #uninformed
+        bounds[2] = (0, 180) #uninformed pab
         bounds[3] = (theta0[3] - vsyspad, theta0[3] + vsyspad)
         if self.nglobs == 6: #assumes (0,0) is the best guess for center
             bounds[4] = (-cenpad, cenpad)

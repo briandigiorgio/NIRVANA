@@ -249,9 +249,9 @@ def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
                 analysispath, reduxpath = (None, None)
 
             if resdict['type'] == 'Stars':
-                kin = MaNGAStellarKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir, analysis_path=analysispath, redux_path=reduxpath, covar=True)
+                kin = MaNGAStellarKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir, analysis_path=analysispath, redux_path=reduxpath)
             else:
-                kin = MaNGAGasKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir, analysis_path=analysispath, redux_path=reduxpath, covar=True)
+                kin = MaNGAGasKinematics.from_plateifu(resdict['plate'],resdict['ifu'], ignore_psf=not smearing, remotedir=remotedir, analysis_path=analysispath, redux_path=reduxpath)
             scatter = ('vel_scatter' in resdict.keys()) and (resdict['vel_scatter'] != 0)
         else:
             kin = gal
@@ -346,6 +346,12 @@ def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
 
     args.getguess(galmeta=galmeta)
     args.getasym()
+
+    #adjustment for wrong pab definition
+    #take out when model is rerun
+    resdict['pab'] /= 2
+    resdict['pabu'] /= 2
+    resdict['pabl'] /= 2
 
     return args, resdict
 

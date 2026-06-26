@@ -1006,7 +1006,7 @@ class AxisymmetricDisk:
         vel, sig = (self.kin.bin(self.model()), None) if self.dc is None \
                         else map(lambda x : self.kin.bin(x), self.model())
         vfom = self._v_resid(vel)
-        sfom = numpy.array([]) if self.dc is None else self._s_resid(sig)
+        sfom = np.array([]) if self.dc is None else self._s_resid(sig)
         return (vfom, sfom) if sep else np.append(vfom, sfom)
 
     def _deriv_resid(self, par, sep=False):
@@ -1032,7 +1032,7 @@ class AxisymmetricDisk:
         self._set_par(par)
         if self.dc is None:
             vel, dvel = self.kin.deriv_bin(*self.deriv_model())
-            return (self._deriv_v_resid(dvel), numpy.array([])) \
+            return (self._deriv_v_resid(dvel), np.array([])) \
                         if sep else self._deriv_v_resid(dvel)
 
         vel, sig, dvel, dsig = self.deriv_model()
@@ -1097,7 +1097,7 @@ class AxisymmetricDisk:
         vf = self._deriv_v_chisqr_covar if self.has_covar else self._deriv_v_chisqr
         if self.dc is None:
             vel, dvel = self.kin.deriv_bin(*self.deriv_model())
-            return (vf(dvel), numpy.array([])) if sep else vf(dvel)
+            return (vf(dvel), np.array([])) if sep else vf(dvel)
 
         sf = self._deriv_s_chisqr_covar if self.has_covar else self._deriv_s_chisqr
         vel, sig, dvel, dsig = self.deriv_model()
@@ -1171,7 +1171,7 @@ class AxisymmetricDisk:
         # Determine which errors were provided
         self.has_err = self.kin.vel_ivar is not None if self.dc is None \
                         else self.kin.vel_ivar is not None and self.kin.sig_ivar is not None
-        if not self.has_err and (self.kin.vel_err is not None or self.kin.sig_err is not None):
+        if not self.has_err and (self.kin.vel_ivar is not None or self.kin.sig_ivar is not None):
             warnings.warn('Some errors being ignored if both velocity and velocity dispersion '
                           'errors are not provided.')
         self.has_covar = self.kin.vel_covar is not None if self.dc is None \

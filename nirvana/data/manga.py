@@ -337,7 +337,7 @@ def manga_files_from_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr=
 # TODO: Break this into two functions to download the DRPall and DAPall file
 # separately?
 def download_catalogs(dr='DR17', oroot=None, redux_path=None, analysis_path=None, overwrite=True,
-                      sasurl='https://data.sdss.org/sas/mangawork/manga/spectro'):
+                      sasurl='https://data.sdss.org/sas/dr17/manga/spectro'):
     """
     Download the two main MaNGA catalog files, the DRPall and DAPall files.
 
@@ -437,7 +437,7 @@ def download_catalogs(dr='DR17', oroot=None, redux_path=None, analysis_path=None
 
 def download_plateifu(plate, ifu, daptype='HYB10-MILESHC-MASTARHC2', dr='DR17', oroot=None, 
                       redux_path=None, analysis_path=None, overwrite=True,
-                      sasurl='https://data.sdss.org/sas/mangawork/manga/spectro'):
+                      sasurl='https://data.sdss.org/sas/dr17/manga/spectro'):
     """
     Download the individual plate-ifu MaNGA data files.
 

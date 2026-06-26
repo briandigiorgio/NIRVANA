@@ -269,7 +269,7 @@ def fileprep(f, plate=None, ifu=None, smearing=None, stellar=False, maxr=None,
         #get sampler in right format
         if type(f) == str: chains = pickle.load(open(f,'rb'))
         elif type(f) == np.ndarray: chains = f
-        elif isinstance(f, (dynesty.NestedSampler, dynesty.DynamicNestedSampler)):
+        elif isinstance(f, (dynesty.NestedSampler, dynesty.DynamicNestedSampler)): chains = f.results
 
         if gal is None and '.nirv' in f and os.path.isfile(f[:-5] + '.gal'):
             gal = f[:-5] + '.gal'

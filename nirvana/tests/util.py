@@ -8,11 +8,16 @@ import os
 import warnings
 
 import pytest
+from importlib import resources
 
-from pkg_resources import resource_filename
 
 def data_file(filename=None):
     root = resource_filename('nirvana', 'data')
+    return root if filename is None else os.path.join(root, filename)
+
+def data_file(filename=None):
+    root_path = resources.files('nirvana').joinpath('data')
+    root = str(root_path)
     return root if filename is None else os.path.join(root, filename)
 
 def test_data_file(filename=None):

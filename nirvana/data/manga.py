@@ -14,7 +14,9 @@ import glob
 import warnings
 import netrc
 
-from pkg_resources import resource_filename
+#deprecated in Python 3.12
+#from pkg_resources import resource_filename
+from importlib import resources
 
 from IPython import embed
 
@@ -565,7 +567,16 @@ def sdss_bitmask(bitgroup):
         :class:`~nirvana.util.bitmask.BitMask`: Instance used to parse SDSS
         maskbits.
     """
-    sdssMaskbits = os.path.join(resource_filename('nirvana', 'config'), 'sdss', 'sdssMaskbits.par')
+    #deprecated in Python 3.12
+    #sdssMaskbits = os.path.join(resource_filename('nirvana', 'config'), 'sdss', 'sdssMaskbits.par')
+
+    # 1. Traverse to the file inside the package hierarchy
+    resource_path = resources.files('nirvana').joinpath('config', 'sdss', 'sdssMaskbits.par')
+
+    # 2. Extract the absolute path as a string
+    with resources.as_file(resource_path) as file_path:
+        sdssMaskbits = str(file_path)
+
     return BitMask.from_par_file(sdssMaskbits, bitgroup)
 
 

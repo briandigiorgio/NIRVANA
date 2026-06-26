@@ -91,7 +91,7 @@ def summaryplot(f, plate=None, ifu=None, smearing=True, stellar=False, maxr=None
             raise ValueError('Plot file already exists')
 
     #unpack input file into useful objects
-    if type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler:
+    if isinstance(f, (dynesty.NestedSampler, dynesty.DynamicNestedSampler)):
         args = plate
         resdict = profs(f, args, stds=True)
         resdict['type'] = ''
@@ -279,7 +279,7 @@ def separate_components(f, plate=None, ifu=None, smearing=True, stellar=False, m
     """
 zz
     print(rootdir)
-    if type(f) == dynesty.nestedsamplers.MultiEllipsoidSampler:
+    if isinstance(f, (dynesty.NestedSampler, dynesty.DynamicNestedSampler)):
         args = plate
         resdict = profs(f, args, stds=True)
         resdict['type'] = ''
